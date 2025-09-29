@@ -3,6 +3,8 @@ mod prelogin;
 mod http;
 mod db;
 mod config;
+mod telnet;
+mod lua;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -18,10 +20,11 @@ async fn main() -> anyhow::Result<()> {
     init_tracing();
 
     let cfg = config::Config::from_env()?;
-    dbg!(&cfg);
 
     let db = db::Db::new(&cfg.database_url)?;
     db.init().await?;
+
+    spawn_background_tasks(db.clone());
 
     let tcp_addr: SocketAddr = cfg.tcp_addr.parse()?;
     let http_addr: SocketAddr = cfg.http_addr.parse()?;
@@ -51,6 +54,16 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
+fn spawn_background_tasks(db: db::Db) {
+    let db_for_spawn = db.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(1000));
+        loop {
+            interval.tick().await;
+            let _ = db_for_spawn.spawn_tick().await;
+        }
+    });
+}
 
 fn init_tracing() {
     use tracing_subscriber::{prelude::*, EnvFilter};

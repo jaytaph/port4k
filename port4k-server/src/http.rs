@@ -65,7 +65,7 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
         let cmd = text.trim();
         let resp = process_command(cmd, &state.registry, &sess)
             .await
-            .unwrap_or_else(|e| format!("error: {e}\\n"));
+            .unwrap_or_else(|e| format!("erreur: {e}\\n"));
 
         let _ = socket
             .send(Message::Text(format!("{}> ", ensure_nl(resp))))
