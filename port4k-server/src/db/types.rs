@@ -1,7 +1,9 @@
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[allow(unused)]
 pub struct AccountName(pub String);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[allow(unused)]
 pub struct BlueprintKey(pub String);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

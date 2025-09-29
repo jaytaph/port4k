@@ -1,0 +1,20 @@
+localhost:4040 {
+    root * /port4k-site
+    file_server
+
+    # Proxy all websocket traffic to Rust backend
+    handle_path /ws* {
+        reverse_proxy 127.0.0.1:4001
+    }
+
+    header {
+#        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+#        X-Content-Type-Options "nosniff"
+#        Referrer-Policy "strict-origin-when-cross-origin"
+        # Cache static assets (tune paths as you like)
+        @assets {
+            path /assets/* *.css *.js *.png *.jpg *.svg
+        }
+        header @assets Cache-Control "public, max-age=31536000, immutable"
+    }
+}

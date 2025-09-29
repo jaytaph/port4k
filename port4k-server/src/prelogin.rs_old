@@ -1,12 +1,13 @@
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
 
 use crate::db::Db;
 use crate::telnet::telnet_echo_on;
 use crate::telnet::{read_telnet_line, telnet_echo_off};
 use port4k_core::Username;
+use crate::lua::LuaJob;
 
 #[derive(Debug)]
 pub struct Editor {
@@ -90,7 +91,7 @@ pub async fn handle_connection(
     registry: Arc<Registry>,
     banner: &str,
     entry: &str,
-    lua_tx: mpsc::Sender<crate::lua::LuaJob>,
+    lua_tx: mpsc::Sender<LuaJob>,
 ) -> anyhow::Result<()> {
     let (r, mut w) = stream.into_split();
     let mut reader = BufReader::new(r);
@@ -219,7 +220,7 @@ pub(crate) async fn process_command(
     cmd: &str,
     registry: &Arc<Registry>,
     sess: &Arc<Mutex<Session>>,
-    lua_tx: mpsc::Sender<crate::lua::LuaJob>,
+    lua_tx: mpsc::Sender<LuaJob>,
 ) -> anyhow::Result<String> {
     if cmd.is_empty() {
         return Ok(String::new());
@@ -350,19 +351,23 @@ pub(crate) async fn process_command(
                                     *room = next.clone();
                                 }
                             }
-                            let extra = crate::lua::run_on_enter_playtest(
-                                &registry.db,
-                                &bp,
-                                &next,
-                                &username,
-                            )
-                            .await?
-                            .unwrap_or_default();
+                            let (tx, rx) = oneshot::channel();
+                            lua_tx.send(LuaJob::OnEnterPlaytest {
+                                db: registry.db.clone(),
+                                bp: bp.clone(),
+                                room: next.clone(),
+                                account: username.clone(),
+                                reply: tx,
+                            }).await?;
+
+                            let extra = rx.await??.unwrap_or_default();
+
                             let view = registry
                                 .db
                                 .bp_room_view(&bp, &next)
                                 .await?
                                 .unwrap_or_else(|| "[playtest] room missing\n".into());
+
                             Ok(format!("{view}{extra}"))
                         }
                         None => Ok("You can't go that way (playtest).\n".into()),
@@ -585,24 +590,18 @@ pub(crate) async fn process_command(
                 .collect::<Vec<_>>();
 
             // Prepare the oneshot reply channel
-            let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-
-            // Send job to the Lua worker
-            lua_tx
-                .send(crate::lua::LuaJob::OnCommandPlaytest {
-                    db: registry.db.clone(),
-                    bp,
-                    room,
-                    user,
-                    verb: verb.to_string(),
-                    args: args_vec,
-                    reply: reply_tx,
-                })
-                .await
-                .map_err(|_| anyhow::anyhow!("Lua worker dropped"))?;
-
-            match reply_rx.await? {
-                Ok(out) if !out.trim().is_empty() => Ok(out),
+            let (tx, rx) = oneshot::channel();
+            lua_tx.send(LuaJob::OnCommandPlaytest {
+                db: registry.db.clone(),
+                bp: bp.clone(),
+                room: room.clone(),
+                account: user.clone(),
+                verb: verb.to_string(),
+                args: args_vec.clone(),
+                reply: tx,
+            }).await?;
+            match rx.await?? {
+                Some(out) if !out.trim().is_empty() => Ok(out),
                 _ => Ok("Unknown command. Try `help`.\n".into()),
             }
         }

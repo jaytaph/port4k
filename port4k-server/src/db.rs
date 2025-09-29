@@ -6,6 +6,7 @@ pub struct Db {
 }
 
 impl Db {
+    #[allow(unused)]
     pub async fn get_client(&self) -> anyhow::Result<deadpool_postgres::Client> {
         Ok(self.pool.get().await?)
     }

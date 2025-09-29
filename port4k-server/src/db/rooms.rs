@@ -24,6 +24,7 @@ impl Db {
         Ok(format!("{title}\n{body}\n{exits_line}\n"))
     }
 
+    #[allow(unused)]
     pub async fn room_coin_total(&self, room_id: i64) -> anyhow::Result<i64> {
         let client = self.pool.get().await?;
         let row = client
