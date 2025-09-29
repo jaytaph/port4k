@@ -45,8 +45,12 @@ impl Db {
             )
             .await?;
 
-        let Some(row) = row else { return Ok(false); };
-        let Some(stored): Option<String> = row.try_get(0).ok() else { return Ok(false); };
+        let Some(row) = row else {
+            return Ok(false);
+        };
+        let Some(stored): Option<String> = row.try_get(0).ok() else {
+            return Ok(false);
+        };
 
         if stored.trim().is_empty() {
             return Ok(false);
@@ -62,7 +66,10 @@ impl Db {
     pub async fn account_balance(&self, account: &str) -> anyhow::Result<i64> {
         let client = self.pool.get().await?;
         let row = client
-            .query_one("SELECT balance FROM accounts WHERE username = $1", &[&account])
+            .query_one(
+                "SELECT balance FROM accounts WHERE username = $1",
+                &[&account],
+            )
             .await?;
         Ok(row.get(0))
     }
