@@ -1,16 +1,16 @@
-use std::sync::Arc;
 use axum::{
-    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    Router,
     extract::State,
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::IntoResponse,
     routing::get,
-    Router,
 };
+use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
-use tokio::sync::{mpsc, Mutex};
 use crate::lua::LuaJob;
-use crate::{process_command, Registry, Session};
+use crate::{Registry, Session, process_command};
+use tokio::sync::{Mutex, mpsc};
 
 pub async fn serve(
     addr: std::net::SocketAddr,
@@ -21,8 +21,18 @@ pub async fn serve(
 ) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/ws", get(ws_upgrade))
-        .with_state(AppState { registry, banner, entry, lua_tx })
-        .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any));
+        .with_state(AppState {
+            registry,
+            banner,
+            entry,
+            lua_tx,
+        })
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        );
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(listener, app).await?;

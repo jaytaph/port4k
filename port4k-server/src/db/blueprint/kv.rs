@@ -2,7 +2,10 @@ use super::super::Db;
 
 impl Db {
     pub async fn bp_room_kv_get(
-        &self, bp: &str, room: &str, key: &str
+        &self,
+        bp: &str,
+        room: &str,
+        key: &str,
     ) -> anyhow::Result<Option<serde_json::Value>> {
         let c = self.pool.get().await?;
         let row = c
@@ -16,7 +19,11 @@ impl Db {
     }
 
     pub async fn bp_room_kv_set(
-        &self, bp: &str, room: &str, key: &str, value: &serde_json::Value
+        &self,
+        bp: &str,
+        room: &str,
+        key: &str,
+        value: &serde_json::Value,
     ) -> anyhow::Result<()> {
         let c = self.pool.get().await?;
         c.execute(
@@ -26,12 +33,16 @@ impl Db {
                 DO UPDATE SET value=EXCLUDED.value",
             &[&bp, &room, &key, value],
         )
-            .await?;
+        .await?;
         Ok(())
     }
 
     pub async fn bp_player_kv_get(
-        &self, bp: &str, account: &str, room: &str, key: &str
+        &self,
+        bp: &str,
+        account: &str,
+        room: &str,
+        key: &str,
     ) -> anyhow::Result<Option<serde_json::Value>> {
         let c = self.pool.get().await?;
         let row = c
@@ -45,7 +56,12 @@ impl Db {
     }
 
     pub async fn bp_player_kv_set(
-        &self, bp: &str, account: &str, room: &str, key: &str, value: &serde_json::Value
+        &self,
+        bp: &str,
+        account: &str,
+        room: &str,
+        key: &str,
+        value: &serde_json::Value,
     ) -> anyhow::Result<()> {
         let c = self.pool.get().await?;
         c.execute(
@@ -55,7 +71,7 @@ impl Db {
                 DO UPDATE SET value=EXCLUDED.value",
             &[&bp, &account, &room, &key, value],
         )
-            .await?;
+        .await?;
         Ok(())
     }
 }

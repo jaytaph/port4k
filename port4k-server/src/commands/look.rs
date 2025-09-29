@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::commands::CmdCtx;
 use crate::state::session::{ConnState, WorldMode};
+use anyhow::Result;
 
 pub async fn look(ctx: &CmdCtx<'_>) -> Result<String> {
     let s = ctx.sess.lock().await;

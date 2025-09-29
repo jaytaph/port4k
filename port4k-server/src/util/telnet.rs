@@ -10,14 +10,18 @@ const SE: u8 = 240;
 const ECHO: u8 = 1;
 const SGA: u8 = 3;
 
-pub(crate) async fn telnet_echo_off<W: tokio::io::AsyncWrite + Unpin>(w: &mut W) -> std::io::Result<()> {
+pub(crate) async fn telnet_echo_off<W: tokio::io::AsyncWrite + Unpin>(
+    w: &mut W,
+) -> std::io::Result<()> {
     use tokio::io::AsyncWriteExt;
     w.write_all(&[IAC, WILL, ECHO]).await?;
     w.write_all(&[IAC, DO, SGA]).await?;
     w.flush().await
 }
 
-pub(crate) async fn telnet_echo_on<W: tokio::io::AsyncWrite + Unpin>(w: &mut W) -> std::io::Result<()> {
+pub(crate) async fn telnet_echo_on<W: tokio::io::AsyncWrite + Unpin>(
+    w: &mut W,
+) -> std::io::Result<()> {
     use tokio::io::AsyncWriteExt;
     w.write_all(&[IAC, WONT, ECHO]).await?;
     w.write_all(&[IAC, DONT, SGA]).await?;
@@ -31,11 +35,15 @@ fn strip_telnet(raw: &[u8]) -> Vec<u8> {
         let b = raw[i];
         if b == IAC {
             i += 1;
-            if i >= raw.len() { break; }
+            if i >= raw.len() {
+                break;
+            }
             let cmd = raw[i];
             i += 1;
             match cmd {
-                WILL | WONT | DO | DONT => { i += 1; } // consume option byte
+                WILL | WONT | DO | DONT => {
+                    i += 1;
+                } // consume option byte
                 SB => {
                     // consume until IAC SE
                     while i < raw.len() {
@@ -46,8 +54,8 @@ fn strip_telnet(raw: &[u8]) -> Vec<u8> {
                         i += 1;
                     }
                 }
-                SE => {}           // end subnegotiation
-                240..255 => {}    // other cmds (NOP/DM etc.) ignore
+                SE => {}              // end subnegotiation
+                240..255 => {}        // other cmds (NOP/DM etc.) ignore
                 255 => out.push(255), // IAC IAC (escaped 0xFF) -> literal 0xFF
                 _ => {}
             }
@@ -62,7 +70,8 @@ fn strip_telnet(raw: &[u8]) -> Vec<u8> {
                 }
                 out.push(b'\n');
             }
-            0x08 | 0x7F => { // backspace/delete
+            0x08 | 0x7F => {
+                // backspace/delete
                 let _ = out.pop();
             }
             b if b < 0x20 && b != b'\n' && b != b'\t' => {
@@ -76,7 +85,9 @@ fn strip_telnet(raw: &[u8]) -> Vec<u8> {
 }
 
 /// Read one logical line from a Telnet stream (with negotiations), into a String.
-pub(crate) async fn read_telnet_line<R: AsyncBufRead + Unpin>(reader: &mut R) -> std::io::Result<String> {
+pub(crate) async fn read_telnet_line<R: AsyncBufRead + Unpin>(
+    reader: &mut R,
+) -> std::io::Result<String> {
     let mut raw = Vec::new();
     // read until LF; CR-only lines will be normalized in strip_telnet
     let _n = reader.read_until(b'\n', &mut raw).await?;

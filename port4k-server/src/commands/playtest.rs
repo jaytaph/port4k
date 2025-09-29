@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::commands::CmdCtx;
 use crate::state::session::{ConnState, WorldMode};
+use anyhow::Result;
 
 pub async fn playtest(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
     let rest = raw.strip_prefix("@playtest").unwrap().trim();
@@ -51,6 +51,9 @@ pub async fn playtest(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
             .await?
             .unwrap_or_else(|| "[playtest] empty room\n".into());
 
-        Ok(format!("[playtest] entered `{}` at `{}`.\n{}", bp, entry, view))
+        Ok(format!(
+            "[playtest] entered `{}` at `{}`.\n{}",
+            bp, entry, view
+        ))
     }
 }

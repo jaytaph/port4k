@@ -1,24 +1,27 @@
 mod banner;
-mod http;
-mod db;
-mod config;
-mod util;
-mod lua;
-mod state;
-mod net;
 mod commands;
+mod config;
+mod db;
+mod http;
+mod lua;
+mod net;
 mod scripting;
+mod state;
+mod util;
 
-pub use net::connection::handle_connection;
-pub use state::{session::{Session, ConnState, WorldMode, Editor}, registry::Registry};
 pub use commands::process_command;
+pub use net::connection::handle_connection;
+pub use state::{
+    registry::Registry,
+    session::{ConnState, Editor, Session, WorldMode},
+};
 
+use crate::banner::{BANNER, ENTRY};
+use crate::lua::start_lua_worker;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::runtime::Handle;
-use crate::banner::{BANNER, ENTRY};
-use crate::lua::start_lua_worker;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -47,7 +50,15 @@ async fn main() -> anyhow::Result<()> {
     let http_registry = registry.clone();
     let lua_tx_for_http = lua_tx.clone();
     let http_jh = tokio::spawn(async move {
-        if let Err(e) = http::serve(SocketAddr::from(websocket_addr), http_registry, BANNER, ENTRY, lua_tx_for_http).await {
+        if let Err(e) = http::serve(
+            SocketAddr::from(websocket_addr),
+            http_registry,
+            BANNER,
+            ENTRY,
+            lua_tx_for_http,
+        )
+        .await
+        {
             eprintln!("HTTP server error: {e}");
         }
     });
@@ -61,7 +72,10 @@ async fn main() -> anyhow::Result<()> {
                     let registry = telnet_registry.clone();
                     let lua_tx_clone = lua_tx.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = handle_connection(stream, registry, BANNER, ENTRY, lua_tx_clone.clone()).await {
+                        if let Err(e) =
+                            handle_connection(stream, registry, BANNER, ENTRY, lua_tx_clone.clone())
+                                .await
+                        {
                             tracing::error!(%peer, error=%e, "connection error");
                         }
                         tracing::info!(%peer, "client disconnected");
@@ -77,7 +91,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Wait for both servers to finish (they won't, unless there's an error)
     match tokio::try_join!(http_jh, telnet_jh) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             tracing::error!(error=%e, "server task failed successfully");
         }
@@ -98,7 +112,7 @@ fn spawn_background_tasks(db: db::Db) {
 }
 
 fn init_tracing() {
-    use tracing_subscriber::{prelude::*, EnvFilter};
+    use tracing_subscriber::{EnvFilter, prelude::*};
 
     let fmt_layer = tracing_subscriber::fmt::layer().with_target(false);
     let filter = EnvFilter::try_from_default_env()

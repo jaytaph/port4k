@@ -7,9 +7,7 @@ use crate::db::Db;
 
 pub enum LuaJob {
     /// Called when a player enters a room
-    OnEnter {
-        reply: oneshot::Sender<Result<()>>,
-    },
+    OnEnter { reply: oneshot::Sender<Result<()>> },
     /// Called when a player issues a command in a room
     OnCommand {
         db: Db,
@@ -37,7 +35,7 @@ pub enum LuaJob {
         room: String,
         account: String,
         reply: oneshot::Sender<Result<Option<String>>>,
-    }
+    },
 }
 
 /// Start a dedicated Lua worker thread with its own Lua state.
@@ -61,11 +59,17 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                     let _ = reply.send(res);
                 }
 
-                LuaJob::OnCommand { .. } => {
+                LuaJob::OnCommand { .. } => {}
 
-                }
-
-                LuaJob::OnCommandPlaytest { db, bp, room, account, verb, args, reply } => {
+                LuaJob::OnCommandPlaytest {
+                    db,
+                    bp,
+                    room,
+                    account,
+                    verb,
+                    args,
+                    reply,
+                } => {
                     let res = (|| -> Result<Option<String>> {
                         // Load live script (async) via runtime handle
                         let src = rt_handle
@@ -97,13 +101,12 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                             // broadcast_room(text) – here we just append to local out
                             {
                                 let out_b = out.clone();
-                                let broadcast_room = lua.create_function(
-                                    move |_, (text,): (String,)| {
+                                let broadcast_room =
+                                    lua.create_function(move |_, (text,): (String,)| {
                                         out_b.lock().push_str(&text);
                                         out_b.lock().push('\n');
                                         Ok(())
-                                    },
-                                )?;
+                                    })?;
                                 globals.set("broadcast_room", broadcast_room)?;
                             }
 
@@ -136,9 +139,9 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                                     move |lua_ctx, (key, value): (String, Value)| {
                                         let v = lua_to_serde_json(lua_ctx, value)?;
                                         handle
-                                            .block_on(db_cl.bp_room_kv_set(
-                                                &bp_cl, &room_cl, &key, &v,
-                                            ))
+                                            .block_on(
+                                                db_cl.bp_room_kv_set(&bp_cl, &room_cl, &key, &v),
+                                            )
                                             .map_err(mlua::Error::external)?;
                                         Ok(())
                                     },
@@ -155,11 +158,12 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                                 let handle = rt_handle.clone();
                                 let get_player =
                                     lua.create_function(move |lua_ctx, (key,): (String,)| {
-                                        let v = handle
-                                            .block_on(db_cl.bp_player_kv_get(
-                                                &bp_cl, &acc_cl, &room_cl, &key,
-                                            ))
-                                            .map_err(mlua::Error::external)?;
+                                        let v =
+                                            handle
+                                                .block_on(db_cl.bp_player_kv_get(
+                                                    &bp_cl, &acc_cl, &room_cl, &key,
+                                                ))
+                                                .map_err(mlua::Error::external)?;
                                         Ok(match v {
                                             Some(v) => serde_json_to_lua(lua_ctx, v)?,
                                             None => Value::Nil,
@@ -216,7 +220,13 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                     let _ = reply.send(res);
                 }
 
-                LuaJob::OnEnterPlaytest { db, bp, room, account, reply } => {
+                LuaJob::OnEnterPlaytest {
+                    db,
+                    bp,
+                    room,
+                    account,
+                    reply,
+                } => {
                     let res = (|| -> Result<Option<String>> {
                         let src = rt_handle
                             .block_on(db.bp_script_get_live(&bp, &room, "on_enter"))?
@@ -231,20 +241,28 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                         {
                             let g = lua.globals();
                             let o = out.clone();
-                            g.set("send", lua.create_function(move |_, (t,): (String,)| {
-                                o.lock().push_str(&t);
-                                o.lock().push('\n');
-                                Ok(())
-                            })?)?;
+                            g.set(
+                                "send",
+                                lua.create_function(move |_, (t,): (String,)| {
+                                    o.lock().push_str(&t);
+                                    o.lock().push('\n');
+                                    Ok(())
+                                })?,
+                            )?;
                             let o2 = out.clone();
-                            g.set("broadcast_room", lua.create_function(move |_, (t,): (String,)| {
-                                o2.lock().push_str(&t);
-                                o2.lock().push('\n');
-                                Ok(())
-                            })?)?;
+                            g.set(
+                                "broadcast_room",
+                                lua.create_function(move |_, (t,): (String,)| {
+                                    o2.lock().push_str(&t);
+                                    o2.lock().push('\n');
+                                    Ok(())
+                                })?,
+                            )?;
                         }
 
-                        lua.load(&src).set_name(&format!("{bp}:{room}:on_enter")).exec()?;
+                        lua.load(&src)
+                            .set_name(&format!("{bp}:{room}:on_enter"))
+                            .exec()?;
 
                         if let Ok(f) = lua.globals().get::<_, Function>("on_enter") {
                             f.call::<_, ()>((account.as_str(),))
@@ -306,15 +324,20 @@ fn lua_to_serde_json(lua: &Lua, v: Value) -> mlua::Result<serde_json::Value> {
                 match k {
                     Value::Number(n) if n.fract() == 0.0 && n > 0.0 => {
                         let i = n as usize;
-                        if i > max_index { max_index = i; }
+                        if i > max_index {
+                            max_index = i;
+                        }
                     }
-                    _ => { is_array = false; break; }
+                    _ => {
+                        is_array = false;
+                        break;
+                    }
                 }
             }
             if is_array {
                 let mut vec = Vec::with_capacity(max_index);
                 for i in 1..=max_index {
-                    vec.push(lua_to_serde_json(lua, t.get(i)? )?);
+                    vec.push(lua_to_serde_json(lua, t.get(i)?)?);
                 }
                 serde_json::Value::Array(vec)
             } else {

@@ -1,7 +1,7 @@
-use anyhow::Result;
 use crate::commands::CmdCtx;
 use crate::state::session::Editor;
-use crate::util::args::{split_args_quoted, parse_bp_room_key};
+use crate::util::args::{parse_bp_room_key, split_args_quoted};
+use anyhow::Result;
 
 pub async fn script(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
     let parts = split_args_quoted(raw.trim_start_matches("@script").trim());
@@ -43,6 +43,9 @@ pub async fn script(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
                 Ok("[script] no draft found to publish.\n".into())
             }
         }
-        _ => Ok("Usage:\n  @script edit <bp>:<room> <event>\n  @script publish <bp>:<room> <event>\n".into()),
+        _ => Ok(
+            "Usage:\n  @script edit <bp>:<room> <event>\n  @script publish <bp>:<room> <event>\n"
+                .into(),
+        ),
     }
 }

@@ -1,21 +1,21 @@
-use std::sync::Arc;
 use anyhow::Result;
-use tokio::sync::{mpsc, Mutex};
+use std::sync::Arc;
+use tokio::sync::{Mutex, mpsc};
 
 use crate::lua::LuaJob;
 use crate::state::registry::Registry;
 use crate::state::session::Session;
 
-mod look;
-mod go;
-mod take;
 mod balance;
-mod login;
 mod bp;
-mod playtest;
 mod debug_cmd;
-mod script;
 mod fallback;
+mod go;
+mod login;
+mod look;
+mod playtest;
+mod script;
+mod take;
 
 pub struct CmdCtx<'a> {
     pub registry: &'a Arc<Registry>,
@@ -33,28 +33,34 @@ pub async fn process_command(
         return Ok(String::new());
     }
     let mut it = raw.split_whitespace();
-    let Some(verb) = it.next() else { return Ok(String::new()); };
+    let Some(verb) = it.next() else {
+        return Ok(String::new());
+    };
 
     // Commands starting with '@' → special namespace
-    let ctx = CmdCtx { registry, sess, lua_tx };
+    let ctx = CmdCtx {
+        registry,
+        sess,
+        lua_tx,
+    };
 
     match verb.to_ascii_lowercase().as_str() {
         "help" => Ok(help_text()),
         "quit" | "exit" => Ok("Goodbye!\n".to_string()),
         "who" => balance::who(&ctx).await, // tiny helper in balance.rs (or move to its own file)
         "register" => login::register(&ctx, it.collect()).await,
-        "login"    => login::login(&ctx, it.collect()).await, // one-line login; telnet 2-step stays in connection.rs
-        "look"     => look::look(&ctx).await,
-        "go"       => go::go(&ctx, it.collect()).await,
-        "take"     => take::take(&ctx, it.collect()).await,
-        "balance"  => balance::balance(&ctx).await,
+        "login" => login::login(&ctx, it.collect()).await, // one-line login; telnet 2-step stays in connection.rs
+        "look" => look::look(&ctx).await,
+        "go" => go::go(&ctx, it.collect()).await,
+        "take" => take::take(&ctx, it.collect()).await,
+        "balance" => balance::balance(&ctx).await,
 
         // Namespaced commands
         v if v.starts_with('@') => match &v[1..] {
-            "bp"        => bp::bp(&ctx, raw).await,
-            "playtest"  => playtest::playtest(&ctx, raw).await,
-            "debug"     => debug_cmd::debug(&ctx, raw).await,
-            "script"    => script::script(&ctx, raw).await,
+            "bp" => bp::bp(&ctx, raw).await,
+            "playtest" => playtest::playtest(&ctx, raw).await,
+            "debug" => debug_cmd::debug(&ctx, raw).await,
+            "script" => script::script(&ctx, raw).await,
             _ => Ok("Unknown @-command. Try `help`.\n".into()),
         },
 
@@ -83,5 +89,6 @@ Special:
   @playtest [key|stop]         Enter/exit playtest mode
   @script ...                  Edit/publish Lua scripts
   @debug where                 Show debug info
-"#.to_string()
+"#
+    .to_string()
 }

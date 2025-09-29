@@ -1,7 +1,7 @@
+use crate::db::Db;
+use port4k_core::Username;
 use std::collections::BTreeSet;
 use tokio::sync::RwLock;
-use port4k_core::Username;
-use crate::db::Db;
 
 #[derive(Debug)]
 pub struct Registry {
@@ -11,12 +11,19 @@ pub struct Registry {
 
 impl Registry {
     pub fn new(db: Db) -> Self {
-        Self { db, online: RwLock::new(BTreeSet::new()) }
+        Self {
+            db,
+            online: RwLock::new(BTreeSet::new()),
+        }
     }
 
     pub async fn set_online(&self, name: &Username, online: bool) {
         let mut g = self.online.write().await;
-        if online { g.insert(name.0.clone()); } else { g.remove(&name.0); }
+        if online {
+            g.insert(name.0.clone());
+        } else {
+            g.remove(&name.0);
+        }
     }
 
     pub async fn who(&self) -> Vec<String> {

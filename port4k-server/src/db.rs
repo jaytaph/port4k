@@ -13,12 +13,12 @@ impl Db {
 }
 
 // keep public API surface by re-exporting submodules
-pub mod types;
-mod pool;
 mod migrations;
+mod pool;
+pub mod types;
 
 pub mod accounts;
-pub mod characters;
-pub mod rooms;
-pub mod loot;
 pub mod blueprint;
+pub mod characters;
+pub mod loot;
+pub mod rooms;

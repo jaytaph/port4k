@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::commands::CmdCtx;
 use crate::state::session::WorldMode;
+use anyhow::Result;
 
 pub async fn debug(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
     let rest = raw.strip_prefix("@debug").unwrap().trim();

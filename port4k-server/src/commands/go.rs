@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::commands::CmdCtx;
 use crate::state::session::WorldMode;
+use anyhow::Result;
 
 pub async fn go(ctx: &CmdCtx<'_>, args: Vec<&str>) -> Result<String> {
     if args.is_empty() {
@@ -10,7 +10,10 @@ pub async fn go(ctx: &CmdCtx<'_>, args: Vec<&str>) -> Result<String> {
 
     let (username, world) = {
         let s = ctx.sess.lock().await;
-        let username = match &s.name { Some(u) => u.0.clone(), None => return Ok("You must `login` first.\n".into()) };
+        let username = match &s.name {
+            Some(u) => u.0.clone(),
+            None => return Ok("You must `login` first.\n".into()),
+        };
         (username, s.world.clone())
     };
 
@@ -41,16 +44,19 @@ pub async fn go(ctx: &CmdCtx<'_>, args: Vec<&str>) -> Result<String> {
                     }
                     // fire on_enter (playtest)
                     let (tx, rx) = tokio::sync::oneshot::channel();
-                    ctx.lua_tx.send(crate::lua::LuaJob::OnEnterPlaytest {
-                        db: ctx.registry.db.clone(),
-                        bp: bp.clone(),
-                        room: next.clone(),
-                        account: username.clone(),
-                        reply: tx,
-                    }).await?;
+                    ctx.lua_tx
+                        .send(crate::lua::LuaJob::OnEnterPlaytest {
+                            db: ctx.registry.db.clone(),
+                            bp: bp.clone(),
+                            room: next.clone(),
+                            account: username.clone(),
+                            reply: tx,
+                        })
+                        .await?;
                     let extra = rx.await??.unwrap_or_default();
 
-                    let view = ctx.registry
+                    let view = ctx
+                        .registry
                         .db
                         .bp_room_view(&bp, &next)
                         .await?

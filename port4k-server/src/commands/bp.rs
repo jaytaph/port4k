@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::commands::CmdCtx;
-use crate::util::args::{split_args_quoted, parse_bp_room_key};
+use crate::util::args::{parse_bp_room_key, split_args_quoted};
+use anyhow::Result;
 
 pub async fn bp(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
     let rest = raw.strip_prefix("@bp").unwrap().trim();

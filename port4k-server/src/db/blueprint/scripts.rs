@@ -2,7 +2,12 @@ use super::super::Db;
 
 impl Db {
     pub async fn bp_script_put_draft(
-        &self, bp_key: &str, room_key: &str, event: &str, source: &str, author: &str,
+        &self,
+        bp_key: &str,
+        room_key: &str,
+        event: &str,
+        source: &str,
+        author: &str,
     ) -> anyhow::Result<()> {
         let c = self.pool.get().await?;
         c.execute(
@@ -13,12 +18,15 @@ impl Db {
              SET source=EXCLUDED.source, author=EXCLUDED.author, updated_at=now()",
             &[&bp_key, &room_key, &event, &source, &author],
         )
-            .await?;
+        .await?;
         Ok(())
     }
 
     pub async fn bp_script_publish(
-        &self, bp_key: &str, room_key: &str, event: &str,
+        &self,
+        bp_key: &str,
+        room_key: &str,
+        event: &str,
     ) -> anyhow::Result<bool> {
         let c = self.pool.get().await?;
         let n = c.execute(
@@ -36,7 +44,10 @@ impl Db {
     }
 
     pub async fn bp_script_get_live(
-        &self, bp_key: &str, room_key: &str, event: &str,
+        &self,
+        bp_key: &str,
+        room_key: &str,
+        event: &str,
     ) -> anyhow::Result<Option<String>> {
         let c = self.pool.get().await?;
         let row = c

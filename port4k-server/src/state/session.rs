@@ -16,8 +16,14 @@ pub struct Editor {
 
 #[derive(Debug, Clone)]
 pub enum WorldMode {
-    Live { room_id: i64 },
-    Playtest { bp: String, room: String, prev_room_id: Option<i64> },
+    Live {
+        room_id: i64,
+    },
+    Playtest {
+        bp: String,
+        room: String,
+        prev_room_id: Option<i64>,
+    },
 }
 
 #[derive(Debug)]
@@ -30,6 +36,11 @@ pub struct Session {
 
 impl Default for Session {
     fn default() -> Self {
-        Self { name: None, state: ConnState::PreLogin, world: None, editor: None }
+        Self {
+            name: None,
+            state: ConnState::PreLogin,
+            world: None,
+            editor: None,
+        }
     }
 }

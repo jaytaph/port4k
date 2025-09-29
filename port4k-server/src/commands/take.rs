@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::commands::CmdCtx;
 use crate::state::session::WorldMode;
+use anyhow::Result;
 
 pub async fn take(ctx: &CmdCtx<'_>, args: Vec<&str>) -> Result<String> {
     if args.is_empty() {
@@ -15,7 +15,10 @@ pub async fn take(ctx: &CmdCtx<'_>, args: Vec<&str>) -> Result<String> {
 
     let (user, loc) = {
         let s = ctx.sess.lock().await;
-        let user = match &s.name { Some(u) => u.clone(), None => return Ok("You must `login` first.\n".into()) };
+        let user = match &s.name {
+            Some(u) => u.clone(),
+            None => return Ok("You must `login` first.\n".into()),
+        };
         match &s.world {
             Some(WorldMode::Live { room_id }) => (user, *room_id),
             Some(WorldMode::Playtest { .. }) => {

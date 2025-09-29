@@ -1,5 +1,5 @@
-use rand_core::OsRng;
 use super::Db;
+use rand_core::OsRng;
 
 impl Db {
     /// Spawn due coin piles (and other loot) up to max_instances per spawn.
@@ -50,7 +50,7 @@ impl Db {
                     "INSERT INTO room_loot (room_id, item, qty) VALUES ($1, $2, $3)",
                     &[&room_id, &item, &qty],
                 )
-                    .await?;
+                .await?;
                 spawned += 1;
             }
 
@@ -60,7 +60,7 @@ impl Db {
                  WHERE id = $2",
                 &[&interval_ms, &spawn_id],
             )
-                .await?;
+            .await?;
         }
 
         tx.commit().await?;
@@ -103,13 +103,13 @@ impl Db {
                 "UPDATE room_loot SET qty = qty - $1 WHERE id = $2",
                 &[&take, &loot_id],
             )
-                .await?;
+            .await?;
         } else {
             tx.execute(
                 "UPDATE room_loot SET picked_by = $1, picked_at = now() WHERE id = $2",
                 &[&account, &loot_id],
             )
-                .await?;
+            .await?;
         }
 
         let take64 = i64::from(take);
@@ -117,7 +117,7 @@ impl Db {
             "UPDATE accounts SET balance = balance + $1 WHERE username = $2",
             &[&take64, &account],
         )
-            .await?;
+        .await?;
 
         tx.commit().await?;
         Ok(take)

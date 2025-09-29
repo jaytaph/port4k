@@ -71,7 +71,9 @@ impl Db {
                 &[&account],
             )
             .await?;
-        let Some(row) = row else { return Ok(None); };
+        let Some(row) = row else {
+            return Ok(None);
+        };
         let cid: i64 = row.get(0);
         let cur: i64 = row.get(1);
 
@@ -83,7 +85,9 @@ impl Db {
                 &[&cur, &dir],
             )
             .await?;
-        let Some(to_row) = to else { return Ok(None); };
+        let Some(to_row) = to else {
+            return Ok(None);
+        };
         let new_room: i64 = to_row.get(0);
 
         client

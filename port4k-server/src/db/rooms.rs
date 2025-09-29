@@ -15,7 +15,10 @@ impl Db {
                 &[&room_id],
             )
             .await?;
-        let dirs: Vec<String> = exits.into_iter().map(|row| row.get::<_, String>(0)).collect();
+        let dirs: Vec<String> = exits
+            .into_iter()
+            .map(|row| row.get::<_, String>(0))
+            .collect();
         let exits_line = if dirs.is_empty() {
             "Exits: none".to_string()
         } else {

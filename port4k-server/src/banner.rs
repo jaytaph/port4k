@@ -6,7 +6,6 @@ pub const BANNER: &str = r#"______          _       ___ _
 \_|  \___/|_|   \__|     |_/_|\_\
 "#;
 
-
 pub const ENTRY: &str = r#"
 Welcome to Port4k
 A world of rooms, puzzles, and adventure

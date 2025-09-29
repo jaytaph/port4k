@@ -1,2 +1,2 @@
-pub mod telnet;
 pub mod args;
+pub mod telnet;

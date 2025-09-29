@@ -9,7 +9,9 @@ impl Db {
     /// Run embedded SQL migrations (idempotent).
     pub async fn init(&self) -> anyhow::Result<()> {
         let mut client = self.pool.get().await?;
-        embedded::migrations::runner().run_async(&mut **client).await?;
+        embedded::migrations::runner()
+            .run_async(&mut **client)
+            .await?;
         Ok(())
     }
 }
