@@ -12,6 +12,7 @@ use tokio::net::TcpListener;
 
 
 use crate::banner::{BANNER, ENTRY};
+use crate::lua::start_lua_worker;
 use crate::prelogin::{handle_connection, Registry};
 
 
@@ -34,9 +35,12 @@ async fn main() -> anyhow::Result<()> {
 
     let registry = Arc::new(Registry::new(db));
 
+    let lua_tx = start_lua_worker();
+    let lua_tx_clone = lua_tx.clone();
+
     let http_registry = registry.clone();
     tokio::spawn(async move {
-        if let Err(e) = http::serve(SocketAddr::from(http_addr), http_registry, BANNER, ENTRY).await {
+        if let Err(e) = http::serve(SocketAddr::from(http_addr), http_registry, BANNER, ENTRY, lua_tx_clone.clone()).await {
             eprintln!("HTTP server error: {e}");
         }
     });
@@ -45,8 +49,10 @@ async fn main() -> anyhow::Result<()> {
         let (stream, peer) = listener.accept().await?;
         let registry = registry.clone();
         tracing::info!(%peer, "client connected");
+
+        let lua_tx_clone = lua_tx.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, registry, BANNER, ENTRY).await {
+            if let Err(e) = handle_connection(stream, registry, BANNER, ENTRY, lua_tx_clone.clone()).await {
                 tracing::error!(%peer, error=%e, "connection error");
             }
             tracing::info!(%peer, "client disconnected");

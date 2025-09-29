@@ -9,18 +9,25 @@ use axum::{
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::prelogin::{process_command, Registry, Session};
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, Mutex};
+use crate::lua::LuaJob;
 
 pub async fn serve(
     addr: std::net::SocketAddr,
     registry: Arc<Registry>,
     banner: &'static str,
     entry: &'static str,
+    lua_tx: mpsc::Sender<LuaJob>,
 ) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/", get(index))
         .route("/ws", get(ws_upgrade))
-        .with_state(AppState { registry, banner, entry })
+        .with_state(AppState {
+            registry,
+            banner,
+            entry,
+            lua_tx,
+        })
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any));
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -31,6 +38,7 @@ pub async fn serve(
 #[derive(Clone)]
 struct AppState {
     registry: Arc<Registry>,
+    lua_tx: mpsc::Sender<LuaJob>,
     banner: &'static str,
     entry: &'static str,
 }
@@ -63,9 +71,9 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
         };
 
         let cmd = text.trim();
-        let resp = process_command(cmd, &state.registry, &sess)
+        let resp = process_command(cmd, &state.registry, &sess, state.lua_tx.clone())
             .await
-            .unwrap_or_else(|e| format!("erreur: {e}\\n"));
+            .unwrap_or_else(|e| format!("error: {e}\\n"));
 
         let _ = socket
             .send(Message::Text(format!("{}> ", ensure_nl(resp))))

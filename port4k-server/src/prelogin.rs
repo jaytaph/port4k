@@ -1,12 +1,12 @@
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{mpsc, Mutex, RwLock};
 
-use port4k_core::Username;
 use crate::db::Db;
-use crate::telnet::{read_telnet_line, telnet_echo_off};
 use crate::telnet::telnet_echo_on;
+use crate::telnet::{read_telnet_line, telnet_echo_off};
+use port4k_core::Username;
 
 #[derive(Debug)]
 pub struct Editor {
@@ -16,28 +16,39 @@ pub struct Editor {
     buf: String,
 }
 
-
 #[derive(Debug, Clone)]
 pub enum WorldMode {
-    Live { room_id: i64 },
-    Playtest { bp: String, room: String, prev_room_id: Option<i64> },
+    Live {
+        room_id: i64,
+    },
+    Playtest {
+        bp: String,
+        room: String,
+        prev_room_id: Option<i64>,
+    },
 }
 
 #[derive(Debug)]
 pub struct Registry {
     pub db: Db,
-    /// Online set.
     pub online: RwLock<std::collections::BTreeSet<String>>,
 }
 
 impl Registry {
     pub fn new(db: Db) -> Self {
-        Self { db, online: RwLock::new(std::collections::BTreeSet::new()) }
+        Self {
+            db,
+            online: RwLock::new(std::collections::BTreeSet::new()),
+        }
     }
 
     pub async fn set_online(&self, name: &Username, online: bool) {
         let mut g = self.online.write().await;
-        if online { g.insert(name.0.clone()); } else { g.remove(&name.0); }
+        if online {
+            g.insert(name.0.clone());
+        } else {
+            g.remove(&name.0);
+        }
     }
 
     pub async fn who(&self) -> Vec<String> {
@@ -49,10 +60,11 @@ impl Registry {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConnState { PreLogin, LoggedIn }
-
+pub enum ConnState {
+    PreLogin,
+    LoggedIn,
+}
 
 #[derive(Debug)]
 pub struct Session {
@@ -62,15 +74,24 @@ pub struct Session {
     pub editor: Option<Editor>,
 }
 
+impl Default for Session {
+    fn default() -> Self {
+        Self {
+            name: None,
+            state: ConnState::PreLogin,
+            world: None,
+            editor: None,
+        }
+    }
+}
 
-impl Default for Session { fn default() -> Self { Self {
-    name: None,
-    state: ConnState::PreLogin,
-    world: None,
-    editor: None,
-} } }
-
-pub async fn handle_connection(stream: TcpStream, registry: Arc<Registry>, banner: &str, entry: &str) -> anyhow::Result<()> {
+pub async fn handle_connection(
+    stream: TcpStream,
+    registry: Arc<Registry>,
+    banner: &str,
+    entry: &str,
+    lua_tx: mpsc::Sender<crate::lua::LuaJob>,
+) -> anyhow::Result<()> {
     let (r, mut w) = stream.into_split();
     let mut reader = BufReader::new(r);
 
@@ -86,9 +107,11 @@ pub async fn handle_connection(stream: TcpStream, registry: Arc<Registry>, banne
     loop {
         line.clear(); // important: read_line appends
         let n = reader.read_line(&mut line).await?;
-        if n == 0 { break; }
+        if n == 0 {
+            break;
+        }
 
-        let raw = line.trim_matches(['\r','\n']).trim();
+        let raw = line.trim_matches(['\r', '\n']).trim();
         tracing::debug!(%raw, "received line");
 
         // If in editor mode, process and keep the connection alive
@@ -117,7 +140,8 @@ pub async fn handle_connection(stream: TcpStream, registry: Arc<Registry>, banne
                     // validate user and prompt for password with echo off
                     if let Some(user) = Username::parse(parts[0]) {
                         if !registry.user_exists(&user).await {
-                            w.write_all(b"No such user. Try `register <name> <password>`.\n").await?;
+                            w.write_all(b"No such user. Try `register <name> <password>`.\n")
+                                .await?;
                         } else {
                             // turn echo off, then prompt
                             telnet_echo_off(&mut w).await?;
@@ -130,14 +154,23 @@ pub async fn handle_connection(stream: TcpStream, registry: Arc<Registry>, banne
                                 return Ok(());
                             }
                             telnet_echo_on(&mut w).await?;
-                            let password = pw.trim_matches(['\r','\n']);
+                            let password = pw.trim_matches(['\r', '\n']);
 
-                            if registry.db.verify_user(&user.0, password).await.unwrap_or(false) {
+                            if registry
+                                .db
+                                .verify_user(&user.0, password)
+                                .await
+                                .unwrap_or(false)
+                            {
                                 let mut s = sess.lock().await;
                                 s.name = Some(user.clone());
                                 s.state = ConnState::LoggedIn;
                                 registry.set_online(&user, true).await;
-                                w.write_all(format!("\nWelcome, {}! Type `look` or `help`.\n", user).as_bytes()).await?;
+                                w.write_all(
+                                    format!("\nWelcome, {}! Type `look` or `help`.\n", user)
+                                        .as_bytes(),
+                                )
+                                .await?;
                             } else {
                                 w.write_all(b"\nInvalid credentials.\n").await?;
                             }
@@ -154,11 +187,13 @@ pub async fn handle_connection(stream: TcpStream, registry: Arc<Registry>, banne
         }
 
         // Normal command path
-        let response = process_command(raw, &registry, &sess).await;
+        let response = process_command(raw, &registry, &sess, lua_tx.clone()).await;
         match response {
             Ok(mut out) => {
                 if !out.is_empty() {
-                    if !out.ends_with('\n') { out.push('\n'); }
+                    if !out.ends_with('\n') {
+                        out.push('\n');
+                    }
                     w.write_all(out.as_bytes()).await?;
                 }
             }
@@ -172,21 +207,27 @@ pub async fn handle_connection(stream: TcpStream, registry: Arc<Registry>, banne
         w.flush().await?;
     }
 
-
     // On disconnect, mark offline if logged in
     let name = sess.lock().await.name.clone();
-    if let Some(u) = name { registry.set_online(&u, false).await; }
+    if let Some(u) = name {
+        registry.set_online(&u, false).await;
+    }
     Ok(())
 }
 
-pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &Arc<Mutex<Session>>) -> anyhow::Result<String> {
+pub(crate) async fn process_command(
+    cmd: &str,
+    registry: &Arc<Registry>,
+    sess: &Arc<Mutex<Session>>,
+    lua_tx: mpsc::Sender<crate::lua::LuaJob>,
+) -> anyhow::Result<String> {
     if cmd.is_empty() {
         return Ok(String::new());
     }
 
     let mut it = cmd.split_whitespace();
     let Some(verb) = it.next() else {
-        return Ok(String::new())
+        return Ok(String::new());
     };
 
     match verb.to_ascii_lowercase().as_str() {
@@ -194,7 +235,11 @@ pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &
         "quit" | "exit" => Ok("Goodbye!\n".to_string()),
         "who" => {
             let list = registry.who().await;
-            if list.is_empty() { Ok("No one is online.\n".into()) } else { Ok(format!("Online ({}): {}\n", list.len(), list.join(", "))) }
+            if list.is_empty() {
+                Ok("No one is online.\n".into())
+            } else {
+                Ok(format!("Online ({}): {}\n", list.len(), list.join(", ")))
+            }
         }
         "register" => {
             let args = it.collect::<Vec<_>>();
@@ -203,21 +248,30 @@ pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &
             }
             let name = args[0];
             let pass = args[1];
-            let Some(u) = Username::parse(name) else { return Ok("Invalid username.\n".into()) };
+            let Some(u) = Username::parse(name) else {
+                return Ok("Invalid username.\n".into());
+            };
             if registry.db.register_user(&u.0, pass).await? {
-                Ok(format!("Account `{}` created. You can now `login {} <password>`.\n", u, u))
+                Ok(format!(
+                    "Account `{}` created. You can now `login {} <password>`.\n",
+                    u, u
+                ))
             } else {
                 Ok("That name is taken.\n".into())
             }
         }
         "login" => {
             let args = it.collect::<Vec<_>>();
-            if args.len() < 2 { return Ok("Usage: login <name> <password>\n".into()); }
+            if args.len() < 2 {
+                return Ok("Usage: login <name> <password>\n".into());
+            }
             let name = args[0];
             let pass = args[1];
-            let Some(u) = Username::parse(name) else { return Ok("Invalid username.\n".into()) };
+            let Some(u) = Username::parse(name) else {
+                return Ok("Invalid username.\n".into());
+            };
             if registry.db.verify_user(&u.0, pass).await? {
-                let ( _char_id, loc ) = registry.db.get_or_create_character(&u.0).await?;
+                let (_char_id, loc) = registry.db.get_or_create_character(&u.0).await?;
                 {
                     let mut s = sess.lock().await;
                     s.name = Some(u.clone());
@@ -233,7 +287,9 @@ pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &
         }
         "look" => {
             let s = sess.lock().await;
-            if s.state != ConnState::LoggedIn { return Ok("You must `login` first.\n".into()); }
+            if s.state != ConnState::LoggedIn {
+                return Ok("You must `login` first.\n".into());
+            }
             match &s.world {
                 Some(WorldMode::Live { room_id }) => {
                     let view = registry.db.room_view(*room_id).await?;
@@ -250,13 +306,17 @@ pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &
         }
         "go" => {
             let args = it.collect::<Vec<_>>();
-            if args.is_empty() { return Ok("Usage: go <direction>\n".into()); }
+            if args.is_empty() {
+                return Ok("Usage: go <direction>\n".into());
+            }
             let dir = args[0].to_ascii_lowercase();
 
             // 1) Snapshot user + world, then drop the lock
             let (username, world) = {
                 let s = sess.lock().await;
-                if s.state != ConnState::LoggedIn { return Ok("You must `login` first.\n".into()); }
+                if s.state != ConnState::LoggedIn {
+                    return Ok("You must `login` first.\n".into());
+                }
                 let username = s.name.as_ref().unwrap().0.clone();
                 let world = s.world.clone(); // make sure WorldMode derives Clone
                 (username, world)
@@ -267,7 +327,8 @@ pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &
                 Some(WorldMode::Live { .. }) => {
                     match registry.db.move_character(&username, &dir).await? {
                         Some(new_room) => {
-                            { // update session
+                            {
+                                // update session
                                 let mut s = sess.lock().await;
                                 if let Some(WorldMode::Live { room_id }) = &mut s.world {
                                     *room_id = new_room;
@@ -282,15 +343,25 @@ pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &
                 Some(WorldMode::Playtest { bp, room, .. }) => {
                     match registry.db.bp_move(&bp, &room, &dir).await? {
                         Some(next) => {
-                            { // update session
+                            {
+                                // update session
                                 let mut s = sess.lock().await;
                                 if let Some(WorldMode::Playtest { room, .. }) = &mut s.world {
                                     *room = next.clone();
                                 }
                             }
-                            let extra = crate::lua::run_on_enter_playtest(&registry.db, &bp, &next, &username).await?
-                                .unwrap_or_default();
-                            let view = registry.db.bp_room_view(&bp, &next).await?
+                            let extra = crate::lua::run_on_enter_playtest(
+                                &registry.db,
+                                &bp,
+                                &next,
+                                &username,
+                            )
+                            .await?
+                            .unwrap_or_default();
+                            let view = registry
+                                .db
+                                .bp_room_view(&bp, &next)
+                                .await?
                                 .unwrap_or_else(|| "[playtest] room missing\n".into());
                             Ok(format!("{view}{extra}"))
                         }
@@ -302,9 +373,13 @@ pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &
         }
         "take" => {
             let args = it.collect::<Vec<_>>();
-            if args.is_empty() { return Ok("Usage: take coin [N]\n".into()); }
+            if args.is_empty() {
+                return Ok("Usage: take coin [N]\n".into());
+            }
             let what = args[0].to_ascii_lowercase();
-            if what != "coin" && what != "coins" { return Ok("You can take: coin\n".into()); }
+            if what != "coin" && what != "coins" {
+                return Ok("You can take: coin\n".into());
+            }
 
             // default 1 coin; allow "take coin 3"
             let want: i32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
@@ -319,7 +394,9 @@ pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &
                 match &s.world {
                     Some(WorldMode::Live { room_id }) => (user, *room_id),
                     Some(WorldMode::Playtest { .. }) => {
-                        return Ok("[playtest] Coins aren’t available in playtest instances.\n".into())
+                        return Ok(
+                            "[playtest] Coins aren’t available in playtest instances.\n".into()
+                        );
                     }
                     None => return Ok("You are nowhere.\n".into()),
                 }
@@ -333,9 +410,11 @@ pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &
             }
         }
         "balance" => {
-            let sname = { sess.lock().await.name.clone() };
-            if sname.is_none() { return Ok("You must `login` first.\n".into()); }
-            let user = sname.unwrap();
+            let s_name = { sess.lock().await.name.clone() };
+            if s_name.is_none() {
+                return Ok("You must `login` first.\n".into());
+            }
+            let user = s_name.unwrap();
             let bal = registry.db.account_balance(&user.0).await?;
             Ok(format!("Your balance: {bal} coin(s).\n"))
         }
@@ -393,7 +472,9 @@ pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &
                 let mut s = sess.lock().await;
                 match &mut s.world {
                     Some(WorldMode::Playtest { prev_room_id, .. }) => {
-                        let room_id = prev_room_id.take().ok_or_else(|| anyhow::anyhow!("no previous location"))?;
+                        let room_id = prev_room_id
+                            .take()
+                            .ok_or_else(|| anyhow::anyhow!("no previous location"))?;
                         s.world = Some(WorldMode::Live { room_id });
                         let view = registry.db.room_view(room_id).await?;
                         Ok(format!("[playtest] exited.\n{view}"))
@@ -402,13 +483,33 @@ pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &
                 }
             } else {
                 let bp = rest;
-                let entry = registry.db.bp_entry(bp).await?.ok_or_else(|| anyhow::anyhow!("blueprint has no entry room"))?;
+                let entry = registry
+                    .db
+                    .bp_entry(bp)
+                    .await?
+                    .ok_or_else(|| anyhow::anyhow!("blueprint has no entry room"))?;
                 let mut s = sess.lock().await;
-                if s.state != ConnState::LoggedIn { return Ok("Login required.\n".into()); }
-                let prev = match &s.world { Some(WorldMode::Live { room_id }) => Some(*room_id), _ => None };
-                s.world = Some(WorldMode::Playtest { bp: bp.to_string(), room: entry.clone(), prev_room_id: prev });
-                let view = registry.db.bp_room_view(bp, &entry).await?.unwrap_or_else(|| "[playtest] empty room\n".into());
-                Ok(format!("[playtest] entered `{}` at `{}`.\n{}", bp, entry, view))
+                if s.state != ConnState::LoggedIn {
+                    return Ok("Login required.\n".into());
+                }
+                let prev = match &s.world {
+                    Some(WorldMode::Live { room_id }) => Some(*room_id),
+                    _ => None,
+                };
+                s.world = Some(WorldMode::Playtest {
+                    bp: bp.to_string(),
+                    room: entry.clone(),
+                    prev_room_id: prev,
+                });
+                let view = registry
+                    .db
+                    .bp_room_view(bp, &entry)
+                    .await?
+                    .unwrap_or_else(|| "[playtest] empty room\n".into());
+                Ok(format!(
+                    "[playtest] entered `{}` at `{}`.\n{}",
+                    bp, entry, view
+                ))
             }
         }
         "@debug" => {
@@ -419,12 +520,13 @@ pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &
                     let s = sess.lock().await;
                     let user = s.name.as_ref().map(|u| u.0.as_str()).unwrap_or("<guest>");
                     let msg = match &s.world {
-                        Some(WorldMode::Live { room_id }) =>
-                            format!("[debug] user={user} world=Live room_id={}\n", room_id),
-                        Some(WorldMode::Playtest { bp, room, .. }) =>
-                            format!("[debug] user={user} world=Playtest {}:{}\n", bp, room),
-                        None =>
-                            format!("[debug] user={user} world=None\n"),
+                        Some(WorldMode::Live { room_id }) => {
+                            format!("[debug] user={user} world=Live room_id={}\n", room_id)
+                        }
+                        Some(WorldMode::Playtest { bp, room, .. }) => {
+                            format!("[debug] user={user} world=Playtest {}:{}\n", bp, room)
+                        }
+                        None => format!("[debug] user={user} world=None\n"),
                     };
                     Ok(msg)
                 }
@@ -471,21 +573,37 @@ pub(crate) async fn process_command(cmd: &str, registry: &Arc<Registry>, sess: &
             let (bp, room, user) = {
                 let s = sess.lock().await;
                 match (&s.world, &s.name) {
-                    (Some(WorldMode::Playtest { bp, room, .. }), Some(u)) =>
-                        (bp.clone(), room.clone(), u.0.clone()),
+                    (Some(WorldMode::Playtest { bp, room, .. }), Some(u)) => {
+                        (bp.clone(), room.clone(), u.0.clone())
+                    }
                     _ => return Ok("Unknown command. Try `help`.\n".into()),
                 }
             };
 
-            let args_vec = it.collect::<Vec<_>>().into_iter().map(|s| s.to_string()).collect::<Vec<_>>();
-            if let Some(out) = crate::lua::run_on_command_playtest(&registry.db, &bp, &room, &user, verb, &args_vec).await? {
-                if out.trim().is_empty() {
-                    Ok(String::new())
-                } else {
-                    Ok(out)
-                }
-            } else {
-                Ok("Unknown command. Try `help`.\n".into())
+            let args_vec = it
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>();
+
+            // Prepare the oneshot reply channel
+            let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+
+            // Send job to the Lua worker
+            lua_tx
+                .send(crate::lua::LuaJob::OnCommandPlaytest {
+                    db: registry.db.clone(),
+                    bp,
+                    room,
+                    user,
+                    verb: verb.to_string(),
+                    args: args_vec,
+                    reply: reply_tx,
+                })
+                .await
+                .map_err(|_| anyhow::anyhow!("Lua worker dropped"))?;
+
+            match reply_rx.await? {
+                Ok(out) if !out.trim().is_empty() => Ok(out),
+                _ => Ok("Unknown command. Try `help`.\n".into()),
             }
         }
     }
@@ -505,13 +623,15 @@ Available commands
   take coin [N]                Pick up up to N coins from the room
   balance                      Show how many coins you have
   quit                         Disconnect
-"#.to_string()
+"#
+    .to_string()
 }
-
 
 fn parse_bp_room_key(s: &str) -> Option<(String, String)> {
     let (bp, room) = s.split_once(':')?;
-    if bp.is_empty() || room.is_empty() { return None; }
+    if bp.is_empty() || room.is_empty() {
+        return None;
+    }
     Some((bp.to_string(), room.to_string()))
 }
 
@@ -522,19 +642,32 @@ fn split_args_quoted(s: &str) -> Vec<String> {
     let mut chars = s.chars().peekable();
     while let Some(ch) = chars.next() {
         match ch {
-            '"' => { in_q = !in_q; }
+            '"' => {
+                in_q = !in_q;
+            }
             ' ' | '\t' if !in_q => {
-                if !cur.is_empty() { out.push(std::mem::take(&mut cur)); }
+                if !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                }
             }
             '\\' => {
                 if let Some(&next) = chars.peek() {
-                    if next == '"' || next == '\\' { cur.push(next); chars.next(); } else { cur.push(ch); }
-                } else { cur.push(ch); }
+                    if next == '"' || next == '\\' {
+                        cur.push(next);
+                        chars.next();
+                    } else {
+                        cur.push(ch);
+                    }
+                } else {
+                    cur.push(ch);
+                }
             }
             _ => cur.push(ch),
         }
     }
-    if !cur.is_empty() { out.push(cur); }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
     out
 }
 
@@ -547,13 +680,25 @@ async fn process_editor_line(
     if line.trim() == ".end" {
         let (bp, room, event, src, author) = {
             let mut s = sess.lock().await;
-            let ed = s.editor.take().ok_or_else(|| anyhow::anyhow!("no editor"))?;
-            let author = s.name.as_ref().map(|u| u.0.clone()).unwrap_or_else(|| "unknown".into());
+            let ed = s
+                .editor
+                .take()
+                .ok_or_else(|| anyhow::anyhow!("no editor"))?;
+            let author = s
+                .name
+                .as_ref()
+                .map(|u| u.0.clone())
+                .unwrap_or_else(|| "unknown".into());
             (ed.bp, ed.room, ed.event, ed.buf, author)
         };
-        registry.db.bp_script_put_draft(&bp, &room, &event, &src, &author).await?;
-        return Ok(format!("[script] saved draft for {}:{} {}\nUse: @script publish {}:{} {}\n",
-                          bp, room, event, bp, room, event));
+        registry
+            .db
+            .bp_script_put_draft(&bp, &room, &event, &src, &author)
+            .await?;
+        return Ok(format!(
+            "[script] saved draft for {}:{} {}\nUse: @script publish {}:{} {}\n",
+            bp, room, event, bp, room, event
+        ));
     }
 
     // otherwise accumulate

@@ -2,12 +2,50 @@ use anyhow::{Context, Result};
 use mlua::{Lua, Function, Value, Table};
 use std::time::Duration;
 use mlua::prelude::LuaError;
+use tokio::sync::{mpsc, oneshot};
 use crate::db::Db;
+
+pub enum LuaJob {
+    OnEnter { reply: oneshot::Sender<Result<()>> },
+    OnCommandPlaytest { reply: oneshot::Sender<Result<String>> }
+}
+
+pub fn start_lua_worker() -> mpsc::Sender<LuaJob> {
+    let (tx, mut rx) = mpsc::channel::<LuaJob>(64);
+
+    std::thread::spawn(move || {
+        let lua = mlua::Lua::new(); // stays on this thread forever
+        while let Some(job) = rx.blocking_recv() {
+            match job {
+                LuaJob::OnEnter { reply } => {
+                    let res = (|| -> Result<()> {
+                        if let Ok(f) = lua.globals().get::<_, mlua::Function>("on_enter") {
+                            f.call::<_, ()>(())?;
+                        }
+                        Ok(())
+                    })();
+                    let _ = reply.send(res);
+                }
+                LuaJob::OnCommandPlaytest { reply } => {
+                    let res = (|| -> Result<String> {
+                        if let Ok(f) = lua.globals().get::<_, mlua::Function>("on_command") {
+                            f.call::<_, ()>(())?;
+                        }
+                        Ok("".into())
+                    })();
+                    let _ = reply.send(res);
+                }
+            }
+        }
+    });
+
+    tx
+}
 
 /// Run `on_command` if present for a blueprint room. Returns:
 /// - Ok(Some(text)) if handled (accumulated output)
 /// - Ok(None) if no handler or not handled
-pub async fn run_on_command_playtest(
+async fn run_on_command_playtest(
     db: &Db,
     bp: &str,
     room: &str,
@@ -197,7 +235,6 @@ pub async fn run_on_enter_playtest(db: &Db, bp: &str, room: &str, account: &str)
     Ok(Some(out.lock().clone()))
 }
 
-/* --- helpers: serde_json <-> Lua --- */
 fn serde_json_to_lua(lua: &Lua, v: serde_json::Value) -> mlua::Result<Value> {
     Ok(match v {
         serde_json::Value::Null => Value::Nil,

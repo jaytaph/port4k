@@ -25,6 +25,3 @@ thiserror = "2.0.16"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["fmt", "env-filter"] }
 tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync"] }
-
-[dependencies]
-refinery_cli = "0.8.16"
