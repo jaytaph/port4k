@@ -10,11 +10,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
-
 use crate::banner::{BANNER, ENTRY};
 use crate::lua::start_lua_worker;
 use crate::prelogin::{handle_connection, Registry};
-
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
