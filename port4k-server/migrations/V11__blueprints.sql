@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS blueprints
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS blueprint_rooms
+CREATE TABLE IF NOT EXISTS bp_rooms
 (
     bp_key TEXT NOT NULL REFERENCES blueprints (key) ON DELETE CASCADE,
     key    TEXT NOT NULL,
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS blueprint_rooms
     PRIMARY KEY (bp_key, key)
 );
 
-CREATE TABLE IF NOT EXISTS blueprint_exits
+CREATE TABLE IF NOT EXISTS bp_exits
 (
     bp_key   TEXT NOT NULL REFERENCES blueprints (key) ON DELETE CASCADE,
     from_key TEXT NOT NULL,

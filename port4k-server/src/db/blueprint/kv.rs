@@ -10,7 +10,7 @@ impl Db {
         let c = self.pool.get().await?;
         let row = c
             .query_opt(
-                "SELECT value FROM blueprint_room_kv
+                "SELECT value FROM bp_room_kv
                     WHERE bp_key=$1 AND room_key=$2 AND key=$3",
                 &[&bp, &room, &key],
             )
@@ -27,7 +27,7 @@ impl Db {
     ) -> anyhow::Result<()> {
         let c = self.pool.get().await?;
         c.execute(
-            "INSERT INTO blueprint_room_kv (bp_key, room_key, key, value)
+            "INSERT INTO bp_room_kv (bp_key, room_key, key, value)
                 VALUES ($1,$2,$3,$4)
                 ON CONFLICT (bp_key,room_key,key)
                 DO UPDATE SET value=EXCLUDED.value",
@@ -47,7 +47,7 @@ impl Db {
         let c = self.pool.get().await?;
         let row = c
             .query_opt(
-                "SELECT value FROM blueprint_player_kv
+                "SELECT value FROM bp_player_kv
                     WHERE bp_key=$1 AND account_name=$2 AND room_key=$3 AND key=$4",
                 &[&bp, &account, &room, &key],
             )
@@ -65,7 +65,7 @@ impl Db {
     ) -> anyhow::Result<()> {
         let c = self.pool.get().await?;
         c.execute(
-            "INSERT INTO blueprint_player_kv (bp_key, account_name, room_key, key, value)
+            "INSERT INTO bp_player_kv (bp_key, account_name, room_key, key, value)
                 VALUES ($1,$2,$3,$4,$5)
                 ON CONFLICT (bp_key,account_name,room_key,key)
                 DO UPDATE SET value=EXCLUDED.value",

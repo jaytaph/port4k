@@ -11,7 +11,7 @@ impl Db {
     ) -> anyhow::Result<()> {
         let c = self.pool.get().await?;
         c.execute(
-            "INSERT INTO blueprint_scripts_draft (bp_key, room_key, event, source, author)
+            "INSERT INTO bp_scripts_draft (bp_key, room_key, event, source, author)
              VALUES ($1,$2,$3,$4,$5)
              ON CONFLICT (bp_key,room_key,event)
              DO UPDATE
@@ -30,9 +30,9 @@ impl Db {
     ) -> anyhow::Result<bool> {
         let c = self.pool.get().await?;
         let n = c.execute(
-            "INSERT INTO blueprint_scripts_live (bp_key, room_key, event, source, author, updated_at)
+            "INSERT INTO bp_scripts_live (bp_key, room_key, event, source, author, updated_at)
              SELECT bp_key, room_key, event, source, author, now()
-             FROM blueprint_scripts_draft
+             FROM bp_scripts_draft
              WHERE bp_key=$1 AND room_key=$2 AND event=$3
              ON CONFLICT (bp_key,room_key,event)
              DO UPDATE
@@ -52,7 +52,7 @@ impl Db {
         let c = self.pool.get().await?;
         let row = c
             .query_opt(
-                "SELECT source FROM blueprint_scripts_live WHERE bp_key=$1 AND room_key=$2 AND event=$3",
+                "SELECT source FROM bp_scripts_live WHERE bp_key=$1 AND room_key=$2 AND event=$3",
                 &[&bp_key, &room_key, &event],
             )
             .await?;

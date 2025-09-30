@@ -1,6 +1,37 @@
 use super::super::Db;
 
 impl Db {
+    pub async fn bp_room_set_locked(
+        &self,
+        bp_key: &str,
+        room_key: &str,
+        locked: bool,
+    ) -> anyhow::Result<bool> {
+        let c = self.pool.get().await?;
+        let n = c
+            .execute(
+                "UPDATE bp_rooms SET locked=$3
+             WHERE bp_key=$1 AND key=$2",
+                &[&bp_key, &room_key, &locked],
+            )
+            .await?;
+        Ok(n == 1)
+    }
+
+    pub async fn bp_room_is_locked(&self, bp_key: &str, room_key: &str) -> anyhow::Result<Option<bool>> {
+        let c = self.pool.get().await?;
+        let row = c
+            .query_opt(
+                "SELECT locked FROM bp_rooms WHERE bp_key=$1 AND key=$2",
+                &[&bp_key, &room_key],
+            )
+            .await?;
+        Ok(row.and_then(|r| r.get::<_, Option<bool>>(0)))
+    }
+
+
+
+
     pub async fn bp_new(&self, bp_key: &str, title: &str, owner: &str) -> anyhow::Result<bool> {
         let c = self.pool.get().await?;
         let n = c
@@ -24,7 +55,7 @@ impl Db {
         let c = self.pool.get().await?;
         let n = c
             .execute(
-                "INSERT INTO blueprint_rooms (bp_key, key, title, body)
+                "INSERT INTO bp_rooms (bp_key, key, title, body)
              VALUES ($1, $2, $3, $4)
              ON CONFLICT DO NOTHING",
                 &[&bp_key, &room_key, &title, &body],
@@ -43,7 +74,7 @@ impl Db {
         let c = self.pool.get().await?;
         let n = c
             .execute(
-                "INSERT INTO blueprint_exits (bp_key, from_key, dir, to_key)
+                "INSERT INTO bp_exits (bp_key, from_key, dir, to_key)
              VALUES ($1, $2, LOWER($3), $4)
              ON CONFLICT DO NOTHING",
                 &[&bp_key, &from_key, &dir, &to_key],
@@ -82,7 +113,7 @@ impl Db {
         let c = self.pool.get().await?;
         let r = c
             .query_opt(
-                "SELECT title, body FROM blueprint_rooms WHERE bp_key=$1 AND key=$2",
+                "SELECT title, body FROM bp_rooms WHERE bp_key=$1 AND key=$2",
                 &[&bp_key, &room_key],
             )
             .await?;
@@ -94,7 +125,7 @@ impl Db {
 
         let exits = c
             .query(
-                "SELECT dir FROM blueprint_exits
+                "SELECT dir FROM bp_exits
                  WHERE bp_key=$1 AND from_key=$2
                  ORDER BY dir",
                 &[&bp_key, &room_key],
@@ -121,7 +152,7 @@ impl Db {
         let c = self.pool.get().await?;
         let to = c
             .query_opt(
-                "SELECT to_key FROM blueprint_exits
+                "SELECT to_key FROM bp_exits
                  WHERE bp_key=$1 AND from_key=$2 AND dir=LOWER($3)",
                 &[&bp_key, &from_key, &dir],
             )

@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS blueprint_scripts_draft
+CREATE TABLE IF NOT EXISTS bp_scripts_draft
 (
     bp_key     TEXT        NOT NULL,
     room_key   TEXT        NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS blueprint_scripts_draft
     PRIMARY KEY (bp_key, room_key, event)
 );
 
-CREATE TABLE IF NOT EXISTS blueprint_scripts_live
+CREATE TABLE IF NOT EXISTS bp_scripts_live
 (
     bp_key     TEXT        NOT NULL,
     room_key   TEXT        NOT NULL,

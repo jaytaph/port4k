@@ -1,18 +1,22 @@
 use crate::db::Db;
 use port4k_core::Username;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 use tokio::sync::RwLock;
+use crate::config::Config;
 
 #[derive(Debug)]
 pub struct Registry {
     pub db: Db,
+    pub config: Arc<Config>,
     pub online: RwLock<BTreeSet<String>>,
 }
 
 impl Registry {
-    pub fn new(db: Db) -> Self {
+    pub fn new(db: Db, config: Arc<Config>) -> Self {
         Self {
             db,
+            config,
             online: RwLock::new(BTreeSet::new()),
         }
     }

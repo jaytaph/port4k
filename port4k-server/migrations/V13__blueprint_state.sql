@@ -1,5 +1,5 @@
 -- Per-blueprint room & player state (used during playtests)
-CREATE TABLE IF NOT EXISTS blueprint_room_kv
+CREATE TABLE IF NOT EXISTS bp_room_kv
 (
     bp_key   TEXT  NOT NULL,
     room_key TEXT  NOT NULL,
@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS blueprint_room_kv
     PRIMARY KEY (bp_key, room_key, key)
 );
 
-CREATE TABLE IF NOT EXISTS blueprint_player_kv
+CREATE TABLE IF NOT EXISTS bp_player_kv
 (
     bp_key       TEXT  NOT NULL,
     account_name TEXT  NOT NULL,

@@ -79,7 +79,7 @@ SELECT r.cat1,   'up',   r.gate,  '{}'::jsonb FROM r
 UNION ALL
 SELECT r.cat1,   'east', r.shrine,'{}'::jsonb FROM r
 UNION ALL
-SELECT r.shrrine, 'west', r.cat1, '{}'::jsonb FROM r
+SELECT r.shrine, 'west', r.cat1, '{}'::jsonb FROM r
 ON CONFLICT DO NOTHING;
 
 -- ==================================================
@@ -187,74 +187,3 @@ SELECT 'bob',   'Boric',  room_id, '{"level":1,"hp":12,"mp":1}'::jsonb FROM entr
 UNION ALL
 SELECT 'carol', 'Carys',  room_id, '{"level":1,"hp":8,"mp":8}' ::jsonb FROM entry_room
 ON CONFLICT DO NOTHING;
-
--- ===========================
--- BLUEPRINT: bp_space_demo
--- ===========================
-INSERT INTO blueprints (key, title, owner, status, entry_room_key)
-VALUES ('bp_space_demo', 'Space Demo', 'admin', 'draft', 'dock')
-ON CONFLICT (key) DO NOTHING;
-
--- Blueprint rooms
-INSERT INTO blueprint_rooms (bp_key, key, title, body)
-VALUES
-  ('bp_space_demo','dock',    'Orbital Dock',  'Ships drift outside large viewing panes.'),
-  ('bp_space_demo','hall',    'Transfer Hall', 'A long corridor hums with energy.'),
-  ('bp_space_demo','lab',     'Xeno Lab',      'Sterile benches covered with sensors.')
-ON CONFLICT DO NOTHING;
-
--- Blueprint exits
-INSERT INTO blueprint_exits (bp_key, from_key, dir, to_key)
-VALUES
-  ('bp_space_demo','dock','north','hall'),
-  ('bp_space_demo','hall','south','dock'),
-  ('bp_space_demo','hall','east','lab'),
-  ('bp_space_demo','lab','west','hall')
-ON CONFLICT DO NOTHING;
-
--- Draft & live scripts for blueprint rooms
-INSERT INTO blueprint_scripts_draft (bp_key, room_key, event, source, author)
-VALUES
-  ('bp_space_demo','dock','on_enter',
-$LUA$
-function on_enter(ctx)
-  ctx:send("Dock control crackles: 'Welcome to Orbital 4K.'")
-end
-$LUA$
-  ,'admin'),
-  ('bp_space_demo','lab','on_command',
-$LUA$
-function on_command(ctx, verb, args)
-  if verb == "scan" then
-    ctx:send("Analyzing sample... no pathogens detected.")
-    return
-  end
-end
-$LUA$
-  ,'admin')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO blueprint_scripts_live (bp_key, room_key, event, source, author)
-VALUES
-  ('bp_space_demo','hall','on_enter',
-$LUA$
-function on_enter(ctx)
-  ctx:send("Transfer Hall lights up as you step in.")
-end
-$LUA$
-  ,'admin')
-ON CONFLICT DO NOTHING;
-
--- Blueprint KV state (demo)
-INSERT INTO blueprint_room_kv (bp_key, room_key, key, value)
-VALUES
-  ('bp_space_demo','lab','power_level','{"percent": 67}'::jsonb),
-  ('bp_space_demo','dock','traffic','{"ships": 2}'::jsonb)
-ON CONFLICT DO NOTHING;
-
-INSERT INTO blueprint_player_kv (bp_key, account_name, room_key, key, value)
-VALUES
-  ('bp_space_demo','alice','dock','visited','{"at":"now()"}'::jsonb),
-  ('bp_space_demo','bob','hall','badge','{"clearance":"beta"}'::jsonb)
-ON CONFLICT DO NOTHING;
-

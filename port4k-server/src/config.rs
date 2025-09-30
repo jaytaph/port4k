@@ -7,6 +7,7 @@ pub struct Config {
     pub tcp_addr: String,       // e.g. "0.0.0.0:4000"
     pub websocket_addr: String, // e.g. "0.0.0.0:4001"
     pub database_url: String,   // e.g. "postgres://user:pass@localhost:5432/port4k"
+    pub import_dir: String,
 }
 
 impl Config {
@@ -24,6 +25,7 @@ impl Config {
             websocket_addr: std::env::var("WS_ADDR").unwrap_or_else(|_| "0.0.0.0:4001".to_string()),
             database_url: std::env::var("DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://user:pass@localhost:5432/port4k".to_string()),
+            import_dir: std::env::var("IMPORT_DIR").unwrap_or_else(|_| "import".to_string()),
         };
 
         Ok(cfg)

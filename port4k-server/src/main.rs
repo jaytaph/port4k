@@ -8,6 +8,8 @@ mod net;
 mod scripting;
 mod state;
 mod util;
+mod import;
+mod hardering;
 
 pub use commands::process_command;
 pub use net::connection::handle_connection;
@@ -27,7 +29,7 @@ use tokio::runtime::Handle;
 async fn main() -> anyhow::Result<()> {
     init_tracing();
 
-    let cfg = config::Config::from_env()?;
+    let cfg = Arc::new(config::Config::from_env()?);
 
     // Setup database and run migrations if needed
     let db = db::Db::new(&cfg.database_url)?;
@@ -40,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
     let listener = TcpListener::bind(tcp_addr).await?;
     tracing::info!(%tcp_addr, "Port4k server listening");
 
-    let registry = Arc::new(Registry::new(db));
+    let registry = Arc::new(Registry::new(db, cfg.clone()));
 
     // Start Lua worker thread
     let lua_tx = start_lua_worker(Handle::current());
@@ -50,15 +52,15 @@ async fn main() -> anyhow::Result<()> {
     let http_registry = registry.clone();
     let lua_tx_for_http = lua_tx.clone();
     let http_jh = tokio::spawn(async move {
+        tracing::info!(%websocket_addr, "Port4k server WS listening");
+
         if let Err(e) = http::serve(
             SocketAddr::from(websocket_addr),
             http_registry,
             BANNER,
             ENTRY,
             lua_tx_for_http,
-        )
-        .await
-        {
+        ).await {
             eprintln!("HTTP server error: {e}");
         }
     });
