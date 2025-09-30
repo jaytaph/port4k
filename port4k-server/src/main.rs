@@ -13,6 +13,7 @@ mod rendering;
 mod scripting;
 mod state;
 mod util;
+mod parser;
 
 pub use commands::process_command;
 pub use net::connection::handle_connection;
