@@ -8,9 +8,13 @@ pub enum ConnState {
 
 #[derive(Debug)]
 pub struct Editor {
+    /// Blueprint Id
     pub bp: String,
+    /// Room id
     pub room: String,
+    /// Event name
     pub event: String,
+    /// Input buffer
     pub buf: String,
 }
 

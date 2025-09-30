@@ -231,7 +231,7 @@ async fn repaint_prompt(w: &mut OwnedWriteHalf, editor: &LineEditor) -> std::io:
 /// Write text, ensuring it ends in CRLF (good Telnet hygiene)
 async fn write_with_newline(w: &mut OwnedWriteHalf, bytes: &[u8]) -> std::io::Result<()> {
     w.write_all(bytes).await?;
-    if !bytes.ends_with(b"\n") {
+    if !bytes.ends_with(b"\r\n") || !bytes.ends_with(b"\n") {
         w.write_all(b"\r\n").await?;
     }
     Ok(())
