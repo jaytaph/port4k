@@ -1,57 +1,110 @@
 mod banner;
-mod prelogin;
-mod http;
-mod db;
+mod commands;
 mod config;
-mod telnet;
+mod db;
+mod domain;
+mod hardering;
+mod http;
+mod import;
 mod lua;
+mod net;
+mod readline;
+mod rendering;
+mod scripting;
+mod state;
+mod util;
 
+pub use commands::process_command;
+pub use net::connection::handle_connection;
+pub use state::{
+    registry::Registry,
+    session::{ConnState, Editor, Session, WorldMode},
+};
+
+use crate::banner::{BANNER, ENTRY};
+use crate::lua::start_lua_worker;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-
-
-use crate::banner::{BANNER, ENTRY};
-use crate::prelogin::{handle_connection, Registry};
-
+use tokio::runtime::Handle;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     init_tracing();
 
-    let cfg = config::Config::from_env()?;
+    let cfg = Arc::new(config::Config::from_env()?);
 
+    // Setup database and run migrations if needed
     let db = db::Db::new(&cfg.database_url)?;
     db.init().await?;
 
+    // Start background tasks (spawning loot etc.)
     spawn_background_tasks(db.clone());
 
     let tcp_addr: SocketAddr = cfg.tcp_addr.parse()?;
-    let http_addr: SocketAddr = cfg.http_addr.parse()?;
-
     let listener = TcpListener::bind(tcp_addr).await?;
     tracing::info!(%tcp_addr, "Port4k server listening");
 
-    let registry = Arc::new(Registry::new(db));
+    let registry = Arc::new(Registry::new(db, cfg.clone()));
 
+    // Start Lua worker thread
+    let lua_tx = start_lua_worker(Handle::current());
+
+    // Start HTTP server for WebSocket connections
+    let websocket_addr: SocketAddr = cfg.websocket_addr.parse()?;
     let http_registry = registry.clone();
-    tokio::spawn(async move {
-        if let Err(e) = http::serve(SocketAddr::from(http_addr), http_registry, BANNER, ENTRY).await {
+    let lua_tx_for_http = lua_tx.clone();
+    let http_jh = tokio::spawn(async move {
+        tracing::info!(%websocket_addr, "Port4k server WS listening");
+
+        if let Err(e) = http::serve(
+            SocketAddr::from(websocket_addr),
+            http_registry,
+            BANNER,
+            ENTRY,
+            lua_tx_for_http,
+        )
+        .await
+        {
             eprintln!("HTTP server error: {e}");
         }
     });
 
-    loop {
-        let (stream, peer) = listener.accept().await?;
-        let registry = registry.clone();
-        tracing::info!(%peer, "client connected");
-        tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, registry, BANNER, ENTRY).await {
-                tracing::error!(%peer, error=%e, "connection error");
+    let telnet_registry = Arc::clone(&registry);
+    let telnet_jh = tokio::spawn(async move {
+        loop {
+            match listener.accept().await {
+                Ok((stream, peer)) => {
+                    tracing::info!(%peer, "client connected");
+                    let registry = telnet_registry.clone();
+                    let lua_tx_clone = lua_tx.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) =
+                            handle_connection(stream, registry, BANNER, ENTRY, lua_tx_clone.clone())
+                                .await
+                        {
+                            tracing::error!(%peer, error=%e, "connection error");
+                        }
+                        tracing::info!(%peer, "client disconnected");
+                    });
+                }
+                Err(e) => {
+                    tracing::error!(error=%e, "failed to accept connection");
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                }
             }
-            tracing::info!(%peer, "client disconnected");
-        });
+        }
+    });
+
+    // Wait for both servers to finish (they won't, unless there's an error)
+    match tokio::try_join!(http_jh, telnet_jh) {
+        Ok(_) => {}
+        Err(e) => {
+            tracing::error!(error=%e, "server task failed successfully");
+        }
     }
+
+    Ok(())
 }
 
 fn spawn_background_tasks(db: db::Db) {
@@ -66,7 +119,7 @@ fn spawn_background_tasks(db: db::Db) {
 }
 
 fn init_tracing() {
-    use tracing_subscriber::{prelude::*, EnvFilter};
+    use tracing_subscriber::{EnvFilter, prelude::*};
 
     let fmt_layer = tracing_subscriber::fmt::layer().with_target(false);
     let filter = EnvFilter::try_from_default_env()

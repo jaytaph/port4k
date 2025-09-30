@@ -18,5 +18,19 @@ services:
       timeout: 5s
       retries: 10
 
+  caddy:
+    image: caddy:2.8
+    container_name: port4k_caddy
+    restart: unless-stopped
+    ports:
+      - "4040:4040"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./port4k-site:/srv/site:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:
