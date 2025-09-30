@@ -7,7 +7,7 @@ pub async fn bp(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
     let rest = raw.strip_prefix("@bp").unwrap().trim();
     let parts = split_args_quoted(rest);
     if parts.is_empty() {
-        return Ok("Usage:\n  @bp new <bp> \"Title\"\n  @bp room add <bp>:<room> \"Title\" \"Body\"\n  @bp exit add <bp>:<from> <dir> <bp>:<to>\n  @bp entry <bp>:<room>\n  @bp submit <bp>\n".into());
+        return Ok("Usage:\r\n  @bp new <bp> \"Title\"\r\n  @bp room add <bp>:<room> \"Title\" \"Body\"\r\n  @bp exit add <bp>:<from> <dir> <bp>:<to>\r\n  @bp entry <bp>:<room>\r\n  @bp submit <bp>\r\n".into());
     }
 
     match parts[0].as_str() {
@@ -16,8 +16,8 @@ pub async fn bp(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
             let title = &parts[2];
             let owner = ctx.sess.lock().await.name.as_ref().ok_or_else(|| anyhow::anyhow!("login required"))?.0.clone();
             if ctx.registry.db.bp_new(bp, title, &owner).await? {
-                Ok(format!("[bp] created `{}`: {}\n", bp, title))
-            } else { Ok("[bp] already exists.\n".into()) }
+                Ok(format!("[bp] created `{}`: {}\r\n", bp, title))
+            } else { Ok("[bp] already exists.\r\n".into()) }
         }
         // @bp room add <bp>:<room> "Title" "Body"
         "room" if parts.len() >= 2 => {
@@ -28,9 +28,9 @@ pub async fn bp(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
                     let title = &parts[3];
                     let body = &parts[4];
                     if ctx.registry.db.bp_room_add(&bp, &room, title, body).await? {
-                        Ok(format!("[bp] room {}:{} added.\n", bp, room))
+                        Ok(format!("[bp] room {}:{} added.\r\n", bp, room))
                     } else {
-                        Ok("[bp] room already exists.\n".into())
+                        Ok("[bp] room already exists.\r\n".into())
                     }
                 }
 
@@ -39,9 +39,9 @@ pub async fn bp(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
                     let (bp, room) = parse_bp_room_key(&parts[2])
                         .ok_or_else(|| anyhow::anyhow!("use <bp>:<room>"))?;
                     if ctx.registry.db.bp_room_set_locked(&bp, &room, true).await? {
-                        Ok(format!("[bp] room {}:{} set to LOCKED.\n", bp, room))
+                        Ok(format!("[bp] room {}:{} set to LOCKED.\r\n", bp, room))
                     } else {
-                        Ok("[bp] blueprint/room not found.\n".into())
+                        Ok("[bp] blueprint/room not found.\r\n".into())
                     }
                 }
 
@@ -50,9 +50,9 @@ pub async fn bp(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
                     let (bp, room) = parse_bp_room_key(&parts[2])
                         .ok_or_else(|| anyhow::anyhow!("use <bp>:<room>"))?;
                     if ctx.registry.db.bp_room_set_locked(&bp, &room, false).await? {
-                        Ok(format!("[bp] room {}:{} set to UNLOCKED.\n", bp, room))
+                        Ok(format!("[bp] room {}:{} set to UNLOCKED.\r\n", bp, room))
                     } else {
-                        Ok("[bp] blueprint/room not found.\n".into())
+                        Ok("[bp] blueprint/room not found.\r\n".into())
                     }
                 }
 
@@ -68,7 +68,7 @@ pub async fn bp(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
                 .ok_or_else(|| anyhow::anyhow!("to must be <bp>:<room>"))?;
 
             if bp1 != bp2 {
-                return Ok("[bp] exits must stay within the same blueprint.\n".into());
+                return Ok("[bp] exits must stay within the same blueprint.\r\n".into());
             }
 
             // Optional trailing "locked" flag → lock the destination room by default
@@ -76,16 +76,16 @@ pub async fn bp(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
 
             let mut msg = String::new();
             if ctx.registry.db.bp_exit_add(&bp1, &from, &dir, &to).await? {
-                msg.push_str(&format!("[bp] exit {}:{} --{}--> {} added.\n", bp1, from, dir, to));
+                msg.push_str(&format!("[bp] exit {}:{} --{}--> {} added.\r\n", bp1, from, dir, to));
             } else {
-                msg.push_str("[bp] exit already exists.\n");
+                msg.push_str("[bp] exit already exists.\r\n");
             }
 
             if want_locked {
                 match ctx.registry.db.bp_room_set_locked(&bp1, &to, true).await {
-                    Ok(true)  => msg.push_str(&format!("[bp] room {}:{} set to LOCKED.\n", bp1, to)),
-                    Ok(false) => msg.push_str("[bp] could not lock destination (room not found?).\n"),
-                    Err(e)    => msg.push_str(&format!("[bp] failed to lock destination: {}\n", e)),
+                    Ok(true)  => msg.push_str(&format!("[bp] room {}:{} set to LOCKED.\r\n", bp1, to)),
+                    Ok(false) => msg.push_str("[bp] could not lock destination (room not found?).\r\n"),
+                    Err(e)    => msg.push_str(&format!("[bp] failed to lock destination: {}\r\n", e)),
                 }
             }
 
@@ -94,26 +94,26 @@ pub async fn bp(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
         "entry" if parts.len() >= 2 => {
             let (bp, room) = parse_bp_room_key(&parts[1]).ok_or_else(|| anyhow::anyhow!("use <bp>:<room>"))?;
             if ctx.registry.db.bp_set_entry(&bp, &room).await? {
-                Ok(format!("[bp] entry set: {}:{}\n", bp, room))
-            } else { Ok("[bp] blueprint not found.\n".into()) }
+                Ok(format!("[bp] entry set: {}:{}\r\n", bp, room))
+            } else { Ok("[bp] blueprint not found.\r\n".into()) }
         }
         "submit" if parts.len() >= 2 => {
             let client = ctx.registry.db.pool.get().await?;
             let n = client.execute("UPDATE blueprints SET status='submitted' WHERE key=$1", &[&parts[1]]).await?;
-            if n == 1 { Ok("[bp] submitted for review.\n".into()) } else { Ok("[bp] not found.\n".into()) }
+            if n == 1 { Ok("[bp] submitted for review.\r\n".into()) } else { Ok("[bp] not found.\r\n".into()) }
         }
         "import" if parts.len() >= 3 => {
             let bp = &parts[1];
             let subdir = &parts[2];
 
             // if !ctx.sess.lock().await.is_admin() {
-            //     return Ok("[bp] permission denied.\n".into());
+            //     return Ok("[bp] permission denied.\r\n".into());
             // }
 
             let base_path = Path::new(ctx.registry.config.import_dir.as_str());
             match crate::import::import_blueprint_subdir(bp, subdir, &base_path, &ctx.registry.db).await {
-                Ok(()) => Ok(format!("[bp] imported YAML rooms from {}/{} into `{}`.\n", base_path.display(), subdir, bp)),
-                Err(e) => Ok(format!("[bp] import failed: {:#}\n", e)),
+                Ok(()) => Ok(format!("[bp] imported YAML rooms from {}/{} into `{}`.\r\n", base_path.display(), subdir, bp)),
+                Err(e) => Ok(format!("[bp] import failed: {:#}\r\n", e)),
             }
         }
         _ => Ok(USAGE.into()),

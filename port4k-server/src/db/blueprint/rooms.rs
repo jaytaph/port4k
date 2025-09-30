@@ -1,3 +1,5 @@
+use crate::db::repo::object::ObjectRepo;
+use crate::rendering::{render_room, Theme};
 use super::super::Db;
 
 impl Db {
@@ -105,42 +107,42 @@ impl Db {
         Ok(row.and_then(|r| r.get::<_, Option<String>>(0)))
     }
 
+    /// width: wrap column; pass 80 for now (you can later read from per-user setting like "\w 80")
     pub async fn bp_room_view(
         &self,
         bp_key: &str,
         room_key: &str,
+        width: usize,
     ) -> anyhow::Result<Option<String>> {
         let c = self.pool.get().await?;
-        let r = c
+
+        let row = c
             .query_opt(
                 "SELECT title, body FROM bp_rooms WHERE bp_key=$1 AND key=$2",
                 &[&bp_key, &room_key],
             )
             .await?;
-        let Some(r) = r else {
-            return Ok(None);
-        };
-        let title: String = r.get(0);
-        let body: String = r.get(1);
+
+        let Some(row) = row else { return Ok(None) };
+
+        let title: String = row.get(0);
+        let body: String = row.get(1);
 
         let exits = c
             .query(
                 "SELECT dir FROM bp_exits
-                 WHERE bp_key=$1 AND from_key=$2
-                 ORDER BY dir",
+                    WHERE bp_key=$1 AND from_key=$2
+                    ORDER BY dir",
                 &[&bp_key, &room_key],
             )
             .await?;
-        let dirs: Vec<String> = exits
-            .into_iter()
-            .map(|row| row.get::<_, String>(0))
-            .collect();
-        let exits_line = if dirs.is_empty() {
-            "Exits: none".to_string()
-        } else {
-            format!("Exits: {}", dirs.join(", "))
-        };
-        Ok(Some(format!("{title}\n{body}\n{exits_line}\n")))
+        let exits: Vec<String> = exits.into_iter().map(|r| r.get::<_, String>(0)).collect();
+
+        let objs = ObjectRepo.render_projection(&c, bp_key, room_key).await?;
+        let objects: std::collections::HashMap<_, _> =
+            objs.into_iter().map(|o| (o.id, o.short)).collect();
+
+        Ok(Some(render_room(&Theme::blue(), &title, &body, &objects, &exits, width)))
     }
 
     pub async fn bp_move(

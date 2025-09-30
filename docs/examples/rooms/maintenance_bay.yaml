@@ -21,7 +21,7 @@ objects:
       panel_open: false
       cache_taken: false
     use: |
-      function(ctx, verb, args)
+      return function(ctx, verb, args)
         if (verb == "open" or verb == "search") and not ctx:get_object_state("workbench","panel_open") then
           ctx:set_object_state("workbench","panel_open", true)
           ctx:say("You pry at the seam— a thin panel slides aside revealing a shallow compartment.")
@@ -54,7 +54,7 @@ objects:
       running: false
     examine: "A handwritten note reads: 'Prime first. Pull twice. Watch the coolant pressure.'"
     use: |
-      function(ctx, verb, args)
+      return function(ctx, verb, args)
         if verb == "prime" then
           ctx:set_object_state("generator","primed", true)
           ctx:say("You cycle the primer; the fuel line burbles.")
@@ -93,7 +93,7 @@ objects:
       occupied: false
     examine: "LEDs are dark unless external power is present."
     use: |
-      function(ctx, verb, args)
+      return function(ctx, verb, args)
         local powered = ctx:get_object_state("charger","powered") or ctx:get_object_state("generator","running")
         if verb == "use" or verb == "charge" then
           if not powered then
@@ -127,7 +127,7 @@ exits:
 
 scripts:
   on_enter: |
-    function(ctx)
+    return function(ctx)
       if ctx:get_object_state("generator","running") then
         ctx:set_object_state("charger","powered", true)
         ctx:say("The generator hums steadily; the charger LEDs glow a reassuring green.")

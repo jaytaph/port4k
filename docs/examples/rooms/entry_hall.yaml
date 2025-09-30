@@ -28,7 +28,7 @@ objects:
       powered: true
     examine: "The locking mechanism is intact; manual overrides are scarred but functional."
     use: |
-      function(ctx, verb, _)
+      return function(ctx, verb, _)
         local locked = ctx:get_object_state("blast_door","locked")
         if verb == "open" then
           if locked then
@@ -55,7 +55,7 @@ objects:
       --   use console
       --   power console with <item>
       --   enter <code> on console
-      function(ctx, verb, args)
+      return function(ctx, verb, args)
         local powered = ctx:get_object_state("wall_console","powered")
         if not powered then
           -- allow: power console with microcell
@@ -120,7 +120,7 @@ exits:
 scripts:
   # Called when player enters the room (optional)
   on_enter: |
-    function(ctx)
+    return function(ctx)
       if not ctx:get_object_state("wall_console","powered") then
         ctx:say("The console flickers once and dies. It might need a power source.")
       end
@@ -129,7 +129,7 @@ scripts:
   # Route generic commands not matching engine verbs (optional)
   on_command: |
     -- Example: allow 'read markings' here if your parser passes verb/noun
-    function(ctx, verb, args)
+    return function(ctx, verb, args)
       if verb == "read" and ctx:matches_noun(args, {"markings","symbols","etchings"}) then
         ctx:say("The symbols resemble hazard glyphs: 'pressure loss' and 'quarantine'.")
         return true -- handled

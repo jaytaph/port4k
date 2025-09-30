@@ -22,3 +22,7 @@ pub mod blueprint;
 pub mod characters;
 pub mod loot;
 pub mod rooms;
+
+mod repo {
+    pub mod object;
+}

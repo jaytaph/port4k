@@ -135,9 +135,9 @@ async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> 
     // UPSERT room
     tx.execute(
         r#"
-        INSERT INTO bp_rooms (bp, room, title, short, body, hints, objects, scripts)
+        INSERT INTO bp_rooms (bp_key, key, title, short, body, hints, objects, scripts)
         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb)
-        ON CONFLICT (bp, room) DO UPDATE
+        ON CONFLICT (bp_key, key) DO UPDATE
         SET title  = EXCLUDED.title,
             short  = EXCLUDED.short,
             body   = EXCLUDED.body,
@@ -152,12 +152,12 @@ async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> 
     for ex in &r.exits {
         tx.execute(
             r#"
-            INSERT INTO bp_exits (bp, from_room, dir, to_room, locked, "desc", visible_when_locked)
+            INSERT INTO bp_exits (bp_key, from_key, dir, to_key, locked, description, visible_when_locked)
             VALUES ($1,$2,$3,$4, COALESCE($5,false), $6, COALESCE($7,true))
-            ON CONFLICT (bp, from_room, dir) DO UPDATE
-            SET to_room = EXCLUDED.to_room,
+            ON CONFLICT (bp_key, from_key, dir) DO UPDATE
+            SET to_key = EXCLUDED.to_key,
                 locked  = EXCLUDED.locked,
-                "desc"  = EXCLUDED."desc",
+                description  = EXCLUDED.description,
                 visible_when_locked = EXCLUDED.visible_when_locked
             "#,
             &[&bp, &r.id, &ex.dir.to_ascii_lowercase(), &ex.to, &ex.locked, &ex.description, &ex.visible_when_locked]

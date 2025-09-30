@@ -26,7 +26,7 @@ objects:
     examine: "Couplings are warped; some segments could be reseated with the right spanner."
     use: |
       -- Repair with multi_spanner → restore corridor power
-      function(ctx, verb, args)
+      return function(ctx, verb, args)
         if verb == "repair" or (verb == "use" and ctx:matches_noun(args or {}, {"conduit","power conduit"})) then
           local damaged = ctx:get_object_state("power_conduit","damaged")
           if not damaged then
@@ -56,7 +56,7 @@ objects:
     examine: "Its status light is dark; without corridor power, the panel is inert."
     use: |
       -- Use fiber_probe to bypass when powered; unlock east exit
-      function(ctx, verb, args)
+      return function(ctx, verb, args)
         local online = ctx:get_object_state("power_conduit","powered") and (not ctx:get_object_state("power_conduit","damaged"))
         if verb == "use" or verb == "hack" or verb == "bypass" then
           if not online then
@@ -88,7 +88,7 @@ objects:
       locked: true
     examine: "No handles—purely powered from the panel. A manual release slot is sealed."
     use: |
-      function(ctx, verb, _)
+      return function(ctx, verb, _)
         if verb == "open" then
           if ctx:get_object_state("east_door","locked") then
             ctx:say("Locked. The panel controls must be engaged.")
@@ -127,7 +127,7 @@ exits:
 
 scripts:
   on_enter: |
-    function(ctx)
+    return function(ctx)
       local powered = ctx:get_object_state("power_conduit","powered") and (not ctx:get_object_state("power_conduit","damaged"))
       if not powered then
         ctx:say("Red beacons strobe; the main lights remain dark. The conduit above you crackles softly.")
@@ -140,7 +140,7 @@ scripts:
 
   on_command: |
     -- Small QoL verbs
-    function(ctx, verb, args)
+    return function(ctx, verb, args)
       if verb == "scan" then
         local powered = ctx:get_object_state("power_conduit","powered") and (not ctx:get_object_state("power_conduit","damaged"))
         if powered then

@@ -2,14 +2,17 @@ mod banner;
 mod commands;
 mod config;
 mod db;
+mod domain;
+mod hardering;
 mod http;
+mod import;
 mod lua;
 mod net;
+mod readline;
+mod rendering;
 mod scripting;
 mod state;
 mod util;
-mod import;
-mod hardering;
 
 pub use commands::process_command;
 pub use net::connection::handle_connection;
@@ -60,7 +63,9 @@ async fn main() -> anyhow::Result<()> {
             BANNER,
             ENTRY,
             lua_tx_for_http,
-        ).await {
+        )
+        .await
+        {
             eprintln!("HTTP server error: {e}");
         }
     });

@@ -73,7 +73,7 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
         let cmd = text.trim();
         let resp = process_command(cmd, &state.registry, &sess, state.lua_tx.clone())
             .await
-            .unwrap_or_else(|e| format!("error: {e}\\n"));
+            .unwrap_or_else(|e| format!("error: {e}\\r\\n"));
 
         let _ = socket
             .send(Message::Text(format!("{}> ", ensure_nl(resp))))
@@ -92,6 +92,7 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
 
 fn ensure_nl(mut s: String) -> String {
     if !s.ends_with("\n") {
+        s.push('\r');
         s.push('\n');
     }
     s

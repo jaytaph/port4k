@@ -45,7 +45,7 @@ pub async fn process_command(
 
     match verb.to_ascii_lowercase().as_str() {
         "help" => Ok(help_text()),
-        "quit" | "exit" => Ok("Goodbye!\n".to_string()),
+        "quit" | "exit" => Ok("Goodbye!\r\n".to_string()),
         "who" => balance::who(&ctx).await, // tiny helper in balance.rs (or move to its own file)
         "register" => login::register(&ctx, it.collect()).await,
         "login" => login::login(&ctx, it.collect()).await, // one-line login; telnet 2-step stays in connection.rs
@@ -60,7 +60,7 @@ pub async fn process_command(
             "playtest" => playtest::playtest(&ctx, raw).await,
             "debug" => debug_cmd::debug(&ctx, raw).await,
             "script" => script::script(&ctx, raw).await,
-            _ => Ok("Unknown @-command. Try `help`.\n".into()),
+            _ => Ok("Unknown @-command. Try `help`.\r\n".into()),
         },
 
         // Fallback (e.g., playtest Lua on_command)

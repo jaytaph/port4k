@@ -18,7 +18,7 @@ objects:
     description: "A faded sector chart with hand-scratched updates."
     examine: "Someone added a note: 'MBAY spare code → mirrored of ENTRY'."
     use: |
-      function(ctx, verb, args)
+      return function(ctx, verb, args)
         if verb == "read" or verb == "examine" or verb == "scan" then
           ctx:say("The annotations show patrol routes and docking lanes. One scribble hints a locker code mirror puzzle.")
           return true
@@ -35,7 +35,7 @@ objects:
       opened: false
     examine: "Keypad shows smudges on 1, 2, 3, 4. The dented panel might pry with the right tool."
     use: |
-      function(ctx, verb, args)
+      return function(ctx, verb, args)
         if verb == "enter" and #args > 0 then
           local code = table.concat(args, " ")
           -- 'Mirrored of ENTRY' → entry console code '4312' mirrored horizontally -> '2134'
@@ -79,7 +79,7 @@ objects:
       cache_taken: false
     examine: "You can wiggle it; the screws are barely holding."
     use: |
-      function(ctx, verb, args)
+      return function(ctx, verb, args)
         if verb == "unscrew" or verb == "open" then
           if not ctx:get_object_state("vent_grille","loosened") then
             if ctx:has_item("fiber_probe") then
@@ -117,11 +117,11 @@ exits:
 
 scripts:
   on_enter: |
-    function(ctx)
+    return function(ctx)
       ctx:say("Stars drift beyond the narrow glass; the station’s slow spin tugs at your inner ear.")
     end
   on_command: |
-    function(ctx, verb, args)
+    return function(ctx, verb, args)
       if verb == "scan" then
         ctx:say("Scan: no life signs; weak airflow through vent; minor EM noise from an old locker keypad.")
         return true

@@ -4,7 +4,7 @@ use anyhow::Result;
 
 pub async fn go(ctx: &CmdCtx<'_>, args: Vec<&str>) -> Result<String> {
     if args.is_empty() {
-        return Ok("Usage: go <direction>\n".into());
+        return Ok("Usage: go <direction>\r\n".into());
     }
     let dir = args[0].to_ascii_lowercase();
 
@@ -12,7 +12,7 @@ pub async fn go(ctx: &CmdCtx<'_>, args: Vec<&str>) -> Result<String> {
         let s = ctx.sess.lock().await;
         let username = match &s.name {
             Some(u) => u.0.clone(),
-            None => return Ok("You must `login` first.\n".into()),
+            None => return Ok("You must `login` first.\r\n".into()),
         };
         (username, s.world.clone())
     };
@@ -30,7 +30,7 @@ pub async fn go(ctx: &CmdCtx<'_>, args: Vec<&str>) -> Result<String> {
                     let view = ctx.registry.db.room_view(new_room).await?;
                     Ok(view)
                 }
-                None => Ok("You can't go that way.\n".into()),
+                None => Ok("You can't go that way.\r\n".into()),
             }
         }
         Some(WorldMode::Playtest { bp, room, .. }) => {
@@ -58,14 +58,14 @@ pub async fn go(ctx: &CmdCtx<'_>, args: Vec<&str>) -> Result<String> {
                     let view = ctx
                         .registry
                         .db
-                        .bp_room_view(&bp, &next)
+                        .bp_room_view(&bp, &next, 80)
                         .await?
-                        .unwrap_or_else(|| "[playtest] room missing\n".into());
+                        .unwrap_or_else(|| "[playtest] room missing\r\n".into());
                     Ok(format!("{view}{extra}"))
                 }
-                None => Ok("You can't go that way (playtest).\n".into()),
+                None => Ok("You can't go that way (playtest).\r\n".into()),
             }
         }
-        None => Ok("You are nowhere.\n".into()),
+        None => Ok("You are nowhere.\r\n".into()),
     }
 }
