@@ -222,8 +222,7 @@ impl LineEditor {
             return EditEvent::None;
         }
 
-        // Otherwise clear and ignore.
-        self.esc.clear();
+        // Otherwise ignore.
         EditEvent::None
     }
 
