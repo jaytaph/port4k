@@ -1,22 +1,37 @@
-pub const BANNER: &str = r#"______          _       ___ _
-| ___ \        | |     /   | |
-| |_/ /__  _ __| |_   / /| | | __
-|  __/ _ \| '__| __| / /_| | |/ /
-| | | (_) | |  | |_  \___  |   <
-\_|  \___/|_|   \__|     |_/_|\_\
-"#;
+pub const BANNER: &str = concat!(
+    "\n",
+    "\x1b[36m",
+    "______          _       ___ _     \n",
+    "| ___ \\        | |     /   | |    \n",
+    "| |_/ /__  _ __| |_   / /| | | __ \n",
+    "|  __/ _ \\| '__| __| / /_| | |/ / \n",
+    "| | | (_) | |  | |_  \\___  |   <  \n",
+    "\\_|  \\___/|_|   \\__|     |_/_|\\_\\ \n",
+    "\x1b[0m\n"
+);
 
-pub const ENTRY: &str = r#"
-Welcome to Port4k
-A world of rooms, puzzles, and adventure
-------------------------------------------------
-• Explore worlds built by other players
-• Forge your own rooms with Lua scripting
-• Persist your character: XP, skills, items
-• Classic MUD atmosphere with a modern twist
-------------------------------------------------
-Type: `register <name>` to create a character
-`login <name>` to access your account
-`help` for commands | `quit` to exit
-------------------------------------------------
-"#;
+pub const ENTRY: &str = concat!(
+    "\n",
+    "\x1b[35m",
+    "Welcome to Port4k!\n",
+    "\x1b[0m",
+    "A world of rooms, puzzles, and adventure\n",
+    "------------------------------------------------\n",
+    "\x1b[33m•\x1b[0m Explore worlds built by other players\n",
+    "\x1b[33m•\x1b[0m Forge your own rooms with Lua scripting\n",
+    "\x1b[33m•\x1b[0m Persist your character: XP, skills, items\n",
+    "\x1b[33m•\x1b[0m Classic MUD atmosphere with a modern twist\n",
+    "------------------------------------------------\n",
+    "Type: ",
+    "\x1b[32mregister <name>\x1b[0m",
+    " to create a character\n",
+    "      ",
+    "\x1b[32mlogin <name>\x1b[0m",
+    " to access your account\n",
+    "      ",
+    "\x1b[32mhelp\x1b[0m",
+    " for commands | ",
+    "\x1b[32mquit\x1b[0m",
+    " to exit\n",
+    "------------------------------------------------\n",
+);

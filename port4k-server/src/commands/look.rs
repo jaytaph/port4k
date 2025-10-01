@@ -8,7 +8,7 @@ pub async fn look(ctx: Arc<CmdCtx>, _intent: Intent) -> Result<String> {
     let world = {
         let s = ctx.sess.read().unwrap();
         if s.state != ConnState::LoggedIn {
-            return Ok("You must `login` first.\r\n".into());
+            return Ok("You must `login` first.\n".into());
         }
 
         s.world.clone()
@@ -21,8 +21,8 @@ pub async fn look(ctx: Arc<CmdCtx>, _intent: Intent) -> Result<String> {
         }
         Some(WorldMode::Playtest { bp, room, .. }) => match ctx.registry.db.bp_room_view(bp, room, 80).await? {
             Some(view) => Ok(view),
-            None => Ok("[playtest] This room does not exist.\r\n".into()),
+            None => Ok("[playtest] This room does not exist.\n".into()),
         },
-        None => Ok("You are nowhere.\r\n".into()),
+        None => Ok("You are nowhere.\n".into()),
     }
 }

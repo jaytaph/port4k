@@ -1,7 +1,7 @@
 -- =========================
 -- ACCOUNTS (with balances)
 -- =========================
-INSERT INTO accounts (username, role, password_hash, balance)
+INSERT INTO accounts (username, role, password_hash, xp)
 VALUES
   ('admin',  'admin',  '$argon2id$v=19$m=4096,t=3,p=1$YTRucTM0d2JrMmYwMDAwMA$ys7sXXH6ETEFmIVysP4fW6YQo5s6V/hy2VLrNF7CDEM', 100000),
   ('alice',  'player', '$argon2id$v=19$m=4096,t=3,p=1$MWIya3JwNmNnZTQwMDAwMA$jbsb0ayARAcFOHJ+tLIIR/mhd7ocQpOp0gTrW8cKPoQ',  2500),

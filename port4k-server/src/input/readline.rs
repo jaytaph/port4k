@@ -6,7 +6,7 @@
 //!   loop {
 //!       let b = read_one_byte(...);
 //!       match ed.handle_byte(b) {
-//!           EditEvent::Line(line) => { /* handle command */ write!(stream, "\r\n{}", ed.repaint_line())?; }
+//!           EditEvent::Line(line) => { /* handle command */ write!(stream, "\n{}", ed.repaint_line())?; }
 //!           EditEvent::Redraw     => { write!(stream, "{}", ed.repaint_line())?; }
 //!           EditEvent::None       => {}
 //!       }

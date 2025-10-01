@@ -82,9 +82,9 @@ fn visible_len(s: &str) -> usize {
 fn wrap_ansi(text: &str, width: usize) -> String {
     // Split on blank lines to preserve paragraphs
     let mut out = String::new();
-    for (pi, para) in text.split("\r\n\r\n").enumerate() {
+    for (pi, para) in text.split("\n\n").enumerate() {
         if pi > 0 {
-            out.push_str("\r\n\r\n");
+            out.push_str("\n\n");
         }
 
         // For each paragraph, wrap each line but reflow spaces
@@ -98,7 +98,6 @@ fn wrap_ansi(text: &str, width: usize) -> String {
             let add = if first_word { wlen } else { 1 + wlen };
 
             if line_len > 0 && line_len + 1 + wlen > width {
-                out.push('\r');
                 out.push('\n');
                 out.push_str(word);
                 line_len = wlen;
@@ -145,5 +144,5 @@ pub fn render_room(
     let body_wrapped = wrap_ansi(body_highlighted.as_str(), width.max(20));
     let exits_line = color_exits(theme, exits);
 
-    format!("{border}\r\n{title_line}\r\n{border}\r\n\r\n{body_wrapped}\r\n\r\n{exits_line}\r\n")
+    format!("{border}\n{title_line}\n{border}\n\n{body_wrapped}\n\n{exits_line}\n")
 }

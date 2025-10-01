@@ -19,7 +19,7 @@ impl Db {
         } else {
             format!("Exits: {}", dirs.join(", "))
         };
-        Ok(format!("{title}\r\n{body}\r\n{exits_line}\r\n"))
+        Ok(format!("{title}\n{body}\n{exits_line}\n"))
     }
 
     #[allow(unused)]

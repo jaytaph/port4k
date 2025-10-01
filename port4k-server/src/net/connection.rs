@@ -2,13 +2,58 @@ use std::collections::HashMap;
 use crate::lua::LuaJob;
 use crate::input::readline::{EditEvent, LineEditor};
 use crate::util::telnet::{TelnetIn, TelnetMachine};
-use crate::{ConnState, Registry, Session, process_command};
+use crate::{ConnState, Registry, Session, process_command, WorldMode};
 use port4k_core::Username;
 use std::sync::{Arc, RwLock};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::mpsc;
+
+/// Wrapper around OwnedWriteHalf that normalizes bare '\n' to "\r\n"
+pub struct CRLFOwnedWriteHalf<'a> {
+    pub inner: &'a mut OwnedWriteHalf,
+}
+
+impl<'a> CRLFOwnedWriteHalf<'a> {
+    pub fn new(inner: &'a mut OwnedWriteHalf) -> Self {
+        Self { inner }
+    }
+
+    /// Writes `buf`, normalizing bare '\n' to "\r\n". Existing "\r\n" are preserved.
+    pub async fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        let mut last = 0;
+
+        for i in 0..buf.len() {
+            if buf[i] == b'\n' {
+                // flush everything up to this point (excluding \n)
+                if i > last {
+                    self.inner.write_all(&buf[last..i]).await?;
+                }
+
+                // check previous byte
+                if i == 0 || buf[i - 1] != b'\r' {
+                    self.inner.write_all(b"\r\n").await?;
+                } else {
+                    self.inner.write_all(b"\n").await?;
+                }
+
+                last = i + 1; // move past the \n
+            }
+        }
+
+        // write remaining tail (if no newline at end)
+        if last < buf.len() {
+            self.inner.write_all(&buf[last..]).await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush().await
+    }
+}
 
 /// Small context passed around so helpers don't need tons of args
 struct ConnCtx {
@@ -34,7 +79,7 @@ pub async fn handle_connection(
         lua_tx,
     });
 
-    let mut editor = LineEditor::new("{user} > ");
+    let mut editor = LineEditor::new("> ");
     let mut telnet = TelnetMachine::new();
 
     start_session(&mut w, &mut telnet, banner, entry, &editor).await?;
@@ -55,17 +100,20 @@ async fn start_session(
     // Telnet option negotiation: character-at-a-time + SGA + (server) echo + NAWS
     telnet.start_negotiation(w).await?;
 
+
+    let crlf_w = &mut CRLFOwnedWriteHalf::new(w);
+
     // Welcome text
     if !banner.is_empty() {
         for line in banner.lines() {
-            w.write_all(line.as_bytes()).await?;
-            w.write_all(b"\r\n").await?;
+            crlf_w.write_all(line.as_bytes()).await?;
+            crlf_w.write_all(b"\n").await?;
         }
     }
     if !entry.is_empty() {
         for line in entry.lines() {
-            w.write_all(line.as_bytes()).await?;
-            w.write_all(b"\r\n").await?;
+            crlf_w.write_all(line.as_bytes()).await?;
+            crlf_w.write_all(b"\n").await?;
         }
     }
 
@@ -84,7 +132,7 @@ async fn read_loop(
 
     loop {
 
-        let prompt = generate_prompt(&ctx).await;
+        let prompt = generate_prompt(&ctx, &"{user} [{world}:{room}] @ {wall_time} > ").await;
         editor.set_prompt(&prompt);
 
         let n = reader.read(&mut one).await?;
@@ -102,17 +150,31 @@ async fn read_loop(
     Ok(())
 }
 
-async fn generate_prompt(ctx: &ConnCtx) -> String {
+async fn generate_prompt(ctx: &ConnCtx, prompt: &str) -> String {
     let mut vars = HashMap::new();
+    vars.insert("user".to_string(), "".to_string());
+    vars.insert("world".to_string(), "World".to_string());
+    vars.insert("room".to_string(), "Room".to_string());
+    vars.insert("wall_time".to_string(), chrono::Local::now().format("%H:%M:%S").to_string());
+    vars.insert("online_time".to_string(), chrono::Local::now().format("%H:%M:%S").to_string());
+    vars.insert("online_users".to_string(), format!("{}", 123));
 
     if let Some(name) = ctx.sess.read().unwrap().name.clone() {
         vars.insert("user".to_string(), name.0);
-    } else {
-        vars.insert("user".to_string(), "".to_string());
     }
-    vars.insert("time".to_string(), chrono::Local::now().format("%H:%M:%S").to_string());
+    if let Some(world) = ctx.sess.read().unwrap().world.as_ref() {
+        match world {
+            WorldMode::Live { room_id } => {
+                vars.insert("world".to_string(), "Normal".to_string());
+                vars.insert("room".to_string(), format!("{}", room_id.clone()));
+            }
+            WorldMode::Playtest { bp, room, .. } => {
+                vars.insert("world".to_string(), format!("Playtest({})", bp));
+                vars.insert("room".to_string(), room.clone());
+            }
+        }
+    }
 
-    let prompt = "{user} @ {time} > ";
     let mut out = prompt.to_string();
     for (k, v) in vars {
         out = out.replace(&format!("{{{}}}", k), &v);
@@ -147,7 +209,7 @@ async fn handle_data_byte(
         }
         EditEvent::Line(line) => {
             // Move to a fresh line before emitting any output
-            w.write_all(b"\r\n").await?;
+            w.write_all(b"\n").await?;
             let raw = line.trim();
             tracing::debug!(%raw, "received line");
 
@@ -253,15 +315,19 @@ async fn try_handle_login(
 }
 
 async fn repaint_prompt(w: &mut OwnedWriteHalf, editor: &LineEditor) -> std::io::Result<()> {
+    let mut w = CRLFOwnedWriteHalf::new(w);
+
     w.write_all(editor.repaint_line().as_bytes()).await?;
     w.flush().await
 }
 
 /// Write text, ensuring it ends in CRLF (good Telnet hygiene)
 async fn write_with_newline(w: &mut OwnedWriteHalf, bytes: &[u8]) -> std::io::Result<()> {
+    let mut w = CRLFOwnedWriteHalf::new(w);
+
     w.write_all(bytes).await?;
-    if !bytes.ends_with(b"\r\n") || !bytes.ends_with(b"\n") {
-        w.write_all(b"\r\n").await?;
+    if !bytes.ends_with(b"\n") || !bytes.ends_with(b"\n") {
+        w.write_all(b"\n").await?;
     }
     Ok(())
 }
@@ -275,6 +341,8 @@ async fn read_secret_line(
     telnet: &mut TelnetMachine,
     _ctx: Arc<ConnCtx>,
 ) -> std::io::Result<String> {
+    let mut w_crlf = CRLFOwnedWriteHalf::new(w);
+
     let mut out = Vec::<u8>::new();
     let mut one = [0u8; 1];
 
@@ -284,13 +352,13 @@ async fn read_secret_line(
             break;
         } // disconnect
 
-        if let Some(evt) = telnet.push(one[0], w).await? {
+        if let Some(evt) = telnet.push(one[0], w_crlf.inner).await? {
             match evt {
                 TelnetIn::Data(b) => {
                     match b {
                         b'\r' | b'\n' => {
                             // Move to the next line visually, but DO NOT reveal password
-                            w.write_all(b"\r\n").await?;
+                            w_crlf.write_all(b"\n").await?;
                             break;
                         }
                         0x7F | 0x08 => {

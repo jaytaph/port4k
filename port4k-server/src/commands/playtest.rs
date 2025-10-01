@@ -17,9 +17,9 @@ pub async fn playtest(ctx: Arc<CmdCtx>, raw: &str) -> Result<String> {
                 s.world = Some(WorldMode::Live { room_id });
                 drop(s); // release lock before DB call
                 let view = ctx.registry.db.room_view(room_id).await?;
-                Ok(format!("[playtest] exited.\r\n{view}"))
+                Ok(format!("[playtest] exited.\n{view}"))
             }
-            _ => Ok("[playtest] you are not in playtest.\r\n".into()),
+            _ => Ok("[playtest] you are not in playtest.\n".into()),
         }
     } else {
         // Enter playtest with key in `rest`
@@ -33,7 +33,7 @@ pub async fn playtest(ctx: Arc<CmdCtx>, raw: &str) -> Result<String> {
 
         let mut s = ctx.sess.write().unwrap();
         if s.state != ConnState::LoggedIn {
-            return Ok("Login required.\r\n".into());
+            return Ok("Login required.\n".into());
         }
         let prev = match &s.world {
             Some(WorldMode::Live { room_id }) => Some(*room_id),
@@ -51,8 +51,8 @@ pub async fn playtest(ctx: Arc<CmdCtx>, raw: &str) -> Result<String> {
             .db
             .bp_room_view(bp, &entry, 80)
             .await?
-            .unwrap_or_else(|| "[playtest] empty room\r\n".into());
+            .unwrap_or_else(|| "[playtest] empty room\n".into());
 
-        Ok(format!("[playtest] entered `{}` at `{}`.\r\n{}", bp, entry, view))
+        Ok(format!("[playtest] entered `{}` at `{}`.\n{}", bp, entry, view))
     }
 }

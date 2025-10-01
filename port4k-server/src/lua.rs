@@ -92,7 +92,6 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                                 let out_send = out.clone();
                                 let send = lua.create_function(move |_, (text,): (String,)| {
                                     out_send.lock().push_str(&text);
-                                    out_send.lock().push('\r');
                                     out_send.lock().push('\n');
                                     Ok(())
                                 })?;
@@ -104,7 +103,6 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                                 let out_b = out.clone();
                                 let broadcast_room = lua.create_function(move |_, (text,): (String,)| {
                                     out_b.lock().push_str(&text);
-                                    out_b.lock().push('\r');
                                     out_b.lock().push('\n');
                                     Ok(())
                                 })?;
@@ -233,7 +231,6 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                                 "send",
                                 lua.create_function(move |_, (t,): (String,)| {
                                     o.lock().push_str(&t);
-                                    o.lock().push('\r');
                                     o.lock().push('\n');
                                     Ok(())
                                 })?,
@@ -243,7 +240,6 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                                 "broadcast_room",
                                 lua.create_function(move |_, (t,): (String,)| {
                                     o2.lock().push_str(&t);
-                                    o2.lock().push('\r');
                                     o2.lock().push('\n');
                                     Ok(())
                                 })?,

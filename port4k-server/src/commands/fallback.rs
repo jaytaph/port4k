@@ -12,7 +12,7 @@ pub async fn fallback(ctx: Arc<CmdCtx>, verb: &str, args: Vec<String>) -> Result
         let s = ctx.sess.read().map_err(|_| anyhow::anyhow!("Session lock poisoned"))?;
         match (&s.world, &s.name) {
             (Some(WorldMode::Playtest { bp, room, .. }), Some(u)) => (bp.clone(), room.clone(), u.0.clone()),
-            _ => return Ok("Unknown command. Try `help`.\r\n".into()),
+            _ => return Ok("Unknown command. Try `help`.\n".into()),
         }
     };
 
@@ -31,6 +31,6 @@ pub async fn fallback(ctx: Arc<CmdCtx>, verb: &str, args: Vec<String>) -> Result
 
     match rx.await?? {
         Some(out) if !out.trim().is_empty() => Ok(out),
-        _ => Ok("Unknown command. Try `help`.\r\n".into()),
+        _ => Ok("Unknown command. Try `help`.\n".into()),
     }
 }

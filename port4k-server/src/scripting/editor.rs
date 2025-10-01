@@ -19,7 +19,7 @@ pub async fn process_editor_line(line: &str, registry: &Arc<Registry>, sess: &Ar
             .bp_script_put_draft(&bp, &room, &event, &src, &author)
             .await?;
         return Ok(format!(
-            "[script] saved draft for {}:{} {}\r\nUse: @script publish {}:{} {}\r\n",
+            "[script] saved draft for {}:{} {}\nUse: @script publish {}:{} {}\n",
             bp, room, event, bp, room, event
         ));
     }
@@ -29,7 +29,6 @@ pub async fn process_editor_line(line: &str, registry: &Arc<Registry>, sess: &Ar
         let mut s = sess.lock().await;
         if let Some(ed) = &mut s.editor {
             ed.buf.push_str(line);
-            ed.buf.push('\r');
             ed.buf.push('\n');
         }
     }

@@ -14,6 +14,7 @@ mod scripting;
 mod state;
 mod util;
 mod input;
+mod ansi;
 
 pub use commands::process_command;
 pub use net::connection::handle_connection;
