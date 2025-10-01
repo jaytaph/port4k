@@ -1,41 +1,34 @@
--- ============================================================================
--- Zones (runtime instances: 'live', 'playtest:<user>', 'event:<slug>', ...)
--- ============================================================================
-CREATE TABLE public.zones
-(
-    id         bigserial PRIMARY KEY,
-    key        text NOT NULL UNIQUE,
-    title      text NOT NULL,
-    kind       text NOT NULL DEFAULT 'live',         -- 'live' | 'playtest' | 'event' | ...
-    created_at timestamptz NOT NULL DEFAULT now()
-);
-ALTER TABLE public.zones OWNER TO port4k;
+-- =============================================================================
+-- Extensions
+-- =============================================================================
+CREATE EXTENSION IF NOT EXISTS pgcrypto;  -- gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS citext;    -- case-insensitive usernames
 
 
--- ============================================================================
--- Accounts (global player profile; position is bp/room + zone)
--- ============================================================================
+-- =============================================================================
+-- Accounts (UUID PK; username as CITEXT UNIQUE)
+-- =============================================================================
 CREATE TABLE public.accounts
 (
-    username         text PRIMARY KEY,
-    role             text                      NOT NULL DEFAULT 'player',
-    created_at       timestamptz               NOT NULL DEFAULT now(),
-    password_hash    text,                                 -- Argon2id PHC string
+    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    username         citext NOT NULL UNIQUE,
+    role             text   NOT NULL DEFAULT 'player',
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    password_hash    text,                  -- Argon2id PHC string
     last_login       timestamptz,
 
-    -- Zone + position (FKs added later once targets exist)
-    zone_key         text,
-    current_room_bp  text,
-    current_room_key text,
+    -- Position (see FKs added after dependent tables exist)
+    zone_id          uuid,
+    current_room_id  uuid,
 
     -- Progression & stats
-    xp               integer                   NOT NULL DEFAULT 0 CHECK (xp >= 0),
-    health           integer                   NOT NULL DEFAULT 100 CHECK (health BETWEEN 0 AND 100),
-    coins            integer                   NOT NULL DEFAULT 0 CHECK (coins >= 0),
+    xp               integer  NOT NULL DEFAULT 0 CHECK (xp >= 0),
+    health           integer  NOT NULL DEFAULT 100 CHECK (health BETWEEN 0 AND 100),
+    coins            integer  NOT NULL DEFAULT 0 CHECK (coins >= 0),
 
     -- Free-form player state
-    inventory        jsonb                     NOT NULL DEFAULT '[]'::jsonb,
-    flags            jsonb                     NOT NULL DEFAULT '{}'::jsonb
+    inventory        jsonb    NOT NULL DEFAULT '[]'::jsonb,
+    flags            jsonb    NOT NULL DEFAULT '{}'::jsonb
 );
 ALTER TABLE public.accounts OWNER TO port4k;
 
@@ -43,35 +36,50 @@ CREATE INDEX accounts_last_login_idx ON public.accounts (last_login DESC);
 CREATE INDEX accounts_inventory_gin  ON public.accounts USING gin (inventory);
 CREATE INDEX accounts_flags_gin      ON public.accounts USING gin (flags);
 
+-- =============================================================================
+-- Zones (runtime instances)
+-- =============================================================================
+CREATE TABLE public.zones
+(
+    id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    key        text NOT NULL UNIQUE,                  -- e.g. 'live', 'playtest:joshua'
+    title      text NOT NULL,
+    kind       text NOT NULL DEFAULT 'live',          -- 'live' | 'playtest' | 'event' | ...
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.zones OWNER TO port4k;
 
--- ============================================================================
+-- =============================================================================
 -- Blueprints (authoring packages)
--- ============================================================================
+-- =============================================================================
 CREATE TABLE public.blueprints
 (
-    key            text PRIMARY KEY,
+    id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    key            text NOT NULL UNIQUE,              -- human-friendly identifier
     title          text NOT NULL,
-    owner          text NOT NULL REFERENCES public.accounts(username),
-    status         text NOT NULL DEFAULT 'draft',   -- 'draft' | 'live' | ...
-    entry_room_key text,                             -- optional default spawn inside this bp
+    owner_id       uuid NOT NULL REFERENCES public.accounts(id),
+    status         text NOT NULL DEFAULT 'draft',     -- 'draft' | 'live' | ...
+    entry_room_id  uuid,                              -- FK added after bp_rooms exists
     created_at     timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.blueprints OWNER TO port4k;
 
-
--- Rooms inside a blueprint (static content)
+-- =============================================================================
+-- Blueprint Rooms (static content)
+-- =============================================================================
 CREATE TABLE public.bp_rooms
 (
-    bp_key   text NOT NULL REFERENCES public.blueprints(key) ON DELETE CASCADE,
-    key      text NOT NULL,
+    id       uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- room_id (UUID)
+    bp_id    uuid NOT NULL REFERENCES public.blueprints(id) ON DELETE CASCADE,
+    key      text NOT NULL,                               -- room key inside the blueprint
     title    text NOT NULL,
     body     text NOT NULL,
-    lockdown boolean NOT NULL DEFAULT false,        -- default room-level lockdown
+    lockdown boolean NOT NULL DEFAULT false,              -- default room-level lockdown
     short    text,
     hints    jsonb,
     objects  jsonb,
     scripts  jsonb,
-    PRIMARY KEY (bp_key, key)
+    CONSTRAINT bp_rooms_bp_key_uidx UNIQUE (bp_id, key)
 );
 ALTER TABLE public.bp_rooms OWNER TO port4k;
 
@@ -80,94 +88,78 @@ CREATE INDEX bp_rooms_short_gin ON public.bp_rooms
 CREATE INDEX bp_rooms_body_gin ON public.bp_rooms
     USING gin (to_tsvector('simple', COALESCE(body, '')));
 
--- (Optional) Link blueprint.entry_room_key to an existing room (composite FK).
--- Done with ALTER to avoid creation order issues.
+-- Link blueprint.entry_room_id → bp_rooms(id) (do it after bp_rooms exists)
 ALTER TABLE public.blueprints
     ADD CONSTRAINT blueprints_entry_room_fk
-        FOREIGN KEY (key, entry_room_key)
-            REFERENCES public.bp_rooms (bp_key, key)
+        FOREIGN KEY (entry_room_id) REFERENCES public.bp_rooms(id)
             DEFERRABLE INITIALLY DEFERRED;
 
-
--- Exits between rooms (static; authoring time)
+-- =============================================================================
+-- Blueprint Exits (static; by room UUIDs)
+-- =============================================================================
 CREATE TABLE public.bp_exits
 (
-    bp_key              text    NOT NULL,
-    from_key            text    NOT NULL,
-    dir                 text    NOT NULL,
-    to_key              text    NOT NULL,
-    locked              boolean NOT NULL DEFAULT false,  -- default exit lock
+    from_room_id        uuid NOT NULL REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
+    dir                 text NOT NULL,
+    to_room_id          uuid NOT NULL REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
+    locked              boolean NOT NULL DEFAULT false,   -- default exit lock
     description         text,
     visible_when_locked boolean NOT NULL DEFAULT true,
-    PRIMARY KEY (bp_key, from_key, dir),
-
-    CONSTRAINT bp_exits_from_fk
-        FOREIGN KEY (bp_key, from_key) REFERENCES public.bp_rooms(bp_key, key)
-            ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
-    CONSTRAINT bp_exits_to_fk
-        FOREIGN KEY (bp_key, to_key)   REFERENCES public.bp_rooms(bp_key, key)
-            ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+    PRIMARY KEY (from_room_id, dir)
 );
 ALTER TABLE public.bp_exits OWNER TO port4k;
 
-CREATE UNIQUE INDEX bp_exits_from_dir_uidx ON public.bp_exits (bp_key, from_key, dir);
-
-
--- Blueprint scripts (two models: single row per room; and per-event draft/live)
+-- =============================================================================
+-- Blueprint room scripts (simple dual fields)
+-- =============================================================================
 CREATE TABLE public.bp_room_scripts
 (
-    bp_key         text NOT NULL,
-    room_key       text NOT NULL,
+    room_id       uuid PRIMARY KEY REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
     on_enter_lua   text,
     on_command_lua text,
-    updated_at     timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (bp_key, room_key),
-    FOREIGN KEY (bp_key, room_key) REFERENCES public.bp_rooms (bp_key, key) ON DELETE CASCADE
+    updated_at     timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.bp_room_scripts OWNER TO port4k;
 
+-- Per-event script sources (draft/live)
 CREATE TABLE public.bp_scripts_draft
 (
-    bp_key     text NOT NULL,
-    room_key   text NOT NULL,
+    room_id    uuid NOT NULL REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
     event      text NOT NULL,
     source     text NOT NULL,
-    author     text NOT NULL REFERENCES public.accounts(username),
+    author_id  uuid NOT NULL REFERENCES public.accounts(id),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (bp_key, room_key, event),
-    FOREIGN KEY (bp_key, room_key) REFERENCES public.bp_rooms (bp_key, key) ON DELETE CASCADE
+    PRIMARY KEY (room_id, event)
 );
 ALTER TABLE public.bp_scripts_draft OWNER TO port4k;
 
 CREATE TABLE public.bp_scripts_live
 (
-    bp_key     text NOT NULL,
-    room_key   text NOT NULL,
+    room_id    uuid NOT NULL REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
     event      text NOT NULL,
     source     text NOT NULL,
-    author     text NOT NULL REFERENCES public.accounts(username),
+    author_id  uuid NOT NULL REFERENCES public.accounts(id),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (bp_key, room_key, event),
-    FOREIGN KEY (bp_key, room_key) REFERENCES public.bp_rooms (bp_key, key) ON DELETE CASCADE
+    PRIMARY KEY (room_id, event)
 );
 ALTER TABLE public.bp_scripts_live OWNER TO port4k;
 
-
--- Blueprint objects & nouns (static content)
+-- =============================================================================
+-- Blueprint objects & nouns (static)
+-- =============================================================================
 CREATE TABLE public.bp_objects
 (
-    bp_key      text NOT NULL,
-    room_key    text NOT NULL,
-    id          text NOT NULL,
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    room_id     uuid NOT NULL REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
+    name        text NOT NULL,                               -- object identifier within room
     short       text NOT NULL,
     description text NOT NULL,
     examine     text,
-    state       jsonb NOT NULL DEFAULT '{}'::jsonb, -- static default state
+    state       jsonb NOT NULL DEFAULT '{}'::jsonb,          -- static default state
     use_lua     text,
     position    integer,
     updated_at  timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (bp_key, room_key, id),
-    FOREIGN KEY (bp_key, room_key) REFERENCES public.bp_rooms (bp_key, key) ON DELETE CASCADE
+    CONSTRAINT bp_objects_room_name_uidx UNIQUE (room_id, name)
 );
 ALTER TABLE public.bp_objects OWNER TO port4k;
 
@@ -177,137 +169,120 @@ CREATE INDEX bp_object_state_gin ON public.bp_objects USING gin (state);
 
 CREATE TABLE public.bp_object_nouns
 (
-    bp_key   text NOT NULL,
-    room_key text NOT NULL,
-    obj_id   text NOT NULL,
-    noun     text NOT NULL,
-    PRIMARY KEY (bp_key, room_key, noun),
-    FOREIGN KEY (bp_key, room_key, obj_id) REFERENCES public.bp_objects (bp_key, room_key, id) ON DELETE CASCADE
+    room_id uuid NOT NULL REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
+    obj_id  uuid NOT NULL REFERENCES public.bp_objects(id) ON DELETE CASCADE,
+    noun    text NOT NULL,
+    PRIMARY KEY (room_id, noun)
 );
 ALTER TABLE public.bp_object_nouns OWNER TO port4k;
 
-CREATE INDEX bp_object_noun_btree ON public.bp_object_nouns (bp_key, room_key, noun);
+CREATE INDEX bp_object_noun_btree ON public.bp_object_nouns (room_id, noun);
 
-
--- Arbitrary KV for rooms/players scoped to blueprints (authoring/test data)
+-- =============================================================================
+-- Arbitrary KV scoped to rooms/players (by UUIDs)
+-- =============================================================================
 CREATE TABLE public.bp_room_kv
 (
-    bp_key   text  NOT NULL,
-    room_key text  NOT NULL,
-    key      text  NOT NULL,
-    value    jsonb NOT NULL,
-    PRIMARY KEY (bp_key, room_key, key),
-    FOREIGN KEY (bp_key, room_key) REFERENCES public.bp_rooms (bp_key, key) ON DELETE CASCADE
+    room_id uuid NOT NULL REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
+    key     text NOT NULL,
+    value   jsonb NOT NULL,
+    PRIMARY KEY (room_id, key)
 );
 ALTER TABLE public.bp_room_kv OWNER TO port4k;
 
 CREATE TABLE public.bp_player_kv
 (
-    bp_key       text NOT NULL,
-    account_name text NOT NULL REFERENCES public.accounts(username) ON DELETE CASCADE,
-    room_key     text NOT NULL,
+    room_id      uuid NOT NULL REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
+    account_id   uuid NOT NULL REFERENCES public.accounts(id) ON DELETE CASCADE,
     key          text NOT NULL,
     value        jsonb NOT NULL,
-    PRIMARY KEY (bp_key, account_name, room_key, key),
-    FOREIGN KEY (bp_key, room_key) REFERENCES public.bp_rooms (bp_key, key) ON DELETE CASCADE
+    PRIMARY KEY (room_id, account_id, key)
 );
 ALTER TABLE public.bp_player_kv OWNER TO port4k;
 
-
--- ============================================================================
--- Runtime overlay: per-zone room state (locks, flags, object runtime state)
--- ============================================================================
+-- =============================================================================
+-- Runtime overlay: per-zone room state (locks/objects/flags)
+-- =============================================================================
 CREATE TABLE public.zone_room_state
 (
-    zone_key text NOT NULL REFERENCES public.zones(key) ON DELETE CASCADE,
-    bp_key   text NOT NULL,
-    room_key text NOT NULL,
-    state    jsonb NOT NULL DEFAULT '{}'::jsonb,  -- {"locks":{}, "objects":{}, "flags":{}}
-    PRIMARY KEY (zone_key, bp_key, room_key),
-    FOREIGN KEY (bp_key, room_key) REFERENCES public.bp_rooms (bp_key, key) ON DELETE CASCADE
+    zone_id uuid NOT NULL REFERENCES public.zones(id) ON DELETE CASCADE,
+    room_id uuid NOT NULL REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
+    state   jsonb NOT NULL DEFAULT '{}'::jsonb,  -- {"locks":{}, "objects":{}, "flags":{}}
+    PRIMARY KEY (zone_id, room_id)
 );
 ALTER TABLE public.zone_room_state OWNER TO port4k;
 
 CREATE INDEX zone_room_state_state_gin ON public.zone_room_state USING gin (state);
 
-
--- ============================================================================
--- Loot (runtime) now scoped to (zone, bp, room)
--- ============================================================================
+-- =============================================================================
+-- Loot (runtime) scoped to (zone, room)
+-- =============================================================================
 CREATE TABLE public.loot_spawns
 (
-    id            bigserial PRIMARY KEY,
-    zone_key      text NOT NULL REFERENCES public.zones(key) ON DELETE CASCADE,
-    bp_key        text NOT NULL,
-    room_key      text NOT NULL,
+    id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    zone_id       uuid NOT NULL REFERENCES public.zones(id) ON DELETE CASCADE,
+    room_id       uuid NOT NULL REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
     item          text NOT NULL,
     qty_min       integer NOT NULL DEFAULT 1,
     qty_max       integer NOT NULL DEFAULT 1,
     interval_ms   integer NOT NULL DEFAULT 10000,
     max_instances integer NOT NULL DEFAULT 5,
-    next_spawn_at timestamptz NOT NULL DEFAULT now(),
-    FOREIGN KEY (bp_key, room_key) REFERENCES public.bp_rooms (bp_key, key) ON DELETE CASCADE
+    next_spawn_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.loot_spawns OWNER TO port4k;
 
-CREATE INDEX loot_spawns_zone_room_idx ON public.loot_spawns (zone_key, bp_key, room_key);
+CREATE INDEX loot_spawns_zone_room_idx ON public.loot_spawns (zone_id, room_id);
 
 CREATE TABLE public.room_loot
 (
-    id         bigserial PRIMARY KEY,
-    zone_key   text NOT NULL REFERENCES public.zones(key) ON DELETE CASCADE,
-    bp_key     text NOT NULL,
-    room_key   text NOT NULL,
+    id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    zone_id    uuid NOT NULL REFERENCES public.zones(id) ON DELETE CASCADE,
+    room_id    uuid NOT NULL REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
     item       text NOT NULL,
     qty        integer NOT NULL CHECK (qty > 0),
     spawned_at timestamptz NOT NULL DEFAULT now(),
-    picked_by  text REFERENCES public.accounts(username),
-    picked_at  timestamptz,
-    FOREIGN KEY (bp_key, room_key) REFERENCES public.bp_rooms (bp_key, key) ON DELETE CASCADE
+    picked_by  uuid REFERENCES public.accounts(id),
+    picked_at  timestamptz
 );
 ALTER TABLE public.room_loot OWNER TO port4k;
 
 CREATE INDEX idx_room_loot_available
-    ON public.room_loot (zone_key, bp_key, room_key)
+    ON public.room_loot (zone_id, room_id)
     WHERE picked_by IS NULL;
 
-
--- ============================================================================
--- Characters (optional per-account avatar; positioned in zone/bp/room)
--- ============================================================================
+-- =============================================================================
+-- Characters (avatars) positioned by zone+room UUIDs
+-- =============================================================================
 CREATE TABLE public.characters
 (
-    id           bigserial PRIMARY KEY,
-    account_name text NOT NULL REFERENCES public.accounts(username) ON DELETE CASCADE,
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id   uuid NOT NULL REFERENCES public.accounts(id) ON DELETE CASCADE,
     name         text NOT NULL UNIQUE,
 
-    zone_key     text REFERENCES public.zones(key) ON DELETE SET NULL,
-    bp_key       text,
-    room_key     text,
-    FOREIGN KEY (bp_key, room_key) REFERENCES public.bp_rooms (bp_key, key) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED,
+    zone_id      uuid REFERENCES public.zones(id) ON DELETE SET NULL,
+    room_id      uuid REFERENCES public.bp_rooms(id) ON DELETE SET NULL
+        DEFERRABLE INITIALLY DEFERRED,
 
     stats_json   jsonb NOT NULL DEFAULT '{}'::jsonb,
     created_at   timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.characters OWNER TO port4k;
 
-CREATE INDEX characters_zone_room_idx ON public.characters (zone_key, bp_key, room_key);
+CREATE INDEX characters_zone_room_idx ON public.characters (zone_id, room_id);
 
-
--- ============================================================================
--- Add the FKs on accounts now that targets exist
--- ============================================================================
+-- =============================================================================
+-- Back-fill FKs on accounts now that targets exist
+-- =============================================================================
 ALTER TABLE public.accounts
     ADD CONSTRAINT accounts_zone_fk
-        FOREIGN KEY (zone_key) REFERENCES public.zones(key)
+        FOREIGN KEY (zone_id) REFERENCES public.zones(id)
             ON DELETE SET NULL;
 
 ALTER TABLE public.accounts
     ADD CONSTRAINT accounts_current_room_fk
-        FOREIGN KEY (current_room_bp, current_room_key)
-            REFERENCES public.bp_rooms (bp_key, key)
+        FOREIGN KEY (current_room_id) REFERENCES public.bp_rooms(id)
             ON DELETE SET NULL
             DEFERRABLE INITIALLY DEFERRED;
 
-CREATE INDEX accounts_zone_idx ON public.accounts(zone_key);
-CREATE INDEX accounts_room_idx ON public.accounts(current_room_bp, current_room_key);
+CREATE INDEX accounts_zone_idx ON public.accounts(zone_id);
+CREATE INDEX accounts_room_idx ON public.accounts(current_room_id);

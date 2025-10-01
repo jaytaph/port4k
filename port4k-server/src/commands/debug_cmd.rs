@@ -1,14 +1,19 @@
 use std::sync::Arc;
-use crate::commands::CmdCtx;
+use crate::commands::{CmdCtx, CommandResult};
 use crate::state::session::WorldMode;
 use anyhow::Result;
+use crate::commands::CommandResult::{Failure, Success};
+use crate::input::parser::Intent;
 
-#[allow(unused)]
-pub async fn debug(ctx: Arc<CmdCtx>, raw: &str) -> Result<String> {
-    let rest = raw.strip_prefix("@debug").unwrap().trim();
-    let sub = rest.split_whitespace().next().unwrap_or("");
+pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
+    if intent.args.len() < 2 {
+        return Ok(Failure("Usage: debug where\n".into()));
+    }
 
-    match sub {
+    let sub_cmd = intent.args[1].as_str();
+    // let sub_args = intent.args[2..].to_vec();
+
+    match sub_cmd {
         "where" => {
             let s = ctx.sess.read().unwrap();
             let user = s.name.as_ref().map(|u| u.0.as_str()).unwrap_or("<guest>");
@@ -21,8 +26,8 @@ pub async fn debug(ctx: Arc<CmdCtx>, raw: &str) -> Result<String> {
                 }
                 None => format!("[debug] user={user} world=None\n"),
             };
-            Ok(msg)
+            Ok(Success(msg))
         }
-        _ => Ok("Usage: @debug where\n".into()),
+        _ => Ok(Failure("Usage: @debug where\n".into())),
     }
 }

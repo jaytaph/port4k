@@ -1,12 +1,13 @@
 use std::sync::Arc;
-use crate::commands::CmdCtx;
+use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use crate::state::session::WorldMode;
 use anyhow::Result;
+use crate::commands::CommandResult::{Failure, Success};
 
-pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> Result<String> {
+pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
     if intent.args.is_empty() {
-        return Ok("Usage: go <direction>\n".into());
+        return Ok(Failure("Usage: go <direction>\n".into()));
     }
     let dir = intent.args[0].to_ascii_lowercase();
 
@@ -14,7 +15,7 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> Result<String> {
         let s = ctx.sess.read().unwrap();
         let username = match &s.name {
             Some(u) => u.0.clone(),
-            None => return Ok("You must `login` first.\n".into()),
+            None => return Ok(Failure("You must `login` first.\n".into())),
         };
         (username, s.world.clone())
     };
@@ -29,9 +30,9 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> Result<String> {
                     }
                 }
                 let view = ctx.registry.db.room_view(new_room).await?;
-                Ok(view)
+                Ok(Success(view))
             }
-            None => Ok("You can't go that way.\n".into()),
+            None => Ok(Failure("You can't go that way.\n".into())),
         },
         Some(WorldMode::Playtest { bp, room, .. }) => {
             match ctx.registry.db.bp_move(&bp, &room, &dir).await? {
@@ -61,11 +62,11 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> Result<String> {
                         .bp_room_view(&bp, &next, 80)
                         .await?
                         .unwrap_or_else(|| "[playtest] room missing\n".into());
-                    Ok(format!("{view}{extra}"))
+                    Ok(Success(format!("{view}{extra}")))
                 }
-                None => Ok("You can't go that way (playtest).\n".into()),
+                None => Ok(Failure("You can't go that way (playtest).\n".into())),
             }
         }
-        None => Ok("You are nowhere.\n".into()),
+        None => Ok(Failure("You are nowhere.\n".into())),
     }
 }

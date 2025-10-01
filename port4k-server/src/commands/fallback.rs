@@ -1,18 +1,19 @@
 use std::sync::Arc;
-use crate::commands::CmdCtx;
+use crate::commands::{CmdCtx, CommandResult};
 use crate::state::session::WorldMode;
 use anyhow::Result;
 use tokio::sync::oneshot;
+use crate::commands::CommandResult::{Failure, Success};
 
 /// Handles non-matched commands:
 /// - If in Playtest, forwards to Lua on_command
 /// - Otherwise prints "Unknown command"
-pub async fn fallback(ctx: Arc<CmdCtx>, verb: &str, args: Vec<String>) -> Result<String> {
+pub async fn fallback(ctx: Arc<CmdCtx>, verb: &str, args: Vec<String>) -> Result<CommandResult> {
     let (bp, room, user) = {
         let s = ctx.sess.read().map_err(|_| anyhow::anyhow!("Session lock poisoned"))?;
         match (&s.world, &s.name) {
             (Some(WorldMode::Playtest { bp, room, .. }), Some(u)) => (bp.clone(), room.clone(), u.0.clone()),
-            _ => return Ok("Unknown command. Try `help`.\n".into()),
+            _ => return Ok(Failure("Unknown command. Try `help`.\n".into())),
         }
     };
 
@@ -30,7 +31,7 @@ pub async fn fallback(ctx: Arc<CmdCtx>, verb: &str, args: Vec<String>) -> Result
         .await?;
 
     match rx.await?? {
-        Some(out) if !out.trim().is_empty() => Ok(out),
-        _ => Ok("Unknown command. Try `help`.\n".into()),
+        Some(out) if !out.trim().is_empty() => Ok(Success(out)),
+        _ => Ok(Failure("Unknown command. Try `help`.\n".into())),
     }
 }

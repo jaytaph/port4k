@@ -11,6 +11,7 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::lua::LuaJob;
 use crate::{Registry, Session, process_command};
 use tokio::sync::mpsc;
+use crate::commands::CommandResult;
 
 /// Serve the HTTP server with WebSocket endpoint
 pub async fn serve(
@@ -67,16 +68,36 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
         };
 
         let cmd = text.trim();
-        let resp = process_command(cmd, state.registry.clone(), sess.clone(), state.lua_tx.clone())
-            .await
-            .unwrap_or_else(|e| format!("error: {e}\\n"));
-
-        let _ = socket.send(Message::Text(format!("{}> ", ensure_nl(resp)))).await;
-
-        if matches!(cmd.to_ascii_lowercase().as_str(), "quit" | "exit") {
-            let _ = socket.close().await;
-            break;
+        match process_command(cmd, state.registry.clone(), sess.clone(), state.lua_tx.clone()).await {
+            Ok(CommandResult::Success(msg)) => {
+                let resp = if msg.is_empty() {
+                    String::new()
+                } else {
+                    format!("{}\n", msg)
+                };
+                let _ = socket
+                    .send(Message::Text(format!("{}> ", ensure_nl(resp))))
+                    .await;
+                continue;
+            }
+            Ok(CommandResult::Failure(msg)) => {
+                let _ = socket
+                    .send(Message::Text(format!("error: {msg}\n{}> ", state.entry)))
+                    .await;
+                continue;
+            }
+            Err(e) => {
+                let _ = socket
+                    .send(Message::Text(format!("error: {e}\n{}> ", state.entry)))
+                    .await;
+                continue;
+            }
         }
+
+        // if matches!(cmd.to_ascii_lowercase().as_str(), "quit" | "exit") {
+        //     let _ = socket.close().await;
+        //     break;
+        // }
     }
 
     let username = {

@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 pub const RESET: &str = "\x1b[0m";
 
 pub const FG_BLACK: &str = "\x1b[30m";

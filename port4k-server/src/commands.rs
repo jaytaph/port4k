@@ -6,20 +6,22 @@ use anyhow::Result;
 use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc;
 use crate::ansi;
+use crate::commands::CommandResult::{Failure, Success};
 
 mod balance;
-mod bp;
-mod debug_cmd;
 mod fallback;
 mod go;
 mod login;
 mod logout;
 mod look;
-mod playtest;
 mod register;
-mod script;
 mod take;
 mod who;
+mod blueprint;
+mod debug_cmd;
+mod playtest;
+mod script;
+mod admin;
 
 /// Command context passed to command handlers
 pub struct CmdCtx {
@@ -28,47 +30,50 @@ pub struct CmdCtx {
     pub lua_tx: mpsc::Sender<LuaJob>,
 }
 
+pub enum CommandResult {
+    Success(String),
+    Failure(String),
+}
+
 pub async fn process_command(
     raw: &str,
     registry: Arc<Registry>,
     sess: Arc<RwLock<Session>>,
     lua_tx: mpsc::Sender<LuaJob>,
-) -> Result<String> {
+) -> Result<CommandResult> {
     let intent = parse_command(raw);
 
     let ctx = Arc::new(CmdCtx { registry, sess, lua_tx });
 
     match intent.verb {
-        Verb::Unknown => Ok("Unknown command. Try `help`.\n".to_string()),
-        Verb::Close => Ok("Goodbye!\n".to_string()),
-        Verb::Help => Ok(help_text()),
+        Verb::Close => Ok(Success("Goodbye!\n".to_string())),
+        Verb::Help => Ok(Success(help_text())),
         Verb::Look => look::look(ctx.clone(), intent).await,
         Verb::Take => take::take(ctx.clone(), intent).await,
-        Verb::Drop => Ok("Drop command not implemented yet.\n".to_string()),
-        Verb::Open => Ok("Open command not implemented yet.\n".to_string()),
-        Verb::Unlock => Ok("Unlock command not implemented yet.\n".to_string()),
-        Verb::Lock => Ok("Lock command not implemented yet.\n".to_string()),
-        Verb::Use => Ok("Use command not implemented yet.\n".to_string()),
-        Verb::Put => Ok("Put command not implemented yet.\n".to_string()),
-        Verb::Talk => Ok("Talk command not implemented yet.\n".to_string()),
+        Verb::Drop => Ok(Failure("Drop command not implemented yet.\n".to_string())),
+        Verb::Open => Ok(Failure("Open command not implemented yet.\n".to_string())),
+        Verb::Unlock => Ok(Failure("Unlock command not implemented yet.\n".to_string())),
+        Verb::Lock => Ok(Failure("Lock command not implemented yet.\n".to_string())),
+        Verb::Use => Ok(Failure("Use command not implemented yet.\n".to_string())),
+        Verb::Put => Ok(Failure("Put command not implemented yet.\n".to_string())),
+        Verb::Talk => Ok(Failure("Talk command not implemented yet.\n".to_string())),
         Verb::Go => go::go(ctx.clone(), intent).await,
-        Verb::Inventory => Ok("Inventory command not implemented yet.\n".to_string()),
-        Verb::Quit => Ok("Goodbye!\n".to_string()),
+        Verb::Inventory => Ok(Failure("Inventory command not implemented yet.\n".to_string())),
+        Verb::Quit => Ok(Success("Goodbye!\n".to_string())),
         Verb::Who => who::who(ctx.clone()).await,
 
         Verb::Logout => logout::logout(ctx.clone(), intent).await,
         Verb::Login => login::login(ctx.clone(), intent).await,
         Verb::Register => register::register(ctx.clone(), intent).await,
-        // "help" => Ok(help_text()),
-        // "quit" | "exit" => Ok("Goodbye!\n".to_string()),
-        // "who" => balance::who(&ctx).await, // tiny helper in balance.rs (or move to its own file)
-        // "register" => login::register(&ctx, it.collect()).await,
-        // "login" => login::login(&ctx, it.collect()).await, // one-line login; telnet 2-step stays in connection.rs
-        // "look" => look::look(&ctx).await,
-        // "go" => go::go(&ctx, it.collect()).await,
-        // "take" => take::take(&ctx, it.collect()).await,
-        // "balance" => balance::balance(&ctx).await,
-        //
+
+        Verb::ScBlueprint => blueprint::blueprint(ctx.clone(), intent).await,
+        Verb::ScPlaytest => playtest::playtest(ctx.clone(), intent).await,
+        Verb::ScScript => script::script(ctx.clone(), intent).await,
+        Verb::ScDebug => debug_cmd::debug_cmd(ctx.clone(), intent).await,
+
+        Verb::Unknown => Ok(Failure("Unknown command. Try `help`.\n".to_string())),
+
+
         // // Namespaced commands
         // v if v.starts_with('@') => match &v[1..] {
         //     "bp" => bp::bp(&ctx, raw).await,

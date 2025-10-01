@@ -9,6 +9,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::mpsc;
+use crate::commands::CommandResult;
 
 /// Wrapper around OwnedWriteHalf that normalizes bare '\n' to "\r\n"
 pub struct CRLFOwnedWriteHalf<'a> {
@@ -209,7 +210,7 @@ async fn handle_data_byte(
         }
         EditEvent::Line(line) => {
             // Move to a fresh line before emitting any output
-            w.write_all(b"\n").await?;
+            w.write_all(b"\r\n").await?;
             let raw = line.trim();
             tracing::debug!(%raw, "received line");
 
@@ -238,9 +239,14 @@ async fn handle_naws(cols: u16, rows: u16, _ctx: Arc<ConnCtx>) {
 
 async fn dispatch_command(raw: &str, w: &mut OwnedWriteHalf, ctx: Arc<ConnCtx>) -> anyhow::Result<()> {
     match process_command(raw, ctx.registry.clone(), ctx.sess.clone(), ctx.lua_tx.clone()).await {
-        Ok(out) => {
+        Ok(CommandResult::Success(out))     => {
             if !out.is_empty() {
                 write_with_newline(w, out.as_bytes()).await?;
+            }
+        }
+        Ok(CommandResult::Failure(out))     => {
+            if !out.is_empty() {
+                write_with_newline(w, format!("error: {out}").as_bytes()).await?;
             }
         }
         Err(e) => {

@@ -37,6 +37,11 @@ pub enum Verb {
     Register,
     /// Unrecognized; keep the raw verb so Lua/room handlers can try.
     Unknown,
+    /// Special commands starting with '@'
+    ScBlueprint,
+    ScPlaytest,
+    ScScript,
+    ScDebug,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -376,6 +381,13 @@ fn verb_map() -> HashMap<&'static str, Verb> {
     m.insert("login", Login);
     m.insert("logout", Logout);
     m.insert("register", Register);
+
+    // Special commands starting with '@'
+    m.insert("@bp", ScBlueprint);
+    m.insert("@playtest", ScPlaytest);
+    m.insert("@script", ScScript);
+    m.insert("@debug", ScDebug);
+
     m
 }
 
