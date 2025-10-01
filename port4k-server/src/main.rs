@@ -2,18 +2,18 @@ mod banner;
 mod commands;
 mod config;
 mod db;
+#[allow(unused)]
 mod domain;
 mod hardering;
 mod http;
 mod import;
 mod lua;
 mod net;
-mod readline;
 mod rendering;
 mod scripting;
 mod state;
 mod util;
-mod parser;
+mod input;
 
 pub use commands::process_command;
 pub use net::connection::handle_connection;
@@ -80,10 +80,7 @@ async fn main() -> anyhow::Result<()> {
                     let registry = telnet_registry.clone();
                     let lua_tx_clone = lua_tx.clone();
                     tokio::spawn(async move {
-                        if let Err(e) =
-                            handle_connection(stream, registry, BANNER, ENTRY, lua_tx_clone.clone())
-                                .await
-                        {
+                        if let Err(e) = handle_connection(stream, registry.clone(), BANNER, ENTRY, lua_tx_clone.clone()).await {
                             tracing::error!(%peer, error=%e, "connection error");
                         }
                         tracing::info!(%peer, "client disconnected");
@@ -127,8 +124,5 @@ fn init_tracing() {
         .or_else(|_| EnvFilter::try_new("info,port4k_server=debug"))
         .unwrap();
 
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(fmt_layer)
-        .init();
+    tracing_subscriber::registry().with(filter).with(fmt_layer).init();
 }

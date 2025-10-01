@@ -1,20 +1,22 @@
+use std::sync::Arc;
 use crate::commands::CmdCtx;
+use crate::input::parser::Intent;
 use crate::state::session::WorldMode;
 use anyhow::Result;
 
-pub async fn take(ctx: &CmdCtx<'_>, args: Vec<&str>) -> Result<String> {
-    if args.is_empty() {
+pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> Result<String> {
+    if intent.args.is_empty() {
         return Ok("Usage: take coin [N]\r\n".into());
     }
-    let what = args[0].to_ascii_lowercase();
+    let what = intent.args[0].to_ascii_lowercase();
     if what != "coin" && what != "coins" {
         return Ok("You can take: coin\r\n".into());
     }
 
-    let want: i32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
+    let want: i32 = intent.args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
 
     let (user, loc) = {
-        let s = ctx.sess.lock().await;
+        let s = ctx.sess.read().unwrap();
         let user = match &s.name {
             Some(u) => u.clone(),
             None => return Ok("You must `login` first.\r\n".into()),

@@ -52,8 +52,8 @@ impl Default for EditorConfig {
 pub struct LineEditor {
     prompt: String,
     buf: String,
-    cursor: usize,         // byte index within buf (ASCII assumed)
-    esc: Vec<u8>,          // accumulating an escape sequence (CSI, SS3)
+    cursor: usize, // byte index within buf (ASCII assumed)
+    esc: Vec<u8>,  // accumulating an escape sequence (CSI, SS3)
     pub history: Vec<String>,
     hist_ix: Option<usize>, // index into history while navigating (None = editing new line)
     cfg: EditorConfig,
@@ -79,7 +79,9 @@ impl LineEditor {
     }
 
     /// Change the prompt string.
-    pub fn set_prompt(&mut self, p: impl Into<String>) { self.prompt = p.into(); }
+    pub fn set_prompt(&mut self, p: impl Into<String>) {
+        self.prompt = p.into();
+    }
 
     /// Replace the entire history (e.g., after loading from disk).
     pub fn set_history(&mut self, items: Vec<String>) {
@@ -89,7 +91,9 @@ impl LineEditor {
 
     /// Push a line into history manually (dedup + cap).
     pub fn push_history(&mut self, line: String) {
-        if line.trim().is_empty() { return; }
+        if line.trim().is_empty() {
+            return;
+        }
         if self.cfg.dedup_consecutive_history {
             if self.history.last().map_or(false, |h| h == &line) {
                 return;
@@ -126,7 +130,8 @@ impl LineEditor {
                 EditEvent::Line(line)
             }
 
-            0x7F | 0x08 => { // Backspace / Ctrl-H
+            0x7F | 0x08 => {
+                // Backspace / Ctrl-H
                 if self.cursor > 0 {
                     let prev = self.cursor - 1;
                     self.buf.remove(prev);
@@ -135,21 +140,25 @@ impl LineEditor {
                 EditEvent::Redraw
             }
 
-            0x01 => { // Ctrl-A (Home)
+            0x01 => {
+                // Ctrl-A (Home)
                 self.cursor = 0;
                 EditEvent::Redraw
             }
-            0x05 => { // Ctrl-E (End)
+            0x05 => {
+                // Ctrl-E (End)
                 self.cursor = self.buf.len();
                 EditEvent::Redraw
             }
-            0x15 => { // Ctrl-U (kill line)
+            0x15 => {
+                // Ctrl-U (kill line)
                 self.buf.clear();
                 self.cursor = 0;
                 self.hist_ix = None;
                 EditEvent::Redraw
             }
-            0x17 => { // Ctrl-W (kill previous word)
+            0x17 => {
+                // Ctrl-W (kill previous word)
                 if self.cursor > 0 {
                     // Trim trailing spaces before the cursor
                     while self.cursor > 0 && self.buf.as_bytes()[self.cursor - 1].is_ascii_whitespace() {
@@ -187,14 +196,34 @@ impl LineEditor {
         let s = &self.esc.as_slice();
 
         // Arrow keys: ESC [ A/B/C/D
-        if s == b"\x1B[A" { self.esc.clear(); return self.hist_prev(); }
-        if s == b"\x1B[B" { self.esc.clear(); return self.hist_next(); }
-        if s == b"\x1B[C" { self.esc.clear(); return self.move_right(); }
-        if s == b"\x1B[D" { self.esc.clear(); return self.move_left(); }
+        if s == b"\x1B[A" {
+            self.esc.clear();
+            return self.hist_prev();
+        }
+        if s == b"\x1B[B" {
+            self.esc.clear();
+            return self.hist_next();
+        }
+        if s == b"\x1B[C" {
+            self.esc.clear();
+            return self.move_right();
+        }
+        if s == b"\x1B[D" {
+            self.esc.clear();
+            return self.move_left();
+        }
 
         // Home/End via CSI
-        if s == b"\x1B[H" { self.esc.clear(); self.cursor = 0; return EditEvent::Redraw; }
-        if s == b"\x1B[F" { self.esc.clear(); self.cursor = self.buf.len(); return EditEvent::Redraw; }
+        if s == b"\x1B[H" {
+            self.esc.clear();
+            self.cursor = 0;
+            return EditEvent::Redraw;
+        }
+        if s == b"\x1B[F" {
+            self.esc.clear();
+            self.cursor = self.buf.len();
+            return EditEvent::Redraw;
+        }
 
         // Delete: ESC [ 3 ~
         if s == b"\x1B[3~" {
@@ -206,8 +235,16 @@ impl LineEditor {
         }
 
         // SS3 Home/End: ESC O H/F
-        if s == b"\x1B[OH" { self.esc.clear(); self.cursor = 0; return EditEvent::Redraw; }
-        if s == b"\x1B[OF" { self.esc.clear(); self.cursor = self.buf.len(); return EditEvent::Redraw; }
+        if s == b"\x1B[OH" {
+            self.esc.clear();
+            self.cursor = 0;
+            return EditEvent::Redraw;
+        }
+        if s == b"\x1B[OF" {
+            self.esc.clear();
+            self.cursor = self.buf.len();
+            return EditEvent::Redraw;
+        }
 
         if s.starts_with(b"\x1b[") {
             if let Some(&last) = s.last() {
@@ -227,29 +264,45 @@ impl LineEditor {
     }
 
     fn move_left(&mut self) -> EditEvent {
-        if self.cursor > 0 { self.cursor -= 1; }
+        if self.cursor > 0 {
+            self.cursor -= 1;
+        }
         EditEvent::Redraw
     }
     fn move_right(&mut self) -> EditEvent {
-        if self.cursor < self.buf.len() { self.cursor += 1; }
+        if self.cursor < self.buf.len() {
+            self.cursor += 1;
+        }
         EditEvent::Redraw
     }
 
     fn hist_prev(&mut self) -> EditEvent {
-        if self.history.is_empty() { return EditEvent::None; }
+        if self.history.is_empty() {
+            return EditEvent::None;
+        }
         match self.hist_ix {
-            None => { self.hist_ix = Some(self.history.len().saturating_sub(1)); }
-            Some(ix) => { if ix > 0 { self.hist_ix = Some(ix - 1); } }
+            None => {
+                self.hist_ix = Some(self.history.len().saturating_sub(1));
+            }
+            Some(ix) => {
+                if ix > 0 {
+                    self.hist_ix = Some(ix - 1);
+                }
+            }
         }
         if let Some(ix) = self.hist_ix {
             self.buf = self.history[ix].clone();
             self.cursor = self.buf.len();
             EditEvent::Redraw
-        } else { EditEvent::None }
+        } else {
+            EditEvent::None
+        }
     }
 
     fn hist_next(&mut self) -> EditEvent {
-        if self.history.is_empty() { return EditEvent::None; }
+        if self.history.is_empty() {
+            return EditEvent::None;
+        }
         match self.hist_ix {
             None => EditEvent::None,
             Some(ix) => {
@@ -293,7 +346,9 @@ impl LineEditor {
     }
 
     /// Access current buffer (e.g., for preview or external validation).
-    pub fn buffer(&self) -> &str { &self.buf }
+    pub fn buffer(&self) -> &str {
+        &self.buf
+    }
 
     /// Replace current buffer (e.g., programmatic completion).
     pub fn set_buffer(&mut self, new_buf: impl Into<String>) {

@@ -1,18 +1,19 @@
+use std::collections::HashMap;
 use crate::lua::LuaJob;
-use crate::readline::{EditEvent, LineEditor};
+use crate::input::readline::{EditEvent, LineEditor};
 use crate::util::telnet::{TelnetIn, TelnetMachine};
 use crate::{ConnState, Registry, Session, process_command};
 use port4k_core::Username;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::mpsc;
 
 /// Small context passed around so helpers don't need tons of args
 struct ConnCtx {
     registry: Arc<Registry>,
-    sess: Arc<Mutex<Session>>,
+    sess: Arc<RwLock<Session>>,
     lua_tx: mpsc::Sender<LuaJob>,
 }
 
@@ -27,18 +28,18 @@ pub async fn handle_connection(
     let (r, mut w) = stream.into_split();
     let mut reader = BufReader::new(r);
 
-    let ctx = ConnCtx {
+    let ctx = Arc::new(ConnCtx {
         registry,
-        sess: Arc::new(Mutex::new(Session::default())),
+        sess: Arc::new(RwLock::new(Session::default())),
         lua_tx,
-    };
+    });
 
-    let mut editor = LineEditor::new("LE> ");
+    let mut editor = LineEditor::new("{user} > ");
     let mut telnet = TelnetMachine::new();
 
     start_session(&mut w, &mut telnet, banner, entry, &editor).await?;
 
-    read_loop(&mut reader, &mut w, &mut telnet, &mut editor, &ctx).await?;
+    read_loop(&mut reader, &mut w, &mut telnet, &mut editor, ctx.clone()).await?;
 
     cleanup(&ctx).await;
     Ok(())
@@ -77,11 +78,15 @@ async fn read_loop(
     w: &mut OwnedWriteHalf,
     telnet: &mut TelnetMachine,
     editor: &mut LineEditor,
-    ctx: &ConnCtx,
+    ctx: Arc<ConnCtx>,
 ) -> anyhow::Result<()> {
     let mut one = [0u8; 1];
 
     loop {
+
+        let prompt = generate_prompt(&ctx).await;
+        editor.set_prompt(&prompt);
+
         let n = reader.read(&mut one).await?;
         if n == 0 {
             break; // disconnect
@@ -89,16 +94,40 @@ async fn read_loop(
 
         if let Some(evt) = telnet.push(one[0], w).await? {
             match evt {
-                TelnetIn::Data(b) => handle_data_byte(b, reader, w, telnet, editor, ctx).await?,
-                TelnetIn::Naws { cols, rows } => handle_naws(cols, rows, ctx).await,
+                TelnetIn::Data(b) => handle_data_byte(b, reader, w, telnet, editor, ctx.clone()).await?,
+                TelnetIn::Naws { cols, rows } => handle_naws(cols, rows, ctx.clone()).await,
             }
         }
     }
     Ok(())
 }
 
+async fn generate_prompt(ctx: &ConnCtx) -> String {
+    let mut vars = HashMap::new();
+
+    if let Some(name) = ctx.sess.read().unwrap().name.clone() {
+        vars.insert("user".to_string(), name.0);
+    } else {
+        vars.insert("user".to_string(), "".to_string());
+    }
+    vars.insert("time".to_string(), chrono::Local::now().format("%H:%M:%S").to_string());
+
+    let prompt = "{user} @ {time} > ";
+    let mut out = prompt.to_string();
+    for (k, v) in vars {
+        out = out.replace(&format!("{{{}}}", k), &v);
+    }
+
+    out
+}
+
 async fn cleanup(ctx: &ConnCtx) {
-    if let Some(u) = ctx.sess.lock().await.name.clone() {
+    let username_opt = {
+        let sess = ctx.sess.read().unwrap();
+        sess.name.clone()
+    };
+
+    if let Some(u) = username_opt {
         ctx.registry.set_online(&u, false).await;
     }
 }
@@ -109,7 +138,7 @@ async fn handle_data_byte(
     w: &mut OwnedWriteHalf,
     telnet: &mut TelnetMachine,
     editor: &mut LineEditor,
-    ctx: &ConnCtx,
+    ctx: Arc<ConnCtx>,
 ) -> anyhow::Result<()> {
     match editor.handle_byte(b) {
         EditEvent::None => {}
@@ -123,13 +152,13 @@ async fn handle_data_byte(
             tracing::debug!(%raw, "received line");
 
             // Try login flow first; if handled, we just repaint
-            if try_handle_login(raw, reader, w, telnet, ctx).await? == LoginOutcome::Handled {
+            if try_handle_login(raw, reader, w, telnet, ctx.clone()).await? == LoginOutcome::Handled {
                 repaint_prompt(w, editor).await?;
                 return Ok(());
             }
 
             // Otherwise, dispatch as a normal command
-            dispatch_command(raw, w, ctx).await?;
+            dispatch_command(raw, w, ctx.clone()).await?;
 
             // Always repaint prompt after server output
             repaint_prompt(w, editor).await?;
@@ -138,15 +167,15 @@ async fn handle_data_byte(
     Ok(())
 }
 
-async fn handle_naws(cols: u16, rows: u16, _ctx: &ConnCtx) {
+async fn handle_naws(cols: u16, rows: u16, _ctx: Arc<ConnCtx>) {
     dbg!(&cols, &rows);
     // let mut s = ctx.sess.lock().await;
     // s.tty_cols = Some(cols as usize);
     // s.tty_rows = Some(rows as usize);
 }
 
-async fn dispatch_command(raw: &str, w: &mut OwnedWriteHalf, ctx: &ConnCtx) -> anyhow::Result<()> {
-    match process_command(raw, &ctx.registry, &ctx.sess, ctx.lua_tx.clone()).await {
+async fn dispatch_command(raw: &str, w: &mut OwnedWriteHalf, ctx: Arc<ConnCtx>) -> anyhow::Result<()> {
+    match process_command(raw, ctx.registry.clone(), ctx.sess.clone(), ctx.lua_tx.clone()).await {
         Ok(out) => {
             if !out.is_empty() {
                 write_with_newline(w, out.as_bytes()).await?;
@@ -171,7 +200,7 @@ async fn try_handle_login(
     reader: &mut BufReader<OwnedReadHalf>,
     w: &mut OwnedWriteHalf,
     telnet: &mut TelnetMachine,
-    ctx: &ConnCtx,
+    ctx: Arc<ConnCtx>,
 ) -> anyhow::Result<LoginOutcome> {
     // Only handle `login <username>` with exactly one arg here
     let Some(rest) = raw.strip_prefix("login ") else {
@@ -182,7 +211,7 @@ async fn try_handle_login(
         return Ok(LoginOutcome::NotHandled);
     }
 
-    if ctx.sess.lock().await.state == ConnState::LoggedIn {
+    if ctx.sess.read().unwrap().state == ConnState::LoggedIn {
         write_with_newline(w, b"Already logged in.").await?;
         return Ok(LoginOutcome::Handled);
     }
@@ -199,7 +228,7 @@ async fn try_handle_login(
 
     w.write_all(b"Password: ").await?;
     w.flush().await?;
-    let pw = read_secret_line(reader, w, telnet, ctx).await?;
+    let pw = read_secret_line(reader, w, telnet, ctx.clone()).await?;
 
     if pw.is_empty() {
         // Keep the old behavior: end the connection when empty password
@@ -209,7 +238,7 @@ async fn try_handle_login(
     let password = pw.trim_matches(['\r', '\n']);
     if ctx.registry.db.verify_user(&user.0, password).await.unwrap_or(false) {
         {
-            let mut s = ctx.sess.lock().await;
+            let mut s = ctx.sess.write().unwrap();
             s.name = Some(user.clone());
             s.state = ConnState::LoggedIn;
         }
@@ -244,14 +273,16 @@ async fn read_secret_line(
     reader: &mut BufReader<OwnedReadHalf>,
     w: &mut OwnedWriteHalf,
     telnet: &mut TelnetMachine,
-    _ctx: &ConnCtx,
+    _ctx: Arc<ConnCtx>,
 ) -> std::io::Result<String> {
     let mut out = Vec::<u8>::new();
     let mut one = [0u8; 1];
 
     loop {
         let n = reader.read(&mut one).await?;
-        if n == 0 { break; } // disconnect
+        if n == 0 {
+            break;
+        } // disconnect
 
         if let Some(evt) = telnet.push(one[0], w).await? {
             match evt {

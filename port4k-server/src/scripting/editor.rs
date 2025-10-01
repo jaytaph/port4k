@@ -4,24 +4,14 @@ use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub async fn process_editor_line(
-    line: &str,
-    registry: &Arc<Registry>,
-    sess: &Arc<Mutex<Session>>,
-) -> Result<String> {
+#[allow(unused)]
+pub async fn process_editor_line(line: &str, registry: &Arc<Registry>, sess: &Arc<Mutex<Session>>) -> Result<String> {
     // process_editor_line()
     if line.trim() == ".end" {
         let (bp, room, event, src, author) = {
             let mut s = sess.lock().await;
-            let ed = s
-                .editor
-                .take()
-                .ok_or_else(|| anyhow::anyhow!("no editor"))?;
-            let author = s
-                .name
-                .as_ref()
-                .map(|u| u.0.clone())
-                .unwrap_or_else(|| "unknown".into());
+            let ed = s.editor.take().ok_or_else(|| anyhow::anyhow!("no editor"))?;
+            let author = s.name.as_ref().map(|u| u.0.clone()).unwrap_or_else(|| "unknown".into());
             (ed.bp, ed.room, ed.event, ed.buf, author)
         };
         registry

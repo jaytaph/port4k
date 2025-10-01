@@ -1,14 +1,16 @@
+use std::sync::Arc;
 use crate::commands::CmdCtx;
 use crate::state::session::WorldMode;
 use anyhow::Result;
 
-pub async fn debug(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
+#[allow(unused)]
+pub async fn debug(ctx: Arc<CmdCtx>, raw: &str) -> Result<String> {
     let rest = raw.strip_prefix("@debug").unwrap().trim();
     let sub = rest.split_whitespace().next().unwrap_or("");
 
     match sub {
         "where" => {
-            let s = ctx.sess.lock().await;
+            let s = ctx.sess.read().unwrap();
             let user = s.name.as_ref().map(|u| u.0.as_str()).unwrap_or("<guest>");
             let msg = match &s.world {
                 Some(WorldMode::Live { room_id }) => {

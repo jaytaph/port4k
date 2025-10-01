@@ -44,7 +44,6 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
     let (tx, mut rx) = mpsc::channel::<LuaJob>(64);
 
     std::thread::spawn(move || {
-
         let lua = Lua::new();
         lua.sandbox(true).expect("cannot sandbox lua");
 
@@ -103,13 +102,12 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                             // broadcast_room(text) – here we just append to local out
                             {
                                 let out_b = out.clone();
-                                let broadcast_room =
-                                    lua.create_function(move |_, (text,): (String,)| {
-                                        out_b.lock().push_str(&text);
-                                        out_b.lock().push('\r');
-                                        out_b.lock().push('\n');
-                                        Ok(())
-                                    })?;
+                                let broadcast_room = lua.create_function(move |_, (text,): (String,)| {
+                                    out_b.lock().push_str(&text);
+                                    out_b.lock().push('\r');
+                                    out_b.lock().push('\n');
+                                    Ok(())
+                                })?;
                                 globals.set("broadcast_room", broadcast_room)?;
                             }
 
@@ -119,16 +117,15 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                                 let bp_cl = bp.clone();
                                 let room_cl = room.clone();
                                 let handle = rt_handle.clone();
-                                let get_state =
-                                    lua.create_function(move |lua_ctx, (key,): (String,)| {
-                                        let v = handle
-                                            .block_on(db_cl.bp_room_kv_get(&bp_cl, &room_cl, &key))
-                                            .map_err(mlua::Error::external)?;
-                                        Ok(match v {
-                                            Some(v) => serde_json_to_lua(lua_ctx, v)?,
-                                            None => Value::Nil,
-                                        })
-                                    })?;
+                                let get_state = lua.create_function(move |lua_ctx, (key,): (String,)| {
+                                    let v = handle
+                                        .block_on(db_cl.bp_room_kv_get(&bp_cl, &room_cl, &key))
+                                        .map_err(mlua::Error::external)?;
+                                    Ok(match v {
+                                        Some(v) => serde_json_to_lua(lua_ctx, v)?,
+                                        None => Value::Nil,
+                                    })
+                                })?;
                                 globals.set("get_state", get_state)?;
                             }
 
@@ -138,17 +135,14 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                                 let bp_cl = bp.clone();
                                 let room_cl = room.clone();
                                 let handle = rt_handle.clone();
-                                let set_state = lua.create_function(
-                                    move |lua_ctx, (key, value): (String, Value)| {
+                                let set_state =
+                                    lua.create_function(move |lua_ctx, (key, value): (String, Value)| {
                                         let v = lua_to_serde_json(lua_ctx, value)?;
                                         handle
-                                            .block_on(
-                                                db_cl.bp_room_kv_set(&bp_cl, &room_cl, &key, &v),
-                                            )
+                                            .block_on(db_cl.bp_room_kv_set(&bp_cl, &room_cl, &key, &v))
                                             .map_err(mlua::Error::external)?;
                                         Ok(())
-                                    },
-                                )?;
+                                    })?;
                                 globals.set("set_state", set_state)?;
                             }
 
@@ -159,19 +153,15 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                                 let room_cl = room.clone();
                                 let acc_cl = account.clone();
                                 let handle = rt_handle.clone();
-                                let get_player =
-                                    lua.create_function(move |lua_ctx, (key,): (String,)| {
-                                        let v =
-                                            handle
-                                                .block_on(db_cl.bp_player_kv_get(
-                                                    &bp_cl, &acc_cl, &room_cl, &key,
-                                                ))
-                                                .map_err(mlua::Error::external)?;
-                                        Ok(match v {
-                                            Some(v) => serde_json_to_lua(lua_ctx, v)?,
-                                            None => Value::Nil,
-                                        })
-                                    })?;
+                                let get_player = lua.create_function(move |lua_ctx, (key,): (String,)| {
+                                    let v = handle
+                                        .block_on(db_cl.bp_player_kv_get(&bp_cl, &acc_cl, &room_cl, &key))
+                                        .map_err(mlua::Error::external)?;
+                                    Ok(match v {
+                                        Some(v) => serde_json_to_lua(lua_ctx, v)?,
+                                        None => Value::Nil,
+                                    })
+                                })?;
                                 globals.set("get_player", get_player)?;
                             }
 
@@ -182,25 +172,20 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                                 let room_cl = room.clone();
                                 let acc_cl = account.clone();
                                 let handle = rt_handle.clone();
-                                let set_player = lua.create_function(
-                                    move |lua_ctx, (key, value): (String, Value)| {
+                                let set_player =
+                                    lua.create_function(move |lua_ctx, (key, value): (String, Value)| {
                                         let v = lua_to_serde_json(lua_ctx, value)?;
                                         handle
-                                            .block_on(db_cl.bp_player_kv_set(
-                                                &bp_cl, &acc_cl, &room_cl, &key, &v,
-                                            ))
+                                            .block_on(db_cl.bp_player_kv_set(&bp_cl, &acc_cl, &room_cl, &key, &v))
                                             .map_err(mlua::Error::external)?;
                                         Ok(())
-                                    },
-                                )?;
+                                    })?;
                                 globals.set("set_player", set_player)?;
                             }
                         }
 
                         // ----- Load & run on_command(bp:room) -----
-                        lua.load(&src)
-                            .set_name(&format!("{bp}:{room}:on_command"))
-                            .exec()?;
+                        lua.load(&src).set_name(&format!("{bp}:{room}:on_command")).exec()?;
 
                         if let Ok(func) = lua.globals().get::<_, Function>("on_command") {
                             let t: Table = lua.create_table()?;
@@ -265,9 +250,7 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                             )?;
                         }
 
-                        lua.load(&src)
-                            .set_name(&format!("{bp}:{room}:on_enter"))
-                            .exec()?;
+                        lua.load(&src).set_name(&format!("{bp}:{room}:on_enter")).exec()?;
 
                         if let Ok(f) = lua.globals().get::<_, Function>("on_enter") {
                             f.call::<_, ()>((account.as_str(),))
@@ -286,7 +269,6 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
 
     tx
 }
-
 
 // ---------- JSON <-> Lua helpers ----------
 
@@ -317,9 +299,9 @@ fn lua_to_serde_json(lua: &Lua, v: Value) -> mlua::Result<serde_json::Value> {
     Ok(match v {
         Value::Nil => serde_json::Value::Null,
         Value::Boolean(b) => serde_json::Value::Bool(b),
-        Value::Number(n) => serde_json::Value::Number(
-            serde_json::Number::from_f64(n).unwrap_or_else(|| serde_json::Number::from(0)),
-        ),
+        Value::Number(n) => {
+            serde_json::Value::Number(serde_json::Number::from_f64(n).unwrap_or_else(|| serde_json::Number::from(0)))
+        }
         Value::String(s) => serde_json::Value::String(s.to_str()?.to_string()),
         Value::Table(t) => {
             // Heuristic: numeric 1..N keys => array; else object

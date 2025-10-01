@@ -8,6 +8,7 @@ use super::Db;
 impl Db {
     pub fn new(url: &str) -> anyhow::Result<Self> {
         let cfg = tokio_postgres::Config::from_str(url)?;
+
         let mgr = Manager::from_config(
             cfg,
             NoTls,
@@ -15,11 +16,13 @@ impl Db {
                 recycling_method: RecyclingMethod::Fast,
             },
         );
+
         let pool = Pool::builder(mgr)
             .max_size(16)
             .runtime(Runtime::Tokio1)
             .build()
             .map_err(|e| anyhow!(e))?;
+
         Ok(Self { pool })
     }
 }

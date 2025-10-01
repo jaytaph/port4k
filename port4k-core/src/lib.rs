@@ -4,11 +4,9 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Username(pub String);
 
-
 impl fmt::Display for Username {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
 }
-
 
 impl Username {
     pub fn parse(s: &str) -> Option<Self> {

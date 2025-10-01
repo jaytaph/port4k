@@ -31,6 +31,10 @@ pub enum Verb {
     Inventory,
     Help,
     Quit,
+    Who,
+    Login,
+    Logout,
+    Register,
     /// Unrecognized; keep the raw verb so Lua/room handlers can try.
     Unknown,
 }
@@ -49,7 +53,12 @@ pub enum Preposition {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
-    North, South, East, West, Up, Down,
+    North,
+    South,
+    East,
+    West,
+    Up,
+    Down,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,6 +82,7 @@ pub struct NounPhrase {
 pub struct Intent {
     pub verb: Verb,
     pub original: String,
+    pub args: Vec<String>, // The raw args after the verb
 
     // Common slots
     pub direct: Option<NounPhrase>,
@@ -95,8 +105,8 @@ pub struct Intent {
 
 #[derive(Debug, Clone)]
 struct Token {
-    raw: String,     // as in input (lowercased by normalization)
-    lower: String,   // redundant, but explicit
+    raw: String,   // as in input (lowercased by normalization)
+    lower: String, // redundant, but explicit
     quoted: bool,
 }
 
@@ -108,6 +118,7 @@ pub fn parse_command(input: &str) -> Intent {
     if tokens.is_empty() {
         return Intent {
             verb: Verb::Unknown,
+            args: vec![],
             original: normalized,
             direct: None,
             target: None,
@@ -124,6 +135,7 @@ pub fn parse_command(input: &str) -> Intent {
     if let Some(dir) = direction_from(&tokens[0].lower) {
         return Intent {
             verb: Verb::Go,
+            args: vec![],
             original: normalized,
             direct: None,
             target: None,
@@ -144,6 +156,7 @@ pub fn parse_command(input: &str) -> Intent {
         let dir = tokens.get(consumed).and_then(|t| direction_from(&t.lower));
         return Intent {
             verb,
+            args: tokens.iter().map(|t| t.lower.clone()).collect(),
             original: normalized,
             direct: None,
             target: None,
@@ -165,7 +178,7 @@ pub fn parse_command(input: &str) -> Intent {
 
     // If this verb often takes object lists (take/drop), try to split on ',' / 'and'
     let list_friendly = matches!(verb, Verb::Take | Verb::Drop | Verb::Put);
-    let (mut pre_slot, mut post_slot, detected_prep) = split_on_preposition(rest, forced_prep);
+    let (mut pre_slot, post_slot, detected_prep) = split_on_preposition(rest, forced_prep);
 
     if detected_prep.is_some() && forced_prep.is_none() {
         forced_prep = detected_prep; // respect explicit preposition
@@ -192,6 +205,7 @@ pub fn parse_command(input: &str) -> Intent {
 
     Intent {
         verb,
+        args: tokens.iter().map(|t| t.lower.clone()).collect(),
         original: normalized,
         direct,
         target,
@@ -233,7 +247,7 @@ fn tokenize(s: &str) -> Vec<Token> {
     let mut buf = String::new();
     let mut in_quote: Option<char> = None;
 
-    let mut push_tok = |quoted: bool, buf: &mut String, toks: &mut Vec<Token>| {
+    let push_tok = |quoted: bool, buf: &mut String, toks: &mut Vec<Token>| {
         if !buf.is_empty() {
             let raw = buf.clone();
             toks.push(Token {
@@ -281,7 +295,7 @@ fn tokenize(s: &str) -> Vec<Token> {
 //
 
 fn detect_verb(tokens: &[Token]) -> (Verb, usize, Option<Preposition>, Option<String>) {
-    let mut raw_verb: Option<String> = None;
+    // let mut raw_verb: Option<String> = None;
 
     // Phrasal verbs (2-word) that imply a preposition or canonical verb
     if tokens.len() >= 2 {
@@ -309,7 +323,7 @@ fn detect_verb(tokens: &[Token]) -> (Verb, usize, Option<Preposition>, Option<St
 
     // "go <direction>" typed as "north" is handled earlier; here "go" already mapped if needed.
     // Unknown verb: pass the raw string upward
-    raw_verb = Some(tokens[0].raw.clone());
+    let raw_verb = Some(tokens[0].raw.clone());
     (Verb::Unknown, 1, None, raw_verb)
 }
 
@@ -317,9 +331,13 @@ fn verb_map() -> HashMap<&'static str, Verb> {
     use Verb::*;
     let mut m = HashMap::new();
     // look/examine
-    for k in ["look", "l", "examine", "x", "inspect"].iter() { m.insert(*k, Look); }
+    for k in ["look", "l", "examine", "x", "inspect"].iter() {
+        m.insert(*k, Look);
+    }
     // take
-    for k in ["take", "get", "grab"].iter() { m.insert(*k, Take); }
+    for k in ["take", "get", "grab"].iter() {
+        m.insert(*k, Take);
+    }
     // drop
     m.insert("drop", Drop);
     // open/close/lock/unlock
@@ -332,15 +350,32 @@ fn verb_map() -> HashMap<&'static str, Verb> {
     // put
     m.insert("put", Put);
     // talk
-    for k in ["talk", "speak", "say"].iter() { m.insert(*k, Talk); }
+    for k in ["talk", "speak", "say"].iter() {
+        m.insert(*k, Talk);
+    }
     // go / move
-    for k in ["go", "walk", "move"].iter() { m.insert(*k, Go); }
+    for k in ["go", "walk", "move"].iter() {
+        m.insert(*k, Go);
+    }
     // inventory
-    for k in ["inventory", "inv", "i"].iter() { m.insert(*k, Inventory); }
+    for k in ["inventory", "inv", "i"].iter() {
+        m.insert(*k, Inventory);
+    }
+    // who
+    for k in ["whoami", "who"].iter() {
+        m.insert(*k, Who);
+    }
+
     // help, quit
     m.insert("help", Help);
     m.insert("?", Help);
-    for k in ["quit", "exit"].iter() { m.insert(*k, Quit); }
+    for k in ["quit", "exit"].iter() {
+        m.insert(*k, Quit);
+    }
+
+    m.insert("login", Login);
+    m.insert("logout", Logout);
+    m.insert("register", Register);
     m
 }
 
@@ -477,8 +512,10 @@ fn strip_determiners(tokens: &[Token]) -> Vec<Token> {
     }
     // Common determiners/articles/pronouns that shouldn't be part of the NP
     let dets: HashSet<&'static str> = [
-        "a","an","the","some","my","your","his","her","their","our","this","that","these","those",
-    ].into_iter().collect();
+        "a", "an", "the", "some", "my", "your", "his", "her", "their", "our", "this", "that", "these", "those",
+    ]
+    .into_iter()
+    .collect();
 
     tokens
         .iter()
@@ -494,7 +531,7 @@ fn build_np(tokens: &[Token]) -> NounPhrase {
     // If it's a single quoted token, we can derive head as last word inside
     let quoted = tokens.len() == 1 && tokens[0].quoted;
 
-    let mut words: Vec<String> = Vec::new();
+    let words: Vec<String>;
     if quoted {
         // Split the quoted multiword into words for head/adjectives
         words = tokens[0].raw.split_whitespace().map(|s| s.to_string()).collect();
@@ -509,7 +546,12 @@ fn build_np(tokens: &[Token]) -> NounPhrase {
         vec![]
     };
 
-    NounPhrase { raw, head, adjectives, quoted }
+    NounPhrase {
+        raw,
+        head,
+        adjectives,
+        quoted,
+    }
 }
 
 //
@@ -521,7 +563,11 @@ mod tests {
     use super::*;
 
     fn d(np: &NounPhrase) -> (&str, &str, Vec<&str>) {
-        (np.raw.as_str(), np.head.as_str(), np.adjectives.iter().map(|s| s.as_str()).collect())
+        (
+            np.raw.as_str(),
+            np.head.as_str(),
+            np.adjectives.iter().map(|s| s.as_str()).collect(),
+        )
     }
 
     #[test]
@@ -533,6 +579,10 @@ mod tests {
         assert_eq!(raw, "door");
         assert_eq!(head, "door");
         assert!(i.instrument.is_none());
+
+        assert_eq!(i.args[0], "open");
+        assert_eq!(i.args[1], "the");
+        assert_eq!(i.args[2], "door");
     }
 
     #[test]
@@ -592,6 +642,12 @@ mod tests {
         assert_eq!(i.objects[0].head, "coin");
         assert_eq!(i.objects[1].head, "screwdriver");
         assert_eq!(i.objects[2].head, "key");
+
+        assert_eq!(i.args[0], "take");
+        assert_eq!(i.args[1], "coin,");
+        assert_eq!(i.args[2], "screwdriver");
+        assert_eq!(i.args[3], "and");
+        assert_eq!(i.args[4], "key");
     }
 
     #[test]
@@ -642,6 +698,9 @@ mod tests {
         assert_eq!(np.head, "card");
         assert_eq!(np.adjectives, vec!["red", "access"]);
         assert!(np.quoted);
+
+        assert_eq!(i.args[0], "take");
+        assert_eq!(i.args[1], "red access card");
     }
 
     #[test]
@@ -749,6 +808,11 @@ mod tests {
         assert_eq!(i.objects.len(), 2);
         assert_eq!(i.objects[0].raw, "red card");
         assert_eq!(i.objects[1].raw, "blue key");
+
+        assert_eq!(i.args[0], "take");
+        assert_eq!(i.args[1], "red card");
+        assert_eq!(i.args[2], "and");
+        assert_eq!(i.args[3], "blue key");
     }
 
     #[test]
@@ -767,6 +831,4 @@ mod tests {
         assert_eq!(i.preposition, Some(Preposition::At));
         assert_eq!(i.direct.unwrap().head, "markings");
     }
-
 }
-

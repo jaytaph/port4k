@@ -1,7 +1,8 @@
+use crate::db::types::RoomId;
 use super::Db;
 
 impl Db {
-    pub async fn room_view(&self, room_id: i64) -> anyhow::Result<String> {
+    pub async fn room_view(&self, room_id: RoomId) -> anyhow::Result<String> {
         let client = self.pool.get().await?;
         let r = client
             .query_one("SELECT title, body FROM rooms WHERE id=$1", &[&room_id])
@@ -10,15 +11,9 @@ impl Db {
         let body: String = r.get(1);
 
         let exits = client
-            .query(
-                "SELECT dir FROM exits WHERE from_room=$1 ORDER BY dir",
-                &[&room_id],
-            )
+            .query("SELECT dir FROM exits WHERE from_room=$1 ORDER BY dir", &[&room_id])
             .await?;
-        let dirs: Vec<String> = exits
-            .into_iter()
-            .map(|row| row.get::<_, String>(0))
-            .collect();
+        let dirs: Vec<String> = exits.into_iter().map(|row| row.get::<_, String>(0)).collect();
         let exits_line = if dirs.is_empty() {
             "Exits: none".to_string()
         } else {

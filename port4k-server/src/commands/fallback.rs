@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::commands::CmdCtx;
 use crate::state::session::WorldMode;
 use anyhow::Result;
@@ -6,13 +7,11 @@ use tokio::sync::oneshot;
 /// Handles non-matched commands:
 /// - If in Playtest, forwards to Lua on_command
 /// - Otherwise prints "Unknown command"
-pub async fn fallback(ctx: &CmdCtx<'_>, verb: &str, args: Vec<String>) -> Result<String> {
+pub async fn fallback(ctx: Arc<CmdCtx>, verb: &str, args: Vec<String>) -> Result<String> {
     let (bp, room, user) = {
-        let s = ctx.sess.lock().await;
+        let s = ctx.sess.read().map_err(|_| anyhow::anyhow!("Session lock poisoned"))?;
         match (&s.world, &s.name) {
-            (Some(WorldMode::Playtest { bp, room, .. }), Some(u)) => {
-                (bp.clone(), room.clone(), u.0.clone())
-            }
+            (Some(WorldMode::Playtest { bp, room, .. }), Some(u)) => (bp.clone(), room.clone(), u.0.clone()),
             _ => return Ok("Unknown command. Try `help`.\r\n".into()),
         }
     };

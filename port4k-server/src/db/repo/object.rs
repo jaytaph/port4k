@@ -9,8 +9,9 @@ impl ObjectRepo {
         bp: &str,
         room: &str,
     ) -> anyhow::Result<Vec<RoomObject>> {
-        let rows = c.query(
-            r#"
+        let rows = c
+            .query(
+                r#"
             SELECT o.id, o.short, o.description, o.examine, o.state, o.use_lua, o.position,
                    COALESCE((SELECT array_agg(noun ORDER BY noun)
                               FROM bp_object_nouns n
@@ -19,8 +20,9 @@ impl ObjectRepo {
              WHERE o.bp_key=$1 AND o.room_key=$2
              ORDER BY o.position NULLS LAST, o.id
             "#,
-            &[&bp, &room],
-        ).await?;
+                &[&bp, &room],
+            )
+            .await?;
 
         let mut out = Vec::with_capacity(rows.len());
         for r in rows {

@@ -1,7 +1,8 @@
+use crate::db::types::RoomId;
 use super::Db;
 
 impl Db {
-    pub async fn start_room_id(&self) -> anyhow::Result<i64> {
+    pub async fn start_room_id(&self) -> anyhow::Result<RoomId> {
         let client = self.pool.get().await?;
         let row = client
             .query_one(
@@ -12,10 +13,10 @@ impl Db {
                 &[],
             )
             .await?;
-        Ok(row.get::<_, i64>(0))
+        Ok(row.get::<_, i64>(0).into())
     }
 
-    pub async fn get_or_create_character(&self, account: &str) -> anyhow::Result<(i64, i64)> {
+    pub async fn get_or_create_character(&self, account: &str) -> anyhow::Result<(i64, RoomId)> {
         let client = self.pool.get().await?;
 
         if let Some(row) = client
@@ -30,16 +31,13 @@ impl Db {
             .await?
         {
             let id: i64 = row.get(0);
-            let loc: Option<i64> = row.get(1);
+            let loc: Option<RoomId> = row.get(1);
             let loc = if let Some(l) = loc {
                 l
             } else {
                 let s = self.start_room_id().await?;
                 client
-                    .execute(
-                        "UPDATE characters SET location_id=$1 WHERE id=$2",
-                        &[&s, &id],
-                    )
+                    .execute("UPDATE characters SET location_id=$1 WHERE id=$2", &[&s, &id])
                     .await?;
                 s
             };
@@ -59,7 +57,7 @@ impl Db {
         Ok((row.get(0), row.get(1)))
     }
 
-    pub async fn move_character(&self, account: &str, dir: &str) -> anyhow::Result<Option<i64>> {
+    pub async fn move_character(&self, account: &str, dir: &str) -> anyhow::Result<Option<RoomId>> {
         let client = self.pool.get().await?;
         let row = client
             .query_opt(
@@ -88,13 +86,10 @@ impl Db {
         let Some(to_row) = to else {
             return Ok(None);
         };
-        let new_room: i64 = to_row.get(0);
+        let new_room: RoomId = to_row.get(0);
 
         client
-            .execute(
-                "UPDATE characters SET location_id=$1 WHERE id=$2",
-                &[&new_room, &cid],
-            )
+            .execute("UPDATE characters SET location_id=$1 WHERE id=$2", &[&new_room, &cid])
             .await?;
         Ok(Some(new_room))
     }

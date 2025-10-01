@@ -1,12 +1,7 @@
 use super::super::Db;
 
 impl Db {
-    pub async fn bp_room_kv_get(
-        &self,
-        bp: &str,
-        room: &str,
-        key: &str,
-    ) -> anyhow::Result<Option<serde_json::Value>> {
+    pub async fn bp_room_kv_get(&self, bp: &str, room: &str, key: &str) -> anyhow::Result<Option<serde_json::Value>> {
         let c = self.pool.get().await?;
         let row = c
             .query_opt(

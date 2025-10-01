@@ -1,14 +1,17 @@
+use crate::config::Config;
 use crate::db::Db;
 use port4k_core::Username;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::config::Config;
 
 #[derive(Debug)]
 pub struct Registry {
+    /// Database
     pub db: Db,
+    /// Global Configuration
     pub config: Arc<Config>,
+    /// List of online players
     pub online: RwLock<BTreeSet<String>>,
 }
 

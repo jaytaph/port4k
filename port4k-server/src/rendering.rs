@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use regex::Regex;
 use once_cell::sync::Lazy;
+use regex::Regex;
+use std::collections::HashMap;
 
 pub struct Theme {
     pub room_title: String,
@@ -13,11 +13,11 @@ pub struct Theme {
 impl Theme {
     pub fn blue() -> Self {
         Self {
-            room_title: "\x1b[38;5;75;1m".to_string(),   // bright sky blue
-            room_body: "\x1b[0m".to_string(),            // normal
-            objects: "\x1b[38;5;81m".to_string(),        // cyan/teal
-            exits: "\x1b[38;5;39;1m".to_string(),        // vivid blue
-            exit_preface: "\x1b[38;5;39m".to_string(),   // normal blue
+            room_title: "\x1b[38;5;75;1m".to_string(), // bright sky blue
+            room_body: "\x1b[0m".to_string(),          // normal
+            objects: "\x1b[38;5;81m".to_string(),      // cyan/teal
+            exits: "\x1b[38;5;39;1m".to_string(),      // vivid blue
+            exit_preface: "\x1b[38;5;39m".to_string(), // normal blue
         }
     }
 
@@ -25,11 +25,11 @@ impl Theme {
     #[allow(unused)]
     pub fn ansi16() -> Self {
         Self {
-            room_title: "\x1b[1;36m".to_string(),   // bright cyan
+            room_title: "\x1b[1;36m".to_string(), // bright cyan
             room_body: "\x1b[0m".to_string(),
-            objects: "\x1b[36m".to_string(),        // cyan
-            exits: "\x1b[1;34m".to_string(),        // bright blue
-            exit_preface: "\x1b[34m".to_string(),   // normal blue
+            objects: "\x1b[36m".to_string(),      // cyan
+            exits: "\x1b[1;34m".to_string(),      // bright blue
+            exit_preface: "\x1b[34m".to_string(), // normal blue
         }
     }
 }
@@ -50,8 +50,7 @@ const RESET: &str = "\x1b[0m";
 // const FG_EXITS: &str = "\x1b[1;34m";
 
 static ANSI_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\x1b\[[0-9;]*m").unwrap());
-static OBJ_TAG_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\{obj:([a-zA-Z0-9_\-:]+)(?:\|([^}]+))?\}").unwrap());
+static OBJ_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{obj:([a-zA-Z0-9_\-:]+)(?:\|([^}]+))?\}").unwrap());
 
 fn render_objects(theme: &Theme, body: &str, id_to_short: &HashMap<String, String>) -> String {
     let col1 = &theme.room_body;
@@ -84,7 +83,9 @@ fn wrap_ansi(text: &str, width: usize) -> String {
     // Split on blank lines to preserve paragraphs
     let mut out = String::new();
     for (pi, para) in text.split("\r\n\r\n").enumerate() {
-        if pi > 0 { out.push_str("\r\n\r\n"); }
+        if pi > 0 {
+            out.push_str("\r\n\r\n");
+        }
 
         // For each paragraph, wrap each line but reflow spaces
         let mut line_len = 0usize;
@@ -113,12 +114,12 @@ fn wrap_ansi(text: &str, width: usize) -> String {
     out
 }
 
-fn color_title(theme: &Theme,title: &str) -> String {
+fn color_title(theme: &Theme, title: &str) -> String {
     let col = &theme.room_title;
     format!("{col}{title}{RESET}")
 }
 
-fn color_exits(theme: &Theme,dirs: &[String]) -> String {
+fn color_exits(theme: &Theme, dirs: &[String]) -> String {
     let col1 = &theme.exit_preface;
     let col2 = &theme.exits;
 

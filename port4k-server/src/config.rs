@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde::Deserialize;
 use std::path::Path;
 
+/// Global configuration of the server
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub tcp_addr: String,       // e.g. "0.0.0.0:4000"

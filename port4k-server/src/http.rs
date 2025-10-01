@@ -5,13 +5,14 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::lua::LuaJob;
 use crate::{Registry, Session, process_command};
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::mpsc;
 
+/// Serve the HTTP server with WebSocket endpoint
 pub async fn serve(
     addr: std::net::SocketAddr,
     registry: Arc<Registry>,
@@ -27,12 +28,7 @@ pub async fn serve(
             entry,
             lua_tx,
         })
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
-        );
+        .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any));
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(listener, app).await?;
@@ -56,7 +52,7 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
         .send(Message::Text(format!("{}{}> ", state.banner, state.entry)))
         .await;
 
-    let sess = Arc::new(Mutex::new(Session::default()));
+    let sess = Arc::new(RwLock::new(Session::default()));
 
     while let Some(Ok(msg)) = socket.recv().await {
         let text = match msg {
@@ -71,13 +67,11 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
         };
 
         let cmd = text.trim();
-        let resp = process_command(cmd, &state.registry, &sess, state.lua_tx.clone())
+        let resp = process_command(cmd, state.registry.clone(), sess.clone(), state.lua_tx.clone())
             .await
             .unwrap_or_else(|e| format!("error: {e}\\r\\n"));
 
-        let _ = socket
-            .send(Message::Text(format!("{}> ", ensure_nl(resp))))
-            .await;
+        let _ = socket.send(Message::Text(format!("{}> ", ensure_nl(resp)))).await;
 
         if matches!(cmd.to_ascii_lowercase().as_str(), "quit" | "exit") {
             let _ = socket.close().await;
@@ -85,7 +79,11 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
         }
     }
 
-    if let Some(u) = sess.lock().await.name.clone() {
+    let username = {
+        let s = sess.read().unwrap();
+        s.name.clone()
+    };
+    if let Some(u) = username {
         state.registry.set_online(&u, false).await;
     }
 }

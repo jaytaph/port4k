@@ -1,22 +1,22 @@
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use anyhow::{bail, Context, Result};
-use serde_json::json;
-use std::{fs, path::Path};
-use mlua::Lua;
-use tokio_postgres::Transaction;
-use regex::Regex;
 use crate::hardering::{ALLOWED_DIRS, FORBIDDEN_LUA_TOKENS, MAX_LUA_BYTES};
 use crate::util::{list_yaml_files_guarded, resolve_content_subdir};
+use anyhow::{Context, Result, bail};
+use mlua::Lua;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::collections::{HashMap, HashSet};
+use std::{fs, path::Path};
+use tokio_postgres::Transaction;
 
 #[derive(Debug, Deserialize)]
 pub struct RoomYaml {
-    pub id: String,              // "entry_hall"
-    pub name: String,            // "Entry Hall"
+    pub id: String,   // "entry_hall"
+    pub name: String, // "Entry Hall"
     #[serde(default)]
-    pub short: Option<String>,   // oneliner
+    pub short: Option<String>, // oneliner
     #[serde(rename = "description")]
-    pub full_desc: String,       // long text
+    pub full_desc: String, // long text
     #[serde(default)]
     pub hints: Vec<String>,
     #[serde(default)]
@@ -37,19 +37,19 @@ pub struct ObjectYaml {
     #[serde(default)]
     pub examine: Option<String>,
     #[serde(default)]
-    pub state: serde_json::Value,      // arbitrary map
+    pub state: serde_json::Value, // arbitrary map
     #[serde(default)]
     pub loot: Option<serde_json::Value>,
     #[serde(default)]
-    pub use_: Option<String>,          // Lua (key "use" in YAML)
+    pub use_: Option<String>, // Lua (key "use" in YAML)
     #[serde(rename = "use", default)]
-    pub _use_compat: Option<String>,   // compat alias
+    pub _use_compat: Option<String>, // compat alias
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ExitYaml {
-    pub dir: String,            // "north"
-    pub to: String,             // "hallway_1"
+    pub dir: String, // "north"
+    pub to: String,  // "hallway_1"
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
@@ -61,9 +61,9 @@ pub struct ExitYaml {
 #[derive(Debug, Default, Deserialize)]
 pub struct ScriptsYaml {
     #[serde(default)]
-    pub on_enter: Option<String>,     // Lua
+    pub on_enter: Option<String>, // Lua
     #[serde(default)]
-    pub on_command: Option<String>,   // Lua
+    pub on_command: Option<String>, // Lua
     #[serde(default)]
     pub objects: HashMap<String, ScriptObjectHandlers>, // id -> handlers
 }
@@ -71,17 +71,12 @@ pub struct ScriptsYaml {
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ScriptObjectHandlers {
     #[serde(default)]
-    pub use_: Option<String>,         // Lua
+    pub use_: Option<String>, // Lua
     #[serde(rename = "use", default)]
-    pub _use_compat: Option<String>,  // compat alias
+    pub _use_compat: Option<String>, // compat alias
 }
 
-pub async fn import_blueprint_subdir(
-    bp: &str,
-    subdir: &str,
-    content_base: &Path,
-    db: &crate::db::Db,
-) -> Result<()> {
+pub async fn import_blueprint_subdir(bp: &str, subdir: &str, content_base: &Path, db: &crate::db::Db) -> Result<()> {
     let dir = resolve_content_subdir(content_base, subdir)?;
     let files = list_yaml_files_guarded(&dir)?;
 
@@ -90,27 +85,29 @@ pub async fn import_blueprint_subdir(
 
     // Process sequentially for clear error reporting (can be parallelized if needed)
     for path in files {
-        let text = fs::read_to_string(&path)
-            .with_context(|| format!("reading {}", path.display()))?;
-        let mut room: RoomYaml = serde_yaml::from_str(&text)
-            .with_context(|| format!("parsing YAML {}", path.display()))?;
+        let text = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+        let mut room: RoomYaml =
+            serde_yaml::from_str(&text).with_context(|| format!("parsing YAML {}", path.display()))?;
 
         // normalize "use"
         for o in &mut room.objects {
-            if o.use_.is_none() { o.use_ = o._use_compat.take(); }
+            if o.use_.is_none() {
+                o.use_ = o._use_compat.take();
+            }
         }
         for (_, h) in &mut room.scripts.objects {
-            if h.use_.is_none() { h.use_ = h._use_compat.take(); }
+            if h.use_.is_none() {
+                h.use_ = h._use_compat.take();
+            }
         }
 
-        validate_room_semantics(&room)
-            .with_context(|| format!("schema validation failed for {}", room.id))?;
+        validate_room_semantics(&room).with_context(|| format!("schema validation failed for {}", room.id))?;
 
         // Note we don't await here
-        validate_lua_for_room(&room)
-            .with_context(|| format!("Lua validation failed for {}", room.id))?;
+        validate_lua_for_room(&room).with_context(|| format!("Lua validation failed for {}", room.id))?;
 
-        upsert_room_and_exits(bp, &room, &tx).await
+        upsert_room_and_exits(bp, &room, &tx)
+            .await
             .with_context(|| format!("upserting room {}", room.id))?;
     }
 
@@ -121,7 +118,7 @@ pub async fn import_blueprint_subdir(
 async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> Result<()> {
     let title = &r.name;
     let short = r.short.as_deref().unwrap_or_default();
-    let body  = &r.full_desc;
+    let body = &r.full_desc;
 
     // Store objects & scripts as JSONB
     let objects_json = serde_json::to_value(&r.objects)?;
@@ -145,8 +142,18 @@ async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> 
             objects= EXCLUDED.objects,
             scripts= EXCLUDED.scripts
         "#,
-        &[&bp, &r.id, &title, &short, &body, &hints_json, &objects_json, &scripts_json]
-    ).await?;
+        &[
+            &bp,
+            &r.id,
+            &title,
+            &short,
+            &body,
+            &hints_json,
+            &objects_json,
+            &scripts_json,
+        ],
+    )
+    .await?;
 
     // Upsert exits: we’ll do simple merge (insert or update desc/locked/visible)
     for ex in &r.exits {
@@ -160,13 +167,21 @@ async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> 
                 description  = EXCLUDED.description,
                 visible_when_locked = EXCLUDED.visible_when_locked
             "#,
-            &[&bp, &r.id, &ex.dir.to_ascii_lowercase(), &ex.to, &ex.locked, &ex.description, &ex.visible_when_locked]
-        ).await?;
+            &[
+                &bp,
+                &r.id,
+                &ex.dir.to_ascii_lowercase(),
+                &ex.to,
+                &ex.locked,
+                &ex.description,
+                &ex.visible_when_locked,
+            ],
+        )
+        .await?;
     }
 
     Ok(())
 }
-
 
 fn validate_lua_for_room(room: &RoomYaml) -> Result<()> {
     // Fresh state per room (no std libs loaded by default)
@@ -198,17 +213,31 @@ fn validate_lua_for_room(room: &RoomYaml) -> Result<()> {
 
 pub fn validate_room_semantics(room: &RoomYaml) -> Result<()> {
     // id/name/desc basics
-    if room.id.trim().is_empty() { bail!("room id empty"); }
-    if room.name.trim().is_empty() { bail!("room name empty"); }
-    if room.full_desc.trim().is_empty() { bail!("room desc empty"); }
-    if room.id.len() > 64 { bail!("room id too long"); }
-    if room.name.len() > 128 { bail!("room name too long"); }
+    if room.id.trim().is_empty() {
+        bail!("room id empty");
+    }
+    if room.name.trim().is_empty() {
+        bail!("room name empty");
+    }
+    if room.full_desc.trim().is_empty() {
+        bail!("room desc empty");
+    }
+    if room.id.len() > 64 {
+        bail!("room id too long");
+    }
+    if room.name.len() > 128 {
+        bail!("room name too long");
+    }
 
     // unique object ids
     let mut ids = HashSet::new();
     for o in &room.objects {
-        if o.id.trim().is_empty() { bail!("object with empty id"); }
-        if !ids.insert(&o.id) { bail!("duplicate object id: {}", o.id); }
+        if o.id.trim().is_empty() {
+            bail!("object with empty id");
+        }
+        if !ids.insert(&o.id) {
+            bail!("duplicate object id: {}", o.id);
+        }
     }
 
     // {obj:ID} placeholders must reference existing objects
@@ -235,7 +264,6 @@ pub fn validate_room_semantics(room: &RoomYaml) -> Result<()> {
     Ok(())
 }
 
-
 fn check_lua_string(name: &str, code: &str) -> Result<()> {
     let bytes = code.as_bytes();
     if bytes.len() > MAX_LUA_BYTES {
@@ -249,8 +277,6 @@ fn check_lua_string(name: &str, code: &str) -> Result<()> {
     }
     Ok(())
 }
-
-
 
 fn compile_lua_chunk(lua: &Lua, name: &str, code: &str) -> Result<()> {
     check_lua_string(name, code)?;

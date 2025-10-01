@@ -1,12 +1,14 @@
+use std::sync::Arc;
 use crate::commands::CmdCtx;
 use crate::state::session::{ConnState, WorldMode};
 use anyhow::Result;
 
-pub async fn playtest(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
+#[allow(unused)]
+pub async fn playtest(ctx: Arc<CmdCtx>, raw: &str) -> Result<String> {
     let rest = raw.strip_prefix("@playtest").unwrap().trim();
 
     if rest.eq_ignore_ascii_case("stop") {
-        let mut s = ctx.sess.lock().await;
+        let mut s = ctx.sess.write().unwrap();
         match &mut s.world {
             Some(WorldMode::Playtest { prev_room_id, .. }) => {
                 let room_id = prev_room_id
@@ -29,7 +31,7 @@ pub async fn playtest(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
             .await?
             .ok_or_else(|| anyhow::anyhow!("blueprint has no entry room"))?;
 
-        let mut s = ctx.sess.lock().await;
+        let mut s = ctx.sess.write().unwrap();
         if s.state != ConnState::LoggedIn {
             return Ok("Login required.\r\n".into());
         }
@@ -51,9 +53,6 @@ pub async fn playtest(ctx: &CmdCtx<'_>, raw: &str) -> Result<String> {
             .await?
             .unwrap_or_else(|| "[playtest] empty room\r\n".into());
 
-        Ok(format!(
-            "[playtest] entered `{}` at `{}`.\r\n{}",
-            bp, entry, view
-        ))
+        Ok(format!("[playtest] entered `{}` at `{}`.\r\n{}", bp, entry, view))
     }
 }

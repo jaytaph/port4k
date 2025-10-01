@@ -24,5 +24,6 @@ pub mod loot;
 pub mod rooms;
 
 mod repo {
+    #[allow(unused)]
     pub mod object;
 }

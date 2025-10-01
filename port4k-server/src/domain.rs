@@ -1,7 +1,5 @@
-#[allow(unused)]
 pub type ObjectId = String;
 
-#[allow(unused)]
 pub struct RoomObject {
     pub id: ObjectId,
     pub nouns: Vec<String>,

@@ -39,10 +39,7 @@ impl Db {
     pub async fn verify_user(&self, name: &str, password: &str) -> anyhow::Result<bool> {
         let client = self.pool.get().await?;
         let row = client
-            .query_opt(
-                "SELECT password_hash FROM accounts WHERE username = $1",
-                &[&name],
-            )
+            .query_opt("SELECT password_hash FROM accounts WHERE username = $1", &[&name])
             .await?;
 
         let Some(row) = row else {
@@ -57,19 +54,14 @@ impl Db {
         }
 
         let parsed = PasswordHash::new(&stored).map_err(|e| anyhow!(e))?;
-        Ok(Argon2::default()
-            .verify_password(password.as_bytes(), &parsed)
-            .is_ok())
+        Ok(Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok())
     }
 
     /// Read current account balance.
     pub async fn account_balance(&self, account: &str) -> anyhow::Result<i64> {
         let client = self.pool.get().await?;
         let row = client
-            .query_one(
-                "SELECT balance FROM accounts WHERE username = $1",
-                &[&account],
-            )
+            .query_one("SELECT balance FROM accounts WHERE username = $1", &[&account])
             .await?;
         Ok(row.get(0))
     }

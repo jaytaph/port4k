@@ -1,15 +1,17 @@
+use std::sync::Arc;
 use crate::commands::CmdCtx;
+use crate::input::parser::Intent;
 use crate::state::session::WorldMode;
 use anyhow::Result;
 
-pub async fn go(ctx: &CmdCtx<'_>, args: Vec<&str>) -> Result<String> {
-    if args.is_empty() {
+pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> Result<String> {
+    if intent.args.is_empty() {
         return Ok("Usage: go <direction>\r\n".into());
     }
-    let dir = args[0].to_ascii_lowercase();
+    let dir = intent.args[0].to_ascii_lowercase();
 
     let (username, world) = {
-        let s = ctx.sess.lock().await;
+        let s = ctx.sess.read().unwrap();
         let username = match &s.name {
             Some(u) => u.0.clone(),
             None => return Ok("You must `login` first.\r\n".into()),
@@ -18,26 +20,24 @@ pub async fn go(ctx: &CmdCtx<'_>, args: Vec<&str>) -> Result<String> {
     };
 
     match world {
-        Some(WorldMode::Live { .. }) => {
-            match ctx.registry.db.move_character(&username, &dir).await? {
-                Some(new_room) => {
-                    {
-                        let mut s = ctx.sess.lock().await;
-                        if let Some(WorldMode::Live { room_id }) = &mut s.world {
-                            *room_id = new_room;
-                        }
+        Some(WorldMode::Live { .. }) => match ctx.registry.db.move_character(&username, &dir).await? {
+            Some(new_room) => {
+                {
+                    let mut s = ctx.sess.write().unwrap();
+                    if let Some(WorldMode::Live { room_id }) = &mut s.world {
+                        *room_id = new_room;
                     }
-                    let view = ctx.registry.db.room_view(new_room).await?;
-                    Ok(view)
                 }
-                None => Ok("You can't go that way.\r\n".into()),
+                let view = ctx.registry.db.room_view(new_room).await?;
+                Ok(view)
             }
-        }
+            None => Ok("You can't go that way.\r\n".into()),
+        },
         Some(WorldMode::Playtest { bp, room, .. }) => {
             match ctx.registry.db.bp_move(&bp, &room, &dir).await? {
                 Some(next) => {
                     {
-                        let mut s = ctx.sess.lock().await;
+                        let mut s = ctx.sess.write().unwrap();
                         if let Some(WorldMode::Playtest { room, .. }) = &mut s.world {
                             *room = next.clone();
                         }

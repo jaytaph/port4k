@@ -236,7 +236,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "145052bdd345b87320e369255277e3fb5152762ad123a901ef5c262dd38fe8d2"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -1159,6 +1161,8 @@ dependencies = [
  "anyhow",
  "argon2",
  "axum",
+ "bytes",
+ "chrono",
  "deadpool-postgres",
  "dotenvy",
  "futures",
@@ -1168,6 +1172,7 @@ dependencies = [
  "parking_lot",
  "password-hash",
  "port4k-core",
+ "postgres-types",
  "rand_core 0.6.4",
  "refinery",
  "regex",

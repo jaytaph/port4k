@@ -1,31 +1,38 @@
 use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::OwnedWriteHalf;
 
-const IAC: u8 = 255;        // Interpret As Command
-const WILL: u8 = 251;       // I will do option
-const WONT: u8 = 252;       // I won't do option
-const DO: u8 = 253;         // Please, you do option
-const DONT: u8 = 254;       // Please, you don't do option
-const SB: u8 = 250;         // Subnegotiation begin
-const SE: u8 = 240;         // Subnegotiation end
+const IAC: u8 = 255; // Interpret As Command
+const WILL: u8 = 251; // I will do option
+const WONT: u8 = 252; // I won't do option
+const DO: u8 = 253; // Please, you do option
+const DONT: u8 = 254; // Please, you don't do option
+const SB: u8 = 250; // Subnegotiation begin
+const SE: u8 = 240; // Subnegotiation end
 
-const ECHO:     u8 = 1;   // Who echoes (server will echo if we send WILL ECHO)
-const SGA:      u8 = 3;   // Suppress Go-Ahead (interactive mode)
-const TTYPE:    u8 = 24;  // Terminal type
-const NAWS:     u8 = 31;  // Negotiate About Window Size
-const LINEMODE: u8 = 34;  // We want this OFF for char-at-a-time
+const ECHO: u8 = 1; // Who echoes (server will echo if we send WILL ECHO)
+const SGA: u8 = 3; // Suppress Go-Ahead (interactive mode)
+const TTYPE: u8 = 24; // Terminal type
+const NAWS: u8 = 31; // Negotiate About Window Size
+const LINEMODE: u8 = 34; // We want this OFF for char-at-a-time
 
 #[derive(Debug)]
 pub enum TelnetIn {
+    /// Regular data byte
     Data(u8),
+    /// Client resized terminal; cols and rows in characters
     Naws { cols: u16, rows: u16 },
 }
 
 pub struct TelnetMachine {
+    /// Are we in an IAC sequence?
     in_iac: bool,
+    /// If in_iac, which command are we processing (WILL/WONT/DO/DONT/SB)
     in_cmd: Option<u8>,
+    /// Are we inside a subnegotiation (after SB, before IAC SE)?
     in_sb: bool,
+    /// If in_sb, which option are we negotiating?
     sb_opt: u8,
+    /// If in_sb, buffer of data bytes collected so far
     sb_buf: Vec<u8>,
 }
 
@@ -73,7 +80,7 @@ impl TelnetMachine {
                 // Inside SB: collect until IAC SE
                 self.sb_buf.push(b);
                 Ok(None)
-            }
+            };
         }
 
         // We are after an IAC
@@ -120,28 +127,31 @@ impl TelnetMachine {
                 // This branch is hit when we were expecting an option byte after DO/DON'T/WILL/WON'T, or SB's option.
                 if let Some(cmd) = self.in_cmd.take() {
                     match cmd {
-                        DO => { // Client requests we WILL <opt>
+                        DO => {
+                            // Client requests we WILL <opt>
                             match opt {
-                                ECHO => send_will(w, ECHO).await?,        // We'll echo (client stops local echo)
-                                SGA  => send_will(w, SGA).await?,         // We'll suppress go-ahead
-                                LINEMODE => send_wont(w, LINEMODE).await?,// We refuse LINEMODE
+                                ECHO => send_will(w, ECHO).await?,         // We'll echo (client stops local echo)
+                                SGA => send_will(w, SGA).await?,           // We'll suppress go-ahead
+                                LINEMODE => send_wont(w, LINEMODE).await?, // We refuse LINEMODE
                                 NAWS => { /* client asking us to do NAWS is unusual; ignore */ }
                                 _ => send_wont(w, opt).await?,
                             }
                         }
-                        DONT => { // Client says DON'T <opt> (stop doing it)
+                        DONT => {
+                            // Client says DON'T <opt> (stop doing it)
                             match opt {
                                 ECHO | SGA | LINEMODE => send_wont(w, opt).await?,
-                                _ => {/* ignore */},
+                                _ => { /* ignore */ }
                             }
                         }
-                        WILL => { // Client will do <opt>
+                        WILL => {
+                            // Client will do <opt>
                             match opt {
-                                ECHO => send_do(w, ECHO).await?,          // ok, you handle echo (we'd usually prefer we echo)
-                                SGA  => send_do(w, SGA).await?,           // ok, you suppress go-ahead too
-                                LINEMODE => send_dont(w, LINEMODE).await?,// nope, please don't
-                                NAWS => send_do(w, NAWS).await?,          // yes, please send SB NAWS
-                                TTYPE => send_do(w, TTYPE).await?,        // yes, please send SB TTYPE
+                                ECHO => send_do(w, ECHO).await?, // ok, you handle echo (we'd usually prefer we echo)
+                                SGA => send_do(w, SGA).await?,   // ok, you suppress go-ahead too
+                                LINEMODE => send_dont(w, LINEMODE).await?, // nope, please don't
+                                NAWS => send_do(w, NAWS).await?, // yes, please send SB NAWS
+                                TTYPE => send_do(w, TTYPE).await?, // yes, please send SB TTYPE
                                 _ => send_dont(w, opt).await?,
                             }
                         }

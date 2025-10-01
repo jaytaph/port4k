@@ -1,5 +1,6 @@
 use super::Db;
 use rand_core::OsRng;
+use crate::db::types::RoomId;
 
 impl Db {
     /// Spawn due coin piles (and other loot) up to max_instances per spawn.
@@ -68,12 +69,7 @@ impl Db {
     }
 
     /// Atomically pick up to `want_qty` coins from the room. Returns actually picked.
-    pub async fn pickup_coins(
-        &self,
-        account: &str,
-        room_id: i64,
-        want_qty: i32,
-    ) -> anyhow::Result<i32> {
+    pub async fn pickup_coins(&self, account: &str, room_id: RoomId, want_qty: i32) -> anyhow::Result<i32> {
         let mut client = self.pool.get().await?;
         let tx = client.build_transaction().start().await?;
 
@@ -99,11 +95,8 @@ impl Db {
         let take = qty.min(want_qty.max(1));
 
         if qty > take {
-            tx.execute(
-                "UPDATE room_loot SET qty = qty - $1 WHERE id = $2",
-                &[&take, &loot_id],
-            )
-            .await?;
+            tx.execute("UPDATE room_loot SET qty = qty - $1 WHERE id = $2", &[&take, &loot_id])
+                .await?;
         } else {
             tx.execute(
                 "UPDATE room_loot SET picked_by = $1, picked_at = now() WHERE id = $2",

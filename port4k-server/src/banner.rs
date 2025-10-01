@@ -15,7 +15,7 @@ A world of rooms, puzzles, and adventure
 • Persist your character: XP, skills, items
 • Classic MUD atmosphere with a modern twist
 ------------------------------------------------
-Type: `new <name>` to create a character
+Type: `register <name>` to create a character
 `login <name>` to access your account
 `help` for commands | `quit` to exit
 ------------------------------------------------
