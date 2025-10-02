@@ -16,7 +16,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
     let (bp, room) = parse_bp_room_key(&intent.args[2])
         .ok_or_else(|| anyhow::anyhow!("use <bp>:<room>"))?;
 
-    if !ctx.registry.db.bp_set_entry(&bp, &room).await? {
+    if !ctx.registry.repos.room.bp_set_entry(&bp, &room).await? {
         return Ok(Failure("[bp] blueprint not found.\n".into()))
     }
 
