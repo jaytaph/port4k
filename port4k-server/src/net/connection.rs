@@ -153,15 +153,18 @@ async fn read_loop(
 
 async fn generate_prompt(ctx: &ConnCtx, prompt: &str) -> String {
     let mut vars = HashMap::new();
-    vars.insert("user".to_string(), "".to_string());
     vars.insert("world".to_string(), "World".to_string());
     vars.insert("room".to_string(), "Room".to_string());
     vars.insert("wall_time".to_string(), chrono::Local::now().format("%H:%M:%S").to_string());
     vars.insert("online_time".to_string(), chrono::Local::now().format("%H:%M:%S").to_string());
     vars.insert("online_users".to_string(), format!("{}", 123));
 
-    if let Some(name) = ctx.sess.read().unwrap().name.clone() {
-        vars.insert("user".to_string(), name.0);
+    if let Some(account) = ctx.sess.read().unwrap().account.clone() {
+        vars.insert("name".to_string(), account.username);
+        vars.insert("role".to_string(), account.role);
+        vars.insert("xp".to_string(), format!("{}", account.xp));
+        vars.insert("health".to_string(), format!("{}", account.health));
+        vars.insert("coins".to_string(), format!("{}", account.coins));
     }
     if let Some(world) = ctx.sess.read().unwrap().world.as_ref() {
         match world {
@@ -185,13 +188,13 @@ async fn generate_prompt(ctx: &ConnCtx, prompt: &str) -> String {
 }
 
 async fn cleanup(ctx: &ConnCtx) {
-    let username_opt = {
+    let account_opt = {
         let sess = ctx.sess.read().unwrap();
-        sess.name.clone()
+        sess.account.clone()
     };
 
-    if let Some(u) = username_opt {
-        ctx.registry.set_online(&u, false).await;
+    if let Some(a) = account_opt {
+        ctx.registry.set_online(&a, false).await;
     }
 }
 
@@ -307,10 +310,10 @@ async fn try_handle_login(
     if ctx.registry.db.verify_user(&user.0, password).await.unwrap_or(false) {
         {
             let mut s = ctx.sess.write().unwrap();
-            s.name = Some(user.clone());
+            s.account = Some(account.clone());
             s.state = ConnState::LoggedIn;
         }
-        ctx.registry.set_online(&user, true).await;
+        ctx.registry.set_online(&account, true).await;
 
         write_with_newline(w, format!("Welcome, {}! Type `look` or `help`.", user).as_bytes()).await?;
     } else {

@@ -16,15 +16,15 @@ pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult
     match sub_cmd {
         "where" => {
             let s = ctx.sess.read().unwrap();
-            let user = s.name.as_ref().map(|u| u.0.as_str()).unwrap_or("<guest>");
+            let username = s.account.as_ref().map(|a| a.username.as_str()).unwrap_or("[not logged in]");
             let msg = match &s.world {
                 Some(WorldMode::Live { room_id }) => {
-                    format!("[debug] user={user} world=Live room_id={}\n", room_id)
+                    format!("[debug] user={username} world=Live room_id={}\n", room_id)
                 }
                 Some(WorldMode::Playtest { bp, room, .. }) => {
-                    format!("[debug] user={user} world=Playtest {}:{}\n", bp, room)
+                    format!("[debug] user={username} world=Playtest {}:{}\n", bp, room)
                 }
-                None => format!("[debug] user={user} world=None\n"),
+                None => format!("[debug] user={username} world=None\n"),
             };
             Ok(Success(msg))
         }

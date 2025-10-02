@@ -24,7 +24,7 @@ pub async fn script(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
             }
             {
                 let mut s = ctx.sess.write().unwrap();
-                if s.name.is_none() {
+                if s.account.is_none() {
                     return Ok(Failure("Login required.\n".into()));
                 }
                 s.editor = Some(Editor { bp, room, event, buf: String::new() });

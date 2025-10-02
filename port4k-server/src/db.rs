@@ -17,6 +17,7 @@ mod migrations;
 mod pool;
 pub mod types;
 
+pub mod models;
 pub mod accounts;
 pub mod blueprint;
 pub mod characters;

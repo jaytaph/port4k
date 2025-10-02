@@ -1,4 +1,4 @@
-use port4k_core::Username;
+use crate::db::models::account::Account;
 use crate::db::types::RoomId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,8 +41,8 @@ pub enum WorldMode {
 
 #[derive(Debug)]
 pub struct Session {
-    /// Name of the user currently logged in (or None when not logged in)
-    pub name: Option<Username>,
+    /// User Account (if logged in)
+    pub account: Option<Account>,
     /// Current connection state
     pub state: ConnState,
     /// Current world mode, if any

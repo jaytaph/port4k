@@ -4,6 +4,8 @@ use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::db::Db;
+use crate::db::models::account::Account;
+use crate::db::types::RoomId;
 
 pub enum LuaJob {
     /// Called when a player enters a room
@@ -21,9 +23,9 @@ pub enum LuaJob {
     // Called when a player issues a command in playtest mode (no DB state, just ephemeral)
     OnCommandPlaytest {
         db: Db,
-        bp: String,
-        room: String,
-        account: String,
+        bp: BluePrintId,
+        room: RoomId,
+        account: Account,
         verb: String,
         args: Vec<String>,
         reply: oneshot::Sender<Result<Option<String>>>,
@@ -31,9 +33,9 @@ pub enum LuaJob {
     // Called when we enter a room in playtest mode (no DB state, just ephemeral)
     OnEnterPlaytest {
         db: Db,
-        bp: String,
-        room: String,
-        account: String,
+        bp: BluePrintId,
+        room_id: RoomId,
+        account: Account,
         reply: oneshot::Sender<Result<Option<String>>>,
     },
 }
@@ -209,7 +211,7 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                 LuaJob::OnEnterPlaytest {
                     db,
                     bp,
-                    room,
+                    room_id,
                     account,
                     reply,
                 } => {

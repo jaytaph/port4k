@@ -9,10 +9,10 @@ use crate::commands::CommandResult::{Failure, Success};
 /// - If in Playtest, forwards to Lua on_command
 /// - Otherwise prints "Unknown command"
 pub async fn fallback(ctx: Arc<CmdCtx>, verb: &str, args: Vec<String>) -> Result<CommandResult> {
-    let (bp, room, user) = {
+    let (bp, room, account) = {
         let s = ctx.sess.read().map_err(|_| anyhow::anyhow!("Session lock poisoned"))?;
-        match (&s.world, &s.name) {
-            (Some(WorldMode::Playtest { bp, room, .. }), Some(u)) => (bp.clone(), room.clone(), u.0.clone()),
+        match (&s.world, &s.account) {
+            (Some(WorldMode::Playtest { bp, room, .. }), Some(a)) => (bp.clone(), room.clone(), a.clone()),
             _ => return Ok(Failure("Unknown command. Try `help`.\n".into())),
         }
     };
@@ -23,7 +23,7 @@ pub async fn fallback(ctx: Arc<CmdCtx>, verb: &str, args: Vec<String>) -> Result
             db: ctx.registry.db.clone(),
             bp,
             room,
-            account: user,
+            account,
             verb: verb.to_string(),
             args,
             reply: tx,

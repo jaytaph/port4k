@@ -1,86 +1,88 @@
-use crate::db::types::RoomId;
+use crate::db::types::{AccountId, CharacterId, RoomId};
 use super::Db;
 
 impl Db {
+    /// Returns the room ID of the starting room ("start" zone, "entry" room).
     pub async fn start_room_id(&self) -> anyhow::Result<RoomId> {
         let client = self.pool.get().await?;
         let row = client
             .query_one(
                 "SELECT r.id
-                 FROM rooms r
-                 JOIN zones z ON z.id = r.zone_id
-                 WHERE z.key = 'start' AND r.key = 'entry'",
-                &[],
+                    FROM rooms r
+                    JOIN zones z ON z.id = r.zone_id
+                    WHERE z.key = 'start' AND r.key = 'entry'",
+                    &[],
             )
             .await?;
-        Ok(row.get::<_, i64>(0).into())
+
+        Ok(row.get::<_, RoomId>(0).into())
     }
 
-    pub async fn get_or_create_character(&self, account: &str) -> anyhow::Result<(i64, RoomId)> {
+    pub async fn get_or_create_character(&self, account_id: AccountId, username: &str) -> anyhow::Result<(CharacterId, RoomId)> {
         let client = self.pool.get().await?;
 
         if let Some(row) = client
             .query_opt(
-                "SELECT id, location_id
+                "SELECT id, room_id
                  FROM characters
-                 WHERE account_name = $1
-                 ORDER BY id
+                 WHERE account_id = $1
                  LIMIT 1",
-                &[&account],
+                &[&account_id],
             )
             .await?
         {
-            let id: i64 = row.get(0);
+            let character_id: CharacterId = row.get(0);
             let loc: Option<RoomId> = row.get(1);
             let loc = if let Some(l) = loc {
                 l
             } else {
                 let s = self.start_room_id().await?;
                 client
-                    .execute("UPDATE characters SET location_id=$1 WHERE id=$2", &[&s, &id])
+                    .execute("UPDATE characters SET room_id=$1 WHERE id=$2", &[&s, &character_id])
                     .await?;
                 s
             };
-            return Ok((id, loc));
+
+            return Ok((character_id, loc));
         }
 
         let loc = self.start_room_id().await?;
-        let name = account;
         let row = client
             .query_one(
-                "INSERT INTO characters (account_name, name, location_id)
+                "INSERT INTO characters (account_id, name, room_id)
                  VALUES ($1, $2, $3)
-                 RETURNING id, location_id",
-                &[&account, &name, &loc],
+                 RETURNING id, room_id",
+                &[&account_id, &username, &loc],
             )
             .await?;
+
         Ok((row.get(0), row.get(1)))
     }
 
-    pub async fn move_character(&self, account: &str, dir: &str) -> anyhow::Result<Option<RoomId>> {
+    pub async fn move_character(&self, account_id: AccountId, dir: &str) -> anyhow::Result<Option<RoomId>> {
         let client = self.pool.get().await?;
         let row = client
             .query_opt(
-                "SELECT c.id, c.location_id
+                "SELECT c.id, c.room_id
                  FROM characters c
-                 WHERE c.account_name=$1
+                 WHERE c.account_id=$1
                  ORDER BY c.id
                  LIMIT 1",
-                &[&account],
+                &[&account_id],
             )
             .await?;
         let Some(row) = row else {
             return Ok(None);
         };
-        let cid: i64 = row.get(0);
-        let cur: i64 = row.get(1);
+        let character_id: i64 = row.get(0);
+        let cur_room: i64 = row.get(1);
 
         let to = client
             .query_opt(
                 "SELECT to_room
                  FROM exits
                  WHERE from_room=$1 AND dir=LOWER($2)",
-                &[&cur, &dir],
+                &[&cur_room, &dir],
             )
             .await?;
         let Some(to_row) = to else {
@@ -89,7 +91,7 @@ impl Db {
         let new_room: RoomId = to_row.get(0);
 
         client
-            .execute("UPDATE characters SET location_id=$1 WHERE id=$2", &[&new_room, &cid])
+            .execute("UPDATE characters SET room_id=$1 WHERE id=$2", &[&new_room, &character_id])
             .await?;
         Ok(Some(new_room))
     }

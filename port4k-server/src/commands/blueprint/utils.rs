@@ -7,8 +7,8 @@ pub fn current_owner(ctx: Arc<CmdCtx>) -> Result<String> {
     ctx.sess
         .read()
         .unwrap()
-        .name
+        .account
         .as_ref()
-        .map(|u| u.0.clone())
+        .map(|a| a.username.clone())
         .ok_or_else(|| anyhow!("login required"))
 }

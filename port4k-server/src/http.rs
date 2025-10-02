@@ -100,12 +100,12 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
         // }
     }
 
-    let username = {
+    let account = {
         let s = sess.read().unwrap();
-        s.name.clone()
+        s.account.clone()
     };
-    if let Some(u) = username {
-        state.registry.set_online(&u, false).await;
+    if let Some(a) = account {
+        state.registry.set_online(&a, false).await;
     }
 }
 

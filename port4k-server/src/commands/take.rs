@@ -16,14 +16,14 @@ pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
 
     let want: i32 = intent.args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
 
-    let (user, loc) = {
+    let (account, loc) = {
         let s = ctx.sess.read().unwrap();
-        let user = match &s.name {
-            Some(u) => u.clone(),
+        let account = match &s.account {
+            Some(a) => a.clone(),
             None => return Ok(Failure("You must `login` first.\n".into())),
         };
         match &s.world {
-            Some(WorldMode::Live { room_id }) => (user, *room_id),
+            Some(WorldMode::Live { room_id }) => (account, *room_id),
             Some(WorldMode::Playtest { .. }) => {
                 return Ok(Success("[playtest] Coins aren’t available in playtest instances.\n".into()));
             }
@@ -31,7 +31,7 @@ pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
         }
     };
 
-    let got = ctx.registry.db.pickup_coins(&user.0, loc, want).await?;
+    let got = ctx.registry.db.pickup_coins(&account, loc, want).await?;
     if got == 0 {
         Ok(Failure("There are no coins to pick up.\n".into()))
     } else {

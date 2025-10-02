@@ -1,5 +1,6 @@
 use super::Db;
 use rand_core::OsRng;
+use crate::db::models::account::Account;
 use crate::db::types::RoomId;
 
 impl Db {
@@ -69,7 +70,7 @@ impl Db {
     }
 
     /// Atomically pick up to `want_qty` coins from the room. Returns actually picked.
-    pub async fn pickup_coins(&self, account: &str, room_id: RoomId, want_qty: i32) -> anyhow::Result<i32> {
+    pub async fn pickup_coins(&self, account: &Account, room_id: RoomId, want_qty: i32) -> anyhow::Result<i32> {
         let mut client = self.pool.get().await?;
         let tx = client.build_transaction().start().await?;
 
@@ -100,7 +101,7 @@ impl Db {
         } else {
             tx.execute(
                 "UPDATE room_loot SET picked_by = $1, picked_at = now() WHERE id = $2",
-                &[&account, &loot_id],
+                &[&account.id, &loot_id],
             )
             .await?;
         }
@@ -108,7 +109,7 @@ impl Db {
         let take64 = i64::from(take);
         tx.execute(
             "UPDATE accounts SET balance = balance + $1 WHERE username = $2",
-            &[&take64, &account],
+            &[&take64, &account.id],
         )
         .await?;
 
