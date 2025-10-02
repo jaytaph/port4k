@@ -6,6 +6,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::db::Db;
 use crate::db::models::account::Account;
 use crate::db::models::blueprint::Blueprint;
+use crate::db::models::room::{BlueprintRoom, RoomView};
 
 pub enum LuaJob {
     /// Called when a player enters a room
@@ -14,7 +15,7 @@ pub enum LuaJob {
     OnCommand {
         db: Db,
         bp: Blueprint,
-        room: Room,
+        room: RoomView,
         account: Account,
         verb: String,
         args: Vec<String>,
@@ -24,7 +25,7 @@ pub enum LuaJob {
     OnCommandPlaytest {
         db: Db,
         bp: Blueprint,
-        room: Room,
+        room: RoomView,
         account: Account,
         verb: String,
         args: Vec<String>,
@@ -34,7 +35,7 @@ pub enum LuaJob {
     OnEnterPlaytest {
         db: Db,
         bp: Blueprint,
-        room: Room,
+        room: RoomView,
         account: Account,
         reply: oneshot::Sender<Result<Option<String>>>,
     },

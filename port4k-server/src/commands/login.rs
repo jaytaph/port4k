@@ -16,11 +16,11 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
         return Ok(Failure("Invalid username.\n".into()));
     }
 
-    if !ctx.registry.db.verify_user(&username, pass).await? {
+    if !ctx.registry.services.auth.authenticate(&username, pass).await? {
         return Ok(Failure("Invalid credentials.\n".into()))
     }
 
-    let Some(account) = ctx.registry.db.account_by_username(&username).await? else {
+    let Some(account) = ctx.registry.repos.account.get_by_username(&username).await? else {
         return Ok(Failure("Account not found.\n".into()));
     };
 

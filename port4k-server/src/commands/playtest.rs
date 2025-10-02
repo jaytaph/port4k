@@ -64,13 +64,13 @@ pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult>
             };
 
             s.world = Some(WorldMode::Playtest {
-                bp: bp.to_string(),
+                bp,
                 room: entry.clone(),
                 prev_room_id: prev,
             });
 
             prev
-        }; // <— guard dropped here (even if not used later)
+        };
 
         // ----- Scope 2: Now it’s safe to await
         let view = ctx

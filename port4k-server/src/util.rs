@@ -1,4 +1,4 @@
-use crate::hardering::{ALLOW_SYMLINKS, MAX_FILE_BYTES, MAX_FILES_PER_IMPORT, MAX_TOTAL_BYTES};
+use crate::hardening::{ALLOW_SYMLINKS, MAX_FILE_BYTES, MAX_FILES_PER_IMPORT, MAX_TOTAL_BYTES};
 use anyhow::{Context, bail};
 use std::fs;
 use std::path::{Path, PathBuf};

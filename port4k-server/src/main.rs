@@ -2,9 +2,7 @@ mod banner;
 mod commands;
 mod config;
 mod db;
-#[allow(unused)]
-mod domain_obs;
-mod hardering;
+mod hardening;
 mod http;
 mod import;
 mod lua;
@@ -38,17 +36,18 @@ async fn main() -> anyhow::Result<()> {
     let cfg = Arc::new(config::Config::from_env()?);
 
     // Setup database and run migrations if needed
-    let db = db::Db::new(&cfg.database_url)?;
+    let db = Arc::new(db::Db::new(&cfg.database_url)?);
     db.init().await?;
 
+    let registry = Arc::new(Registry::new(db.clone(), cfg.clone()));
+
     // Start background tasks (spawning loot etc.)
-    spawn_background_tasks(db.clone());
+    spawn_background_tasks(registry.clone());
 
     let tcp_addr: SocketAddr = cfg.tcp_addr.parse()?;
     let listener = TcpListener::bind(tcp_addr).await?;
     tracing::info!(%tcp_addr, "Port4k server listening");
 
-    let registry = Arc::new(Registry::new(db, cfg.clone()));
 
     // Start Lua worker thread
     let lua_tx = start_lua_worker(Handle::current());
@@ -73,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let telnet_registry = Arc::clone(&registry);
+    let telnet_registry = registry.clone();
     let telnet_jh = tokio::spawn(async move {
         loop {
             match listener.accept().await {
@@ -107,8 +106,8 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn spawn_background_tasks(db: db::Db) {
-    let db_for_spawn = db.clone();
+fn spawn_background_tasks(registry: Arc<Registry>) {
+    let db_for_spawn = registry.db.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_millis(1000));
         loop {

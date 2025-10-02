@@ -290,7 +290,7 @@ async fn try_handle_login(
         return Ok(LoginOutcome::Handled);
     };
 
-    if !ctx.registry.user_exists(&username).await {
+    if !ctx.registry.services.account.exists(&username).await? {
         write_with_newline(w, b"No such user. Try `register <name> <password>`.").await?;
         return Ok(LoginOutcome::Handled);
     }
@@ -305,14 +305,14 @@ async fn try_handle_login(
     }
 
     let password = pw.trim_matches(['\r', '\n']);
-    if !ctx.registry.db.verify_user(&username, password).await.unwrap_or(false) {
+    if !ctx.registry.services.auth.authenticate(&username, password).await.unwrap_or(false) {
         write_with_newline(w, b"Invalid credentials.").await?;
         return Ok(LoginOutcome::Handled);
     }
 
 
     // All is ok
-    let Some(account) = ctx.registry.db.account_by_username(&username).await? else {
+    let Some(account) = ctx.registry.repos.account.get_by_username(&username).await? else {
         write_with_newline(w, b"Account retrieval error.").await?;
         return Ok(LoginOutcome::Handled);
     };

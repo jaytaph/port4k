@@ -14,10 +14,8 @@ pub async fn process_editor_line(line: &str, registry: &Arc<Registry>, sess: &Ar
             let author = s.account.as_ref().map(|a| a.username.clone()).unwrap_or_else(|| "unknown".into());
             (ed.bp, ed.room, ed.event, ed.buf, author)
         };
-        registry
-            .db
-            .bp_script_put_draft(&bp, &room, &event, &src, &author)
-            .await?;
+        registry.repos.room.bp_script_put_draft(&bp, &room, &event, &src, &author).await?;
+
         return Ok(format!(
             "[script] saved draft for {}:{} {}\nUse: @script publish {}:{} {}\n",
             bp, room, event, bp, room, event

@@ -20,7 +20,7 @@ pub async fn look(ctx: Arc<CmdCtx>, _intent: Intent) -> Result<CommandResult> {
             let view = ctx.registry.db.room_view(*room_id).await?;
             Ok(Success(view))
         }
-        Some(WorldMode::Playtest { bp, room, .. }) => match ctx.registry.db.bp_room_view(bp, room, 80).await? {
+        Some(WorldMode::Playtest { bp, room, .. }) => match ctx.registry.repos.room.bp_room_view(bp, room, 80).await? {
             Some(view) => Ok(Success(view)),
             None => Ok(Failure("[playtest] This room does not exist.\n".into())),
         },

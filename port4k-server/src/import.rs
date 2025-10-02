@@ -1,4 +1,4 @@
-use crate::hardering::{ALLOWED_DIRS, FORBIDDEN_LUA_TOKENS, MAX_LUA_BYTES};
+use crate::hardening::{ALLOWED_DIRS, FORBIDDEN_LUA_TOKENS, MAX_LUA_BYTES};
 use crate::util::{list_yaml_files_guarded, resolve_content_subdir};
 use anyhow::{Context, Result, bail};
 use mlua::Lua;

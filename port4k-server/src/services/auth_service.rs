@@ -1,18 +1,19 @@
+use std::sync::Arc;
 use anyhow::anyhow;
 use argon2::Argon2;
-use password_hash::{PasswordHash, PasswordHasher, SaltString};
+use password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use rand_core::OsRng;
 use crate::db::models::account::Account;
 use crate::db::repo::account::AccountRepo;
 use crate::db::types::AccountId;
 
-pub struct AuthService<R: AccountRepo> {
-    repo: R,
+pub struct AuthService {
+    repo: Arc<dyn AccountRepo>,
     argon: Argon2<'static>,
 }
 
-impl<R: AccountRepo> AuthService<R> {
-    pub fn new(repo: R) -> Self {
+impl AuthService {
+    pub fn new(repo: Arc<dyn AccountRepo>) -> Self {
         let argon = Argon2::default();
         Self { repo, argon }
     }
@@ -30,7 +31,7 @@ impl<R: AccountRepo> AuthService<R> {
             .to_string();
 
         let account = Account {
-            id: 0, // Will be set by the database
+            id: AccountId::new(),
             username: username.to_string(),
             role: "player".to_string(),
             password_hash: hash,
@@ -45,8 +46,10 @@ impl<R: AccountRepo> AuthService<R> {
             flags: vec![],
         };
 
-        let result = self.repo.insert_account(account).await;
-        Ok(result.is_ok())
+        match self.repo.insert_account(account).await {
+            Ok(_) => Ok(true),
+            Err(e) => Err(anyhow!(e)),
+        }
     }
 
     pub async fn authenticate(&self, username: &str, password: &str) -> anyhow::Result<bool> {

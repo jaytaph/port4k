@@ -1,7 +1,11 @@
 use std::collections::HashMap;
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
+use tokio_postgres::Row;
 use uuid::Uuid;
-use crate::db::types::{BlueprintId, Direction, RoomId, ZoneId};
+use crate::db::json_string_vec;
+use crate::db::models::account::Account;
+use crate::db::types::{AccountId, BlueprintId, Direction, RoomId, ZoneId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlueprintRoom {
@@ -13,9 +17,28 @@ pub struct BlueprintRoom {
     pub lockdown: bool,
     pub short: Option<String>,
     pub hints: Vec<String>,
-    pub scripts_inline: Vec<String>, // legacy column; prefer *_scripts tables
-    // You’ll fetch attached data via joins: exits, objects, scripts, kv
+    pub scripts_inline: Vec<String>,
 }
+
+impl BlueprintRoom {
+    pub fn from_row(row: Row) -> Self {
+        let hints_json: Option<serde_json::Value> = row.try_get("hints").ok();
+        let scripts_json: Option<serde_json::Value> = row.try_get("scripts").ok();
+
+        BlueprintRoom {
+            id: RoomId(row.get::<_, Uuid>("id")),
+            bp_id: BlueprintId(row.get::<_, Uuid>("bp_id")),
+            key: row.get("key"),
+            title: row.get("title"),
+            body: row.get("body"),
+            lockdown: row.get("lockdown"),
+            short: row.get::<_, Option<String>>("short"),
+            hints: json_string_vec(hints_json),
+            scripts_inline: json_string_vec(scripts_json),
+        }
+    }
+}
+
 
 /// Row model for `bp_exits`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,6 +49,19 @@ pub struct RoomExitRow {
     pub locked: bool,
     pub description: Option<String>,
     pub visible_when_locked: bool,
+}
+
+impl RoomExitRow {
+    pub fn from_row(row: Row) -> Self {
+        RoomExitRow {
+            from_room_id: RoomId(row.get::<_, Uuid>("from_room_id")),
+            dir: Direction::from(row.get::<_, String>("dir")),
+            to_room_id: RoomId(row.get::<_, Uuid>("to_room_id")),
+            locked: row.get("locked"),
+            description: row.get::<_, Option<String>>("description"),
+            visible_when_locked: row.get("visible_when_locked"),
+        }
+    }
 }
 
 /// Row model for `bp_objects`.
@@ -40,6 +76,24 @@ pub struct RoomObjectRow {
     pub state: Vec<String>,
     pub use_lua: Option<String>,
     pub position: Option<i32>,
+}
+
+impl RoomObjectRow {
+    pub fn from_row(row: Row) -> Self {
+        let state_json: Option<serde_json::Value> = row.try_get("state").ok();
+
+        RoomObjectRow {
+            id: row.get::<_, Uuid>("id"),
+            room_id: RoomId(row.get::<_, Uuid>("room_id")),
+            name: row.get("name"),
+            short: row.get("short"),
+            description: row.get("description"),
+            examine: row.get::<_, Option<String>>("examine"),
+            state: json_string_vec(state_json),
+            use_lua: row.get::<_, Option<String>>("use_lua"),
+            position: row.get::<_, Option<i32>>("position"),
+        }
+    }
 }
 
 /// Noun mapping for objects (`bp_object_nouns`).

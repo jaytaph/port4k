@@ -1,16 +1,23 @@
-use deadpool_postgres::Pool;
+use std::sync::Arc;
+use crate::db::Db;
 use crate::db::models::account::Account;
 use crate::db::repo::account::AccountRepo;
 use crate::db::types::AccountId;
 
-pub struct AccountRepository<'a> {
-    pub pool: &'a Pool,
+pub struct AccountRepository {
+    db: Arc<Db>,
+}
+
+impl AccountRepository {
+    pub fn new(db: Arc<Db>) -> Self {
+        Self { db: db.clone() }
+    }
 }
 
 #[async_trait::async_trait]
-impl<'a> AccountRepo for AccountRepository<'a> {
+impl AccountRepo for AccountRepository {
     async fn get_by_username(&self, username: &str) -> anyhow::Result<Option<Account>> {
-        let client = self.pool.get().await?;
+        let client = self.db.get_client().await?;
 
         let stmt = client.prepare_cached(
             r#"
@@ -27,7 +34,7 @@ impl<'a> AccountRepo for AccountRepository<'a> {
     }
 
     async fn get_by_id(&self, account_id: AccountId) -> anyhow::Result<Option<Account>> {
-        let client = self.pool.get().await?;
+        let client = self.db.get_client().await?;
 
         let stmt = client.prepare_cached(
             r#"
@@ -44,7 +51,7 @@ impl<'a> AccountRepo for AccountRepository<'a> {
     }
 
     async fn insert_account(&self, account: Account) -> anyhow::Result<Account> {
-        let client = self.pool.get().await?;
+        let client = self.db.get_client().await?;
 
         let stmt = client.prepare_cached(
             r#"
@@ -74,7 +81,7 @@ impl<'a> AccountRepo for AccountRepository<'a> {
     }
 
     async fn update_last_login(&self, id: AccountId) -> anyhow::Result<()> {
-        let client = self.pool.get().await?;
+        let client = self.db.get_client().await?;
 
         let stmt = client.prepare_cached(
             "UPDATE accounts SET last_login = NOW() WHERE id = $1"

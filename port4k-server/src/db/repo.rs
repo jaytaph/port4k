@@ -2,4 +2,5 @@
 pub mod account;
 pub mod db_account;
 
-mod room;
+pub mod room;
+pub mod db_room;

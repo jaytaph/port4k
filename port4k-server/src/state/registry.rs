@@ -4,22 +4,51 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::db::models::account::Account;
+use crate::db::repo::account::AccountRepo;
+use crate::db::repo::db_account::AccountRepository;
+use crate::db::repo::db_room::RoomRepository;
+use crate::db::repo::room::RoomRepo;
+use crate::services::account_service::AccountService;
+use crate::services::auth_service::AuthService;
 
-#[derive(Debug)]
+/// We are entering container / DI territory here. We have to be careful that we don't create
+/// circular references.
+
+pub struct Repos {
+    pub account: Arc<dyn AccountRepo>,
+    pub room: Arc<dyn RoomRepo>,
+}
+
+pub struct Services {
+    pub auth: Arc<AuthService>,
+    pub account: Arc<AccountService>,
+}
+
 pub struct Registry {
-    /// Database
-    pub db: Db,
-    /// Global Configuration
+    pub db: Arc<Db>,
+    pub repos: Arc<Repos>,
+    pub services: Arc<Services>,
     pub config: Arc<Config>,
-    /// List of online players
     pub online: RwLock<BTreeSet<String>>,
 }
 
 impl Registry {
-    pub fn new(db: Db, config: Arc<Config>) -> Self {
+    pub fn new(db: Arc<Db>, config: Arc<Config>) -> Self {
+        let repos = Arc::new(Repos {
+            account: Arc::new(AccountRepository::new(db.clone())),
+            room: Arc::new(RoomRepository::new(db.clone())),
+        });
+
+        let services = Arc::new(Services {
+            auth: Arc::new(AuthService::new(repos.account.clone())),
+            account: Arc::new(AccountService::new(repos.account.clone())),
+        });
+
         Self {
             db,
             config,
+            repos,
+            services,
             online: RwLock::new(BTreeSet::new()),
         }
     }
@@ -35,9 +64,5 @@ impl Registry {
 
     pub async fn who(&self) -> Vec<String> {
         self.online.read().await.iter().cloned().collect()
-    }
-
-    pub async fn user_exists(&self, name: &str) -> bool {
-        self.db.account_by_username(&name).await.is_ok()
     }
 }
