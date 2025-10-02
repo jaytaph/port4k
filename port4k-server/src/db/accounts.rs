@@ -2,21 +2,12 @@ use anyhow::anyhow;
 use argon2::{Argon2, PasswordHasher, PasswordVerifier};
 use password_hash::{PasswordHash, SaltString};
 use rand_core::OsRng;
-
 use super::Db;
 
 impl Db {
-    pub async fn user_exists(&self, username: &str) -> anyhow::Result<bool> {
-        let client = self.pool.get().await?;
-        let row = client
-            .query_opt("SELECT 1 FROM accounts WHERE username = $1", &[&username])
-            .await?;
-        Ok(row.is_some())
-    }
-
     /// Create a new user with Argon2id password hash. Returns false if name exists.
     pub async fn register_user(&self, username: &str, password: &str) -> anyhow::Result<bool> {
-        if self.user_exists(username).await? {
+        if self.account_by_username(username).await?.is_some() {
             return Ok(false);
         }
 
@@ -39,33 +30,11 @@ impl Db {
 
     /// Verify username/password.
     pub async fn verify_user(&self, username: &str, password: &str) -> anyhow::Result<bool> {
-        let client = self.pool.get().await?;
-        let row = client
-            .query_opt("SELECT password_hash FROM accounts WHERE username = $1", &[&username])
-            .await?;
-
-        let Some(row) = row else {
+        let Some(account) = self.account_by_username(username).await? else {
             return Ok(false);
         };
 
-        let Some(stored): Option<String> = row.try_get(0).ok() else {
-            return Ok(false);
-        };
-
-        if stored.trim().is_empty() {
-            return Ok(false);
-        }
-
-        let parsed = PasswordHash::new(&stored).map_err(|e| anyhow!(e))?;
+        let parsed = PasswordHash::new(&account.password_hash).map_err(|e| anyhow!(e))?;
         Ok(Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok())
     }
-
-    // /// Read current account balance.
-    // pub async fn account_balance(&self, account: &str) -> anyhow::Result<i64> {
-    //     let client = self.pool.get().await?;
-    //     let row = client
-    //         .query_one("SELECT balance FROM accounts WHERE username = $1", &[&account])
-    //         .await?;
-    //     Ok(row.get(0))
-    // }
 }

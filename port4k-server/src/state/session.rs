@@ -1,5 +1,5 @@
 use crate::db::models::account::Account;
-use crate::db::types::RoomId;
+use crate::db::types::{BlueprintId, RoomId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnState {
@@ -11,13 +11,9 @@ pub enum ConnState {
 
 #[derive(Debug)]
 pub struct Editor {
-    /// Blueprint Id
-    pub bp: String,
-    /// Room id
-    pub room: String,
-    /// Event name
+    pub bp: BlueprintId,
+    pub room: RoomId,
     pub event: String,
-    /// Input buffer
     pub buf: String,
 }
 
@@ -31,9 +27,9 @@ pub enum WorldMode {
     /// Playtest world, private to the user
     Playtest {
         /// Blueprint Id
-        bp: String,
-        /// Current room name
-        room: String,
+        bp: BlueprintId,
+        /// Current room
+        room: RoomId,
         /// Previous room ID, if any
         prev_room_id: Option<RoomId>,
     },
@@ -54,7 +50,7 @@ pub struct Session {
 impl Default for Session {
     fn default() -> Self {
         Self {
-            name: None,
+            account: None,
             state: ConnState::PreLogin,
             world: None,
             editor: None,

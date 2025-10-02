@@ -1,34 +1,10 @@
 use postgres_types::{FromSql, ToSql};
-
-// #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ToSql, FromSql)]
-// #[repr(transparent)]
-// #[postgres(transparent)]
-// pub struct RoomId(pub uuid::Uuid);
-//
-// #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ToSql, FromSql)]
-// #[repr(transparent)]
-// #[postgres(transparent)]
-// pub struct AccountId(pub uuid::Uuid);
-//
-// #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ToSql, FromSql)]
-// #[repr(transparent)]
-// #[postgres(transparent)]
-// pub struct CharacterId(pub uuid::Uuid);
-//
-// #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ToSql, FromSql)]
-// #[repr(transparent)]
-// #[postgres(transparent)]
-// pub struct BluePrintId(pub uuid::Uuid);
-//
-// #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ToSql, FromSql)]
-// #[repr(transparent)]
-// #[postgres(transparent)]
-// pub struct ZoneId(pub uuid::Uuid);
+use serde::{Deserialize, Serialize};
 
 #[macro_export]
 macro_rules! define_id {
     ($name:ident) => {
-        #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ToSql, FromSql)]
+        #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ToSql, FromSql, Serialize, Deserialize)]
         #[repr(transparent)]
         #[postgres(transparent)]
         pub struct $name(pub uuid::Uuid);
@@ -68,9 +44,42 @@ macro_rules! define_id {
 }
 
 define_id!(AccountId);
+define_id!(CharacterId);
 define_id!(ZoneId);
 define_id!(BlueprintId);
 define_id!(RoomId);
 define_id!(ObjectId);
-define_id!(CharacterId);
 define_id!(LootId);
+
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ScriptSource {
+    Live,
+    Draft,
+}
+
+/// Directions as used in `bp_exits.dir`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Direction {
+    North, South, East, West, Up, Down,
+    Northeast, Northwest, Southeast, Southwest,
+    Custom(String), // fallback for user-defined directions
+}
+
+impl From<String> for Direction {
+    fn from(s: String) -> Self {
+        match s.to_lowercase().as_str() {
+            "n" | "north" => Direction::North,
+            "s" | "south" => Direction::South,
+            "e" | "east"  => Direction::East,
+            "w" | "west"  => Direction::West,
+            "u" | "up"    => Direction::Up,
+            "d" | "down"  => Direction::Down,
+            "ne" | "northeast" => Direction::Northeast,
+            "nw" | "northwest" => Direction::Northwest,
+            "se" | "southeast" => Direction::Southeast,
+            "sw" | "southwest" => Direction::Southwest,
+            other => Direction::Custom(other.to_string()),
+        }
+    }
+}

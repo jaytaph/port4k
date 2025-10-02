@@ -3,7 +3,7 @@ mod commands;
 mod config;
 mod db;
 #[allow(unused)]
-mod domain;
+mod domain_obs;
 mod hardering;
 mod http;
 mod import;
@@ -15,6 +15,7 @@ mod state;
 mod util;
 mod input;
 mod ansi;
+mod services;
 
 pub use commands::process_command;
 pub use net::connection::handle_connection;

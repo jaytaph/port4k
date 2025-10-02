@@ -3,13 +3,13 @@ use crate::lua::LuaJob;
 use crate::input::readline::{EditEvent, LineEditor};
 use crate::util::telnet::{TelnetIn, TelnetMachine};
 use crate::{ConnState, Registry, Session, process_command, WorldMode};
-use port4k_core::Username;
 use std::sync::{Arc, RwLock};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::mpsc;
 use crate::commands::CommandResult;
+use crate::db::models::account::Account;
 
 /// Wrapper around OwnedWriteHalf that normalizes bare '\n' to "\r\n"
 pub struct CRLFOwnedWriteHalf<'a> {
@@ -83,7 +83,7 @@ pub async fn handle_connection(
     let mut editor = LineEditor::new("> ");
     let mut telnet = TelnetMachine::new();
 
-    start_session(&mut w, &mut telnet, banner, entry, &editor).await?;
+    start_session(&mut w, &mut telnet, banner, entry, &mut editor, ctx.clone()).await?;
 
     read_loop(&mut reader, &mut w, &mut telnet, &mut editor, ctx.clone()).await?;
 
@@ -96,11 +96,11 @@ async fn start_session(
     telnet: &mut TelnetMachine,
     banner: &str,
     entry: &str,
-    editor: &LineEditor,
+    editor: &mut LineEditor,
+    ctx: Arc<ConnCtx>,
 ) -> anyhow::Result<()> {
     // Telnet option negotiation: character-at-a-time + SGA + (server) echo + NAWS
     telnet.start_negotiation(w).await?;
-
 
     let crlf_w = &mut CRLFOwnedWriteHalf::new(w);
 
@@ -118,7 +118,7 @@ async fn start_session(
         }
     }
 
-    repaint_prompt(w, editor).await?;
+    repaint_prompt(ctx, w, editor).await?;
     Ok(())
 }
 
@@ -132,10 +132,6 @@ async fn read_loop(
     let mut one = [0u8; 1];
 
     loop {
-
-        let prompt = generate_prompt(&ctx, &"{user} [{world}:{room}] @ {wall_time} > ").await;
-        editor.set_prompt(&prompt);
-
         let n = reader.read(&mut one).await?;
         if n == 0 {
             break; // disconnect
@@ -151,7 +147,7 @@ async fn read_loop(
     Ok(())
 }
 
-async fn generate_prompt(ctx: &ConnCtx, prompt: &str) -> String {
+fn generate_prompt(ctx: Arc<ConnCtx>, prompt: &str) -> String {
     let mut vars = HashMap::new();
     vars.insert("world".to_string(), "World".to_string());
     vars.insert("room".to_string(), "Room".to_string());
@@ -172,9 +168,9 @@ async fn generate_prompt(ctx: &ConnCtx, prompt: &str) -> String {
                 vars.insert("world".to_string(), "Normal".to_string());
                 vars.insert("room".to_string(), format!("{}", room_id.clone()));
             }
-            WorldMode::Playtest { bp, room, .. } => {
+            WorldMode::Playtest { bp, .. } => {
                 vars.insert("world".to_string(), format!("Playtest({})", bp));
-                vars.insert("room".to_string(), room.clone());
+                vars.insert("room".to_string(), "dummyroom".to_string());
             }
         }
     }
@@ -209,7 +205,7 @@ async fn handle_data_byte(
     match editor.handle_byte(b) {
         EditEvent::None => {}
         EditEvent::Redraw => {
-            repaint_prompt(w, editor).await?;
+            repaint_prompt(ctx.clone(), w, editor).await?;
         }
         EditEvent::Line(line) => {
             // Move to a fresh line before emitting any output
@@ -219,7 +215,7 @@ async fn handle_data_byte(
 
             // Try login flow first; if handled, we just repaint
             if try_handle_login(raw, reader, w, telnet, ctx.clone()).await? == LoginOutcome::Handled {
-                repaint_prompt(w, editor).await?;
+                repaint_prompt(ctx.clone(), w, editor).await?;
                 return Ok(());
             }
 
@@ -227,7 +223,7 @@ async fn handle_data_byte(
             dispatch_command(raw, w, ctx.clone()).await?;
 
             // Always repaint prompt after server output
-            repaint_prompt(w, editor).await?;
+            repaint_prompt(ctx.clone(), w, editor).await?;
         }
     }
     Ok(())
@@ -287,12 +283,14 @@ async fn try_handle_login(
         return Ok(LoginOutcome::Handled);
     }
 
-    let Some(user) = Username::parse(parts[0]) else {
+    let username = parts[0];
+
+    if Account::validate_username(username).is_err() {
         write_with_newline(w, b"Invalid username.").await?;
         return Ok(LoginOutcome::Handled);
     };
 
-    if !ctx.registry.user_exists(&user).await {
+    if !ctx.registry.user_exists(&username).await {
         write_with_newline(w, b"No such user. Try `register <name> <password>`.").await?;
         return Ok(LoginOutcome::Handled);
     }
@@ -307,24 +305,34 @@ async fn try_handle_login(
     }
 
     let password = pw.trim_matches(['\r', '\n']);
-    if ctx.registry.db.verify_user(&user.0, password).await.unwrap_or(false) {
-        {
-            let mut s = ctx.sess.write().unwrap();
-            s.account = Some(account.clone());
-            s.state = ConnState::LoggedIn;
-        }
-        ctx.registry.set_online(&account, true).await;
-
-        write_with_newline(w, format!("Welcome, {}! Type `look` or `help`.", user).as_bytes()).await?;
-    } else {
+    if !ctx.registry.db.verify_user(&username, password).await.unwrap_or(false) {
         write_with_newline(w, b"Invalid credentials.").await?;
+        return Ok(LoginOutcome::Handled);
     }
 
+
+    // All is ok
+    let Some(account) = ctx.registry.db.account_by_username(&username).await? else {
+        write_with_newline(w, b"Account retrieval error.").await?;
+        return Ok(LoginOutcome::Handled);
+    };
+
+    {
+        let mut s = ctx.sess.write().unwrap();
+        s.account = Some(account.clone());
+        s.state = ConnState::LoggedIn;
+    }
+    ctx.registry.set_online(&account, true).await;
+
+    write_with_newline(w, format!("Welcome, {}! Type `look` or `help`.", account.username).as_bytes()).await?;
     Ok(LoginOutcome::Handled)
 }
 
-async fn repaint_prompt(w: &mut OwnedWriteHalf, editor: &LineEditor) -> std::io::Result<()> {
+async fn repaint_prompt(ctx: Arc<ConnCtx>, w: &mut OwnedWriteHalf, editor: &mut LineEditor) -> std::io::Result<()> {
     let mut w = CRLFOwnedWriteHalf::new(w);
+
+    let prompt = generate_prompt(ctx, &"{user} [{world}:{room}] @ {wall_time} > ");
+    editor.set_prompt(&prompt);
 
     w.write_all(editor.repaint_line().as_bytes()).await?;
     w.flush().await

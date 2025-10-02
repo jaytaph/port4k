@@ -1,6 +1,5 @@
 use crate::config::Config;
 use crate::db::Db;
-use port4k_core::Username;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -38,7 +37,7 @@ impl Registry {
         self.online.read().await.iter().cloned().collect()
     }
 
-    pub async fn user_exists(&self, name: &Username) -> bool {
-        self.db.user_exists(&name.0).await.unwrap_or(false)
+    pub async fn user_exists(&self, name: &str) -> bool {
+        self.db.account_by_username(&name).await.is_ok()
     }
 }

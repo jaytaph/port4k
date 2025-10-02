@@ -5,7 +5,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::db::Db;
 use crate::db::models::account::Account;
-use crate::db::types::RoomId;
+use crate::db::models::blueprint::Blueprint;
 
 pub enum LuaJob {
     /// Called when a player enters a room
@@ -13,9 +13,9 @@ pub enum LuaJob {
     /// Called when a player issues a command in a room
     OnCommand {
         db: Db,
-        bp: String,
-        room: String,
-        account: String,
+        bp: Blueprint,
+        room: Room,
+        account: Account,
         verb: String,
         args: Vec<String>,
         reply: oneshot::Sender<Result<Option<String>>>,
@@ -23,8 +23,8 @@ pub enum LuaJob {
     // Called when a player issues a command in playtest mode (no DB state, just ephemeral)
     OnCommandPlaytest {
         db: Db,
-        bp: BluePrintId,
-        room: RoomId,
+        bp: Blueprint,
+        room: Room,
         account: Account,
         verb: String,
         args: Vec<String>,
@@ -33,8 +33,8 @@ pub enum LuaJob {
     // Called when we enter a room in playtest mode (no DB state, just ephemeral)
     OnEnterPlaytest {
         db: Db,
-        bp: BluePrintId,
-        room_id: RoomId,
+        bp: Blueprint,
+        room: Room,
         account: Account,
         reply: oneshot::Sender<Result<Option<String>>>,
     },
@@ -63,15 +63,7 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
 
                 LuaJob::OnCommand { .. } => {}
 
-                LuaJob::OnCommandPlaytest {
-                    db,
-                    bp,
-                    room,
-                    account,
-                    verb,
-                    args,
-                    reply,
-                } => {
+                LuaJob::OnCommandPlaytest { db, bp, room, account, verb, args, reply } => {
                     let res = (|| -> Result<Option<String>> {
                         // Load live script (async) via runtime handle
                         let src = rt_handle
@@ -208,13 +200,7 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                     let _ = reply.send(res);
                 }
 
-                LuaJob::OnEnterPlaytest {
-                    db,
-                    bp,
-                    room_id,
-                    account,
-                    reply,
-                } => {
+                LuaJob::OnEnterPlaytest { db, bp, room, account, reply, } => {
                     let res = (|| -> Result<Option<String>> {
                         let src = rt_handle
                             .block_on(db.bp_script_get_live(&bp, &room, "on_enter"))?

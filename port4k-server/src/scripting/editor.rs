@@ -11,7 +11,7 @@ pub async fn process_editor_line(line: &str, registry: &Arc<Registry>, sess: &Ar
         let (bp, room, event, src, author) = {
             let mut s = sess.lock().await;
             let ed = s.editor.take().ok_or_else(|| anyhow::anyhow!("no editor"))?;
-            let author = s.name.as_ref().map(|u| u.0.clone()).unwrap_or_else(|| "unknown".into());
+            let author = s.account.as_ref().map(|a| a.username.clone()).unwrap_or_else(|| "unknown".into());
             (ed.bp, ed.room, ed.event, ed.buf, author)
         };
         registry

@@ -33,21 +33,8 @@ impl Theme {
         }
     }
 }
-//
-// /// Basic ANSI bits (portable across most telnet clients)
+
 const RESET: &str = "\x1b[0m";
-// const BOLD: &str = "\x1b[1m";
-// const UNDERLINE: &str = "\x1b[4m";
-// const FG_CYAN: &str = "\x1b[36m";
-// // const FG_YELLOW: &str = "\x1b[33m";
-// const FG_BLUE: &str = "\x1b[34m";
-// const FG_BLUE_BRIGHT: &str = "\x1b[94m";
-// const FG_WHITE_BRIGHT: &str = "\x1b[97m";
-//
-// const FG_TITLE: &str = "\x1b[1;36m";
-// const FG_BORDER_TITLE: &str = "\x1b[1;35m";
-// const FG_OBJECTS: &str = "\x1b[4m\x1b[1;36m";
-// const FG_EXITS: &str = "\x1b[1;34m";
 
 static ANSI_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\x1b\[[0-9;]*m").unwrap());
 static OBJ_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{obj:([a-zA-Z0-9_\-:]+)(?:\|([^}]+))?\}").unwrap());
