@@ -8,8 +8,7 @@ use crate::db::repo::account::AccountRepo;
 use crate::db::repo::db_account::AccountRepository;
 use crate::db::repo::db_room::RoomRepository;
 use crate::db::repo::room::RoomRepo;
-use crate::services::account_service::AccountService;
-use crate::services::auth_service::AuthService;
+use crate::services::{AccountService, AuthService, BlueprintService};
 
 /// We are entering container / DI territory here. We have to be careful that we don't create
 /// circular references.
@@ -22,6 +21,7 @@ pub struct Repos {
 pub struct Services {
     pub auth: Arc<AuthService>,
     pub account: Arc<AccountService>,
+    pub blueprint: Arc<BlueprintService>
 }
 
 pub struct Registry {
@@ -42,6 +42,7 @@ impl Registry {
         let services = Arc::new(Services {
             auth: Arc::new(AuthService::new(repos.account.clone())),
             account: Arc::new(AccountService::new(repos.account.clone())),
+            blueprint: Arc::new(BlueprintService::new(repos.room.clone())),
         });
 
         Self {

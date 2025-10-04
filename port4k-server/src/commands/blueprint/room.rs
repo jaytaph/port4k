@@ -5,23 +5,37 @@ use crate::commands::CommandResult::{Failure, Success};
 use crate::input::parser::Intent;
 use crate::util::args::parse_bp_room_key;
 
+const USAGE: &str = "Usage:
+  @bp room add <bp>:<room> \"Title\" \"Body\"
+  @bp room lock <bp>:<room>
+  @bp room unlock <bp>:<room>\n";
+
 pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
-    if intent.args.len() < 4 {
-        return Ok(Failure(super::USAGE.into()));
+    if intent.args.len() < 2 {
+        return Ok(Failure(USAGE.into()));
     }
 
-    let sub_cmd = intent.args[1].as_str();
-    let sub_args = intent.args[2..].to_vec();
+    let sub_cmd = &intent.args[1];
+    let sub_args = &intent.args[2..];
 
-    match sub_cmd {
+    match sub_cmd.as_str() {
         // @bp room add <bp>:<room> "Title" "Body"
-        "add" if sub_args.len() >= 3 => {
+        "add" => {
+            if sub_args.len() < 3 {
+                return Ok(Failure(USAGE.into()));
+            }
+
             let (bp, room) = parse_bp_room_key(&sub_args[0])
                 .ok_or_else(|| anyhow::anyhow!("room key must be <bp>:<room>"))?;
+
             let title = &sub_args[1];
             let body  = &sub_args[2];
 
-            if ctx.registry.db.bp_room_add(&bp, &room, title, body).await? {
+            if title.is_empty() || body.is_empty() {
+                return Ok(Failure("[bp] title and body cannot be empty.\n".into()));
+            }
+
+            if ctx.state.registry.services.blueprint.new_room(&bp, &room, title, body).await? {
                 Ok(Success(format!("[bp] room {}:{} added.\n", bp, room)))
             } else {
                 Ok(Failure("[bp] room already exists.\n".into()))
@@ -29,10 +43,15 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
         }
 
         // @bp room lock <bp>:<room>
-        "lock" if sub_args.len() >= 2 => {
+        "lock" => {
+            if sub_args.len() < 1 {
+                return Ok(Failure(USAGE.into()));
+            }
+
             let (bp, room) = parse_bp_room_key(&sub_args[0])
                 .ok_or_else(|| anyhow::anyhow!("use <bp>:<room>"))?;
-            if ctx.registry.db.bp_room_set_locked(&bp, &room, true).await? {
+
+            if ctx.state.registry.services.blueprint.set_locked(&bp, &room, true).await? {
                 Ok(Success(format!("[bp] room {}:{} set to LOCKED.\n", bp, room)))
             } else {
                 Ok(Failure("[bp] blueprint/room not found.\n".into()))
@@ -40,10 +59,15 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
         }
 
         // @bp room unlock <bp>:<room>
-        "unlock" if sub_args.len() >= 2 => {
+        "unlock" => {
+            if sub_args.len() < 1 {
+                return Ok(Failure(USAGE.into()));
+            }
+
             let (bp, room) = parse_bp_room_key(&sub_args[0])
                 .ok_or_else(|| anyhow::anyhow!("use <bp>:<room>"))?;
-            if ctx.registry.db.bp_room_set_locked(&bp, &room, false).await? {
+
+            if ctx.state.registry.services.blueprint.set_locked(&bp, &room, false).await? {
                 Ok(Success(format!("[bp] room {}:{} set to UNLOCKED.\n", bp, room)))
             } else {
                 Ok(Failure("[bp] blueprint/room not found.\n".into()))

@@ -9,11 +9,11 @@ pub mod telnet;
 #[derive(Clone)]
 pub struct AppState {
     /// Global registry with all services and repositories
-    registry: Arc<Registry>,
+    pub registry: Arc<Registry>,
     /// Channel to send jobs to the Lua thread
-    lua_tx: mpsc::Sender<LuaJob>,
+    pub lua_tx: mpsc::Sender<LuaJob>,
     /// Banner to show on connection
-    banner: &'static str,
+    pub banner: &'static str,
     /// Entry text to show on connection
-    entry: &'static str,
+    pub entry: &'static str,
 }

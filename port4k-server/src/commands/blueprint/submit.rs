@@ -10,14 +10,10 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
     if intent.args.is_empty() {
         return Ok(Failure(super::USAGE.into()));
     }
+
     let bp = &intent.args[0];
 
-    let client = ctx.registry.db.pool.get().await?;
-    let n = client
-        .execute("UPDATE blueprints SET status='submitted' WHERE key=$1", &[bp])
-        .await?;
-
-    if n == 1 {
+    if ctx.state.registry.services.blueprint.submit(bp).await? {
         Ok(Success("[bp] submitted for review.\n".into()))
     } else {
         Ok(Failure("[bp] not found.\n".into()))

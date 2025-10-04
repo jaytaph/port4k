@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use crate::input::readline::{EditEvent, LineEditor};
 use crate::util::telnet::{TelnetIn, TelnetMachine};
-use crate::{ConnState, process_command, WorldMode, Session};
+use crate::{ConnState, process_command, Session};
 use std::sync::{Arc, RwLock};
 use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
@@ -18,16 +18,15 @@ pub async fn handle_connection(
 ) -> anyhow::Result<()> {
     // Split stream into read/write halves and wrap write half to ensure CRLF outputs.
     let (r, mut w) = stream.into_split();
-    let crlf_w = &mut CrlfWriter::new(&mut w);
+    let mut crlf_w = &mut CrlfWriter::new(&mut w);
 
     let mut reader = BufReader::new(r);
-
     let mut editor = LineEditor::new("> ");
     let mut telnet = TelnetMachine::new();
 
-    start_session(&mut crlf_w, &mut telnet, &mut editor, state.clone()).await?;
-    read_loop(&mut reader, &mut crlf_w, &mut telnet, &mut editor, state.clone()).await?;
-    cleanup(state.clone()).await;
+    start_session(&mut crlf_w, &mut telnet, &mut editor, state.clone(), sess.clone()).await?;
+    read_loop(&mut reader, &mut crlf_w, &mut telnet, &mut editor, state.clone(), sess.clone()).await?;
+    cleanup(sess.clone(), state.clone()).await;
 
     Ok(())
 }
@@ -37,6 +36,7 @@ async fn start_session<W: AsyncWrite + Unpin>(
     telnet: &mut TelnetMachine,
     editor: &mut LineEditor,
     state: Arc<AppState>,
+    sess: Arc<RwLock<Session>>,
 ) -> anyhow::Result<()> {
     // Telnet option negotiation: character-at-a-time + SGA + (server) echo + NAWS
     telnet.start_negotiation(w).await?;
@@ -55,7 +55,7 @@ async fn start_session<W: AsyncWrite + Unpin>(
         }
     }
 
-    repaint_prompt(state.clone(), w, editor).await?;
+    repaint_prompt(sess.clone(), w, editor).await?;
     Ok(())
 }
 
@@ -77,7 +77,7 @@ async fn read_loop<W: AsyncWrite + Unpin>(
 
         if let Some(evt) = telnet.push(one[0], w).await? {
             match evt {
-                TelnetIn::Data(b) => handle_data_byte(b, reader, w, telnet, editor, state.clone()).await?,
+                TelnetIn::Data(b) => handle_data_byte(b, reader, w, telnet, editor, sess.clone(), state.clone()).await?,
                 TelnetIn::Naws { cols, rows } => handle_naws(cols, rows, sess.clone()).await,
             }
         }
@@ -90,27 +90,19 @@ fn generate_prompt(sess: Arc<RwLock<Session>>, prompt: &str) -> String {
     vars.insert("world".to_string(), "World".to_string());
     vars.insert("room".to_string(), "Room".to_string());
     vars.insert("wall_time".to_string(), chrono::Local::now().format("%H:%M:%S").to_string());
-    vars.insert("online_time".to_string(), chrono::Local::now().format("%H:%M:%S").to_string());
+    vars.insert("online_time".to_string(), format!("{}", sess.read().unwrap().session_started.elapsed().as_secs()));
     vars.insert("online_users".to_string(), format!("{}", 123));
 
-    if let Some(account) = sess.read().unwrap().account.clone() {
-        vars.insert("name".to_string(), account.username);
-        vars.insert("role".to_string(), account.role);
+    if let Some(account) = sess.read().unwrap().account.as_ref() {
+        vars.insert("name".to_string(), account.username.to_string());
+        vars.insert("role".to_string(), account.role.to_string());
         vars.insert("xp".to_string(), format!("{}", account.xp));
         vars.insert("health".to_string(), format!("{}", account.health));
         vars.insert("coins".to_string(), format!("{}", account.coins));
     }
-    if let Some(world) = sess.read().unwrap().world.as_ref() {
-        match world {
-            WorldMode::Live { room_id } => {
-                vars.insert("world".to_string(), "Normal".to_string());
-                vars.insert("room".to_string(), format!("{}", room_id.clone()));
-            }
-            WorldMode::Playtest { bp, .. } => {
-                vars.insert("world".to_string(), format!("Playtest({})", bp));
-                vars.insert("room".to_string(), "dummyroom".to_string());
-            }
-        }
+    if let Some(cursor) = sess.read().unwrap().cursor.as_ref() {
+        vars.insert("zone".to_string(), cursor.zone.title.to_string());
+        vars.insert("room".to_string(), cursor.room.room.title.to_string());
     }
 
     let mut out = prompt.to_string();
@@ -128,7 +120,7 @@ async fn cleanup(sess: Arc<RwLock<Session>>, state: Arc<AppState>) {
     };
 
     if let Some(a) = account_opt {
-        state.registry.services.set_online(&a, false).await;
+        state.registry.set_online(&a, false).await;
     }
 }
 
@@ -138,7 +130,8 @@ async fn handle_data_byte<W: AsyncWrite + Unpin>(
     w: &mut W,
     telnet: &mut TelnetMachine,
     editor: &mut LineEditor,
-    sess: Arc<RwLock<Session>>.
+    sess: Arc<RwLock<Session>>,
+    state: Arc<AppState>,
 ) -> anyhow::Result<()> {
     match editor.handle_byte(b) {
         EditEvent::None => {}
@@ -152,16 +145,16 @@ async fn handle_data_byte<W: AsyncWrite + Unpin>(
             tracing::debug!(%raw, "received line");
 
             // Try login flow first; if handled, we just repaint
-            if try_handle_login(raw, reader, w, telnet, sess.clone()).await? == LoginOutcome::Handled {
+            if try_handle_login(raw, reader, w, telnet, state.clone(), sess.clone()).await? == LoginOutcome::Handled {
                 repaint_prompt(sess.clone(), w, editor).await?;
                 return Ok(());
             }
 
             // Otherwise, dispatch as a normal command
-            dispatch_command(raw, w, ctx.clone()).await?;
+            dispatch_command(raw, w, state.clone(), sess.clone()).await?;
 
             // Always repaint prompt after server output
-            repaint_prompt(ctx.clone(), w, editor).await?;
+            repaint_prompt(sess.clone(), w, editor).await?;
         }
     }
     Ok(())
@@ -235,7 +228,7 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
 
     w.write_all(b"Password: ").await?;
     w.flush().await?;
-    let pw = read_secret_line(reader, w, telnet, sess.clone()).await?;
+    let pw = read_secret_line(reader, w, telnet).await?;
 
     if pw.is_empty() {
         // Keep the old behavior: end the connection when empty password
@@ -290,7 +283,6 @@ async fn read_secret_line<W: AsyncWrite + Unpin>(
     reader: &mut BufReader<OwnedReadHalf>,
     w: &mut W,
     telnet: &mut TelnetMachine,
-    _ctx: Arc<ConnCtx>,
 ) -> std::io::Result<String> {
     let mut out = Vec::<u8>::new();
     let mut one = [0u8; 1];

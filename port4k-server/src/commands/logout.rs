@@ -13,7 +13,7 @@ pub async fn logout(ctx: Arc<CmdCtx>, _intent: Intent) -> Result<CommandResult> 
 
     s.state = ConnState::PreLogin;
     s.account = None;
-    s.world = None;
+    s.cursor = None;
 
     Ok(Success("You have been logged out.\n".into()))
 }

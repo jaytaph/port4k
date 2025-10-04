@@ -34,7 +34,7 @@ pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult>
         // ----- Scope 2: Now we can await safely
         match next {
             Next::ExitToLive(room_id) => {
-                let view = ctx.registry.db.room_view(room_id).await?;
+                let view = ctx.state.registry.db.room_view(room_id).await?;
                 Ok(Success(format!("[playtest] exited.\n{view}")))
             }
             Next::NotInPlaytest => Ok(Failure("[playtest] you are not in playtest.\n".into())),
@@ -43,7 +43,7 @@ pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult>
         // We need entry; fetch it BEFORE locking the session.
         let bp = intent.args[1].as_str();
         let entry = ctx
-            .registry
+            .state.registry
             .db
             .bp_entry(bp)
             .await?
@@ -74,7 +74,7 @@ pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult>
 
         // ----- Scope 2: Now it’s safe to await
         let view = ctx
-            .registry
+            .state.registry
             .db
             .bp_room_view(bp, &entry, 80)
             .await?

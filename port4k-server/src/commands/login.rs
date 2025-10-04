@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use crate::state::session::{ConnState, WorldMode};
+use crate::state::session::ConnState;
 use anyhow::Result;
 use crate::commands::CommandResult::{Failure, Success};
 use crate::db::models::account::Account;
@@ -16,23 +16,24 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
         return Ok(Failure("Invalid username.\n".into()));
     }
 
-    if !ctx.registry.services.auth.authenticate(&username, pass).await? {
+    if !ctx.state.registry.services.auth.authenticate(&username, pass).await? {
         return Ok(Failure("Invalid credentials.\n".into()))
     }
 
-    let Some(account) = ctx.registry.repos.account.get_by_username(&username).await? else {
+    let Some(account) = ctx.state.registry.repos.account.get_by_username(&username).await? else {
         return Ok(Failure("Account not found.\n".into()));
     };
 
-    let (_char_id, loc) = ctx.registry.db.get_or_create_character(account.id, &username).await?;
+    let (_char_id, loc) = ctx.state.registry.db.get_or_create_character(account.id, &username).await?;
     {
         let mut s = ctx.sess.write().unwrap();
         s.account = Some(account.clone());
         s.state = ConnState::LoggedIn;
-        s.world = Some(WorldMode::Live { room_id: loc });
+        s.cursor = None;
+        // s.world = Some(WorldMode::Live { room_id: loc });
     }
-    ctx.registry.set_online(&account, true).await;
-    let view = ctx.registry.db.room_view(loc).await?;
+    ctx.state.registry.set_online(&account, true).await;
+    let view = ctx.state.registry.db.room_view(loc).await?;
 
     Ok(Success(format!("Welcome, {}!\n{}", account.username, view)))
 }

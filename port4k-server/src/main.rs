@@ -7,7 +7,6 @@ mod import;
 mod lua;
 mod net;
 mod rendering;
-mod scripting;
 mod state;
 mod util;
 mod input;
@@ -17,7 +16,7 @@ mod services;
 pub use commands::process_command;
 pub use state::{
     registry::Registry,
-    session::{ConnState, Editor, Session, WorldMode},
+    session::{ConnState, Session},
 };
 
 use crate::banner::{BANNER, ENTRY};

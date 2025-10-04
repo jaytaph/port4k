@@ -231,4 +231,94 @@ impl RoomRepo for RoomRepository {
             zone_state,
         })
     }
+
+
+    async fn set_entry(&self, bp_key: &str, room_key: &str) -> Result<bool> {
+        let c = self.db.get_client().await?;
+
+        let n = c.execute(
+        "UPDATE blueprints SET entry_room_key = $2 WHERE key = $1",
+            &[&bp_key, &room_key],
+        ).await?;
+
+        Ok(n == 1)
+    }
+
+    async fn add_exit(&self, bp_key: &str, from_key: &str, dir: &str, to_key: &str) -> Result<bool> {
+        let c = self.db.get_client().await?;
+
+        let n = c.execute(
+            r#"
+            INSERT INTO bp_exits (from_room_id, dir, to_room_id, locked, description, visible_when_locked)
+            SELECT fr.id, $3, tr.id, false, '', false
+            FROM bp_rooms fr
+            JOIN bp_rooms tr ON tr.bp_id = fr.bp_id AND tr.key = $4
+            JOIN blueprints bp ON bp.id = fr.bp_id
+            WHERE bp.key = $1 AND fr.key = $2
+            ON CONFLICT (from_room_id, dir) DO UPDATE SET to_room_id = EXCLUDED.to_room_id
+            "#,
+            &[&bp_key, &from_key, &dir, &to_key],
+        ).await?;
+
+        Ok(n == 1)
+    }
+    async fn set_locked(&self, bp_key: &str, room_key: &str, locked: bool) -> Result<bool> {
+        let c = self.db.get_client().await?;
+
+        let n = c.execute(
+            r#"
+            UPDATE bp_rooms
+            SET lockdown = $3
+            FROM blueprints bp
+            WHERE bp.id = bp_rooms.bp_id AND bp.key = $1 AND bp_rooms.key = $2
+            "#,
+            &[&bp_key, &room_key, &locked],
+        ).await?;
+
+        Ok(n == 1)
+    }
+    async fn insert_blueprint(&self, bp_key: &str, title: &str, owner: &str) -> Result<bool> {
+        let c = self.db.get_client().await?;
+
+        let n = c.execute(
+            r#"
+            INSERT INTO blueprints (key, title, owner, status)
+            VALUES ($1, $2, $3, 'draft')
+            ON CONFLICT (key) DO NOTHING
+            "#,
+            &[&bp_key, &title, &owner],
+        ).await?;
+
+        Ok(n == 1)
+    }
+    async fn insert_room(&self, bp_key: &str, room_key: &str, title: &str, body: &str) -> Result<bool> {
+        let c = self.db.get_client().await?;
+
+        let n = c.execute(
+            r#"
+            INSERT INTO bp_rooms (bp_id, key, title, body, lockdown, short, hints, scripts)
+            SELECT id, $2, $3, $4, false, '', '', '{}'
+            FROM blueprints
+            WHERE key = $1
+            ON CONFLICT (bp_id, key) DO NOTHING
+            "#,
+            &[&bp_key, &room_key, &title, &body],
+        ).await?;
+
+        Ok(n == 1)
+    }
+    async fn submit(&self, bp_key: &str) -> Result<bool> {
+        let c = self.db.get_client().await?;
+
+        let n = c.execute(
+            r#"
+            UPDATE blueprints
+            SET status = 'pending'
+            WHERE key = $1 AND status = 'draft'
+            "#,
+            &[&bp_key],
+        ).await?;
+
+        Ok(n == 1)
+    }
 }

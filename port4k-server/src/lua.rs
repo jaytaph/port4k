@@ -3,24 +3,27 @@ use anyhow::{Context, Result};
 use mlua::{Function, Lua, Table, Value};
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot};
-
+use crate::commands::CommandResult;
 use crate::db::Db;
 use crate::db::models::account::Account;
 use crate::db::models::blueprint::Blueprint;
 use crate::db::models::room::RoomView;
+use crate::db::models::zone::ZoneKind;
+use crate::db::types::{AccountId, BlueprintId, RoomId, ZoneId};
+use crate::input::parser::Intent;
 
 pub enum LuaJob {
     /// Called when a player enters a room
     OnEnter { reply: oneshot::Sender<Result<()>> },
     /// Called when a player issues a command in a room
     OnCommand {
-        db: Arc<Db>,
-        bp: Blueprint,
-        room: RoomView,
-        account: Account,
-        verb: String,
-        args: Vec<String>,
-        reply: oneshot::Sender<Result<Option<String>>>,
+        zone_id: ZoneId,
+        zone_kind: ZoneKind,
+        bp_id: BlueprintId,
+        room_id: RoomId,
+        account_id: AccountId,
+        intent: Intent,
+        reply: oneshot::Sender<CommandResult>,
     },
     // Called when a player issues a command in playtest mode (no DB state, just ephemeral)
     OnCommandPlaytest {

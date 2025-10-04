@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use crate::state::session::WorldMode;
 use anyhow::Result;
 use crate::commands::CommandResult::{Failure, Success};
 
@@ -31,7 +30,7 @@ pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
         }
     };
 
-    let got = ctx.registry.db.pickup_coins(&account, loc, want).await?;
+    let got = ctx.state.registry.db.pickup_coins(&account, loc, want).await?;
     if got == 0 {
         Ok(Failure("There are no coins to pick up.\n".into()))
     } else {

@@ -14,7 +14,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
     let title = &intent.args[3];
     let owner = current_owner(ctx.clone())?;
 
-    if ctx.registry.db.bp_new(bp, title, &owner).await? {
+    if ctx.state.registry.services.blueprint.new_blueprint(bp, title, &owner).await? {
         Ok(Success(format!("[bp] created `{}`: {}\n", bp, title)))
     } else {
         Ok(Failure("[bp] already exists.\n".into()))
