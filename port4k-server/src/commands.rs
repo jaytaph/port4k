@@ -1,12 +1,10 @@
-use crate::lua::LuaJob;
 use crate::input::parser::{Verb, parse_command};
-use crate::state::registry::Registry;
 use crate::state::session::Session;
 use anyhow::Result;
 use std::sync::{Arc, RwLock};
-use tokio::sync::mpsc;
 use crate::ansi;
 use crate::commands::CommandResult::{Failure, Success};
+use crate::net::AppState;
 
 mod balance;
 mod fallback;
@@ -25,9 +23,8 @@ mod admin;
 
 /// Command context passed to command handlers
 pub struct CmdCtx {
-    pub registry: Arc<Registry>,
+    pub state: Arc<AppState>,
     pub sess: Arc<RwLock<Session>>,
-    pub lua_tx: mpsc::Sender<LuaJob>,
 }
 
 pub enum CommandResult {
@@ -37,13 +34,15 @@ pub enum CommandResult {
 
 pub async fn process_command(
     raw: &str,
-    registry: Arc<Registry>,
+    state: Arc<AppState>,
     sess: Arc<RwLock<Session>>,
-    lua_tx: mpsc::Sender<LuaJob>,
 ) -> Result<CommandResult> {
     let intent = parse_command(raw);
 
-    let ctx = Arc::new(CmdCtx { registry, sess, lua_tx });
+    let ctx = Arc::new(CmdCtx {
+        state: state.clone(),
+        sess: sess.clone()
+    });
 
     match intent.verb {
         Verb::Close => Ok(Success("Goodbye!\n".to_string())),

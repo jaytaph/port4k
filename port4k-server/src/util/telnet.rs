@@ -1,5 +1,4 @@
-use tokio::io::AsyncWriteExt;
-use tokio::net::tcp::OwnedWriteHalf;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 const IAC: u8 = 255; // Interpret As Command
 const WILL: u8 = 251; // I will do option
@@ -48,7 +47,7 @@ impl TelnetMachine {
     }
 
     /// Send a sane baseline: character mode, we echo (so client stops local echo), and ask for NAWS.
-    pub async fn start_negotiation(&mut self, w: &mut OwnedWriteHalf) -> std::io::Result<()> {
+    pub async fn start_negotiation<W: AsyncWrite + Unpin>(&mut self, w: &mut W) -> std::io::Result<()> {
         // Character-at-a-time: disable LINEMODE; enable SGA both directions.
         send_dont(w, LINEMODE).await?;
         send_do(w, SGA).await?;
@@ -67,7 +66,7 @@ impl TelnetMachine {
     }
 
     /// Feed one byte; respond to negotiations and produce `TelnetIn::Data` for your editor.
-    pub async fn push(&mut self, b: u8, w: &mut OwnedWriteHalf) -> std::io::Result<Option<TelnetIn>> {
+    pub async fn push<W: AsyncWrite + Unpin>(&mut self, b: u8, w: &mut W) -> std::io::Result<Option<TelnetIn>> {
         if !self.in_iac {
             if b == IAC {
                 self.in_iac = true;
@@ -178,19 +177,19 @@ impl TelnetMachine {
     }
 }
 
-async fn send3(w: &mut OwnedWriteHalf, a: u8, b: u8, c: u8) -> std::io::Result<()> {
+async fn send3<W: AsyncWrite + Unpin>(w: &mut W, a: u8, b: u8, c: u8) -> std::io::Result<()> {
     w.write_all(&[a, b, c]).await
 }
 
-async fn send_do(w: &mut OwnedWriteHalf, opt: u8) -> std::io::Result<()> {
+async fn send_do<W: AsyncWrite + Unpin>(w: &mut W, opt: u8) -> std::io::Result<()> {
     send3(w, IAC, DO, opt).await
 }
-async fn send_dont(w: &mut OwnedWriteHalf, opt: u8) -> std::io::Result<()> {
+async fn send_dont<W: AsyncWrite + Unpin>(w: &mut W, opt: u8) -> std::io::Result<()> {
     send3(w, IAC, DONT, opt).await
 }
-async fn send_will(w: &mut OwnedWriteHalf, opt: u8) -> std::io::Result<()> {
+async fn send_will<W: AsyncWrite + Unpin>(w: &mut W, opt: u8) -> std::io::Result<()> {
     send3(w, IAC, WILL, opt).await
 }
-async fn send_wont(w: &mut OwnedWriteHalf, opt: u8) -> std::io::Result<()> {
+async fn send_wont<W: AsyncWrite + Unpin>(w: &mut W, opt: u8) -> std::io::Result<()> {
     send3(w, IAC, WONT, opt).await
 }

@@ -35,8 +35,17 @@ pub enum WorldMode {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Protocol {
+    Telnet,
+    WebSocket,
+    // SSH (not implemented yet)
+}
+
 #[derive(Debug)]
 pub struct Session {
+    /// Protocol used by the client
+    pub protocol: Protocol,
     /// User Account (if logged in)
     pub account: Option<Account>,
     /// Current connection state
@@ -45,15 +54,22 @@ pub struct Session {
     pub world: Option<WorldMode>,
     /// Current editor state, if any
     pub editor: Option<Editor>,
+
+    // Terminal size (if known)
+    pub tty_cols: Option<usize>,
+    pub tty_rows: Option<usize>,
 }
 
-impl Default for Session {
-    fn default() -> Self {
+impl Session {
+    pub fn new(protocol: Protocol) -> Self {
         Self {
+            protocol,
             account: None,
             state: ConnState::PreLogin,
             world: None,
             editor: None,
+            tty_cols: None,
+            tty_rows: None,
         }
     }
 }

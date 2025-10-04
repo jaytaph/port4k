@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use anyhow::{Context, Result};
 use mlua::{Function, Lua, Table, Value};
 use tokio::runtime::Handle;
@@ -6,14 +7,14 @@ use tokio::sync::{mpsc, oneshot};
 use crate::db::Db;
 use crate::db::models::account::Account;
 use crate::db::models::blueprint::Blueprint;
-use crate::db::models::room::{BlueprintRoom, RoomView};
+use crate::db::models::room::RoomView;
 
 pub enum LuaJob {
     /// Called when a player enters a room
     OnEnter { reply: oneshot::Sender<Result<()>> },
     /// Called when a player issues a command in a room
     OnCommand {
-        db: Db,
+        db: Arc<Db>,
         bp: Blueprint,
         room: RoomView,
         account: Account,
@@ -23,7 +24,7 @@ pub enum LuaJob {
     },
     // Called when a player issues a command in playtest mode (no DB state, just ephemeral)
     OnCommandPlaytest {
-        db: Db,
+        db: Arc<Db>,
         bp: Blueprint,
         room: RoomView,
         account: Account,
@@ -33,7 +34,7 @@ pub enum LuaJob {
     },
     // Called when we enter a room in playtest mode (no DB state, just ephemeral)
     OnEnterPlaytest {
-        db: Db,
+        db: Arc<Db>,
         bp: Blueprint,
         room: RoomView,
         account: Account,

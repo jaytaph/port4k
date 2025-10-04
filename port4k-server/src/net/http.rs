@@ -12,8 +12,10 @@ use crate::lua::LuaJob;
 use crate::{Registry, Session, process_command};
 use tokio::sync::mpsc;
 use crate::commands::CommandResult;
+use crate::net::AppState;
+use crate::state::session::Protocol;
 
-/// Serve the HTTP server with WebSocket endpoint
+/// Run the HTTP server with WebSocket endpoint
 pub async fn serve(
     addr: std::net::SocketAddr,
     registry: Arc<Registry>,
@@ -36,14 +38,6 @@ pub async fn serve(
     Ok(())
 }
 
-#[derive(Clone)]
-struct AppState {
-    registry: Arc<Registry>,
-    lua_tx: mpsc::Sender<LuaJob>,
-    banner: &'static str,
-    entry: &'static str,
-}
-
 async fn ws_upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| ws_handler(socket, state))
 }
@@ -53,7 +47,8 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
         .send(Message::Text(format!("{}{}> ", state.banner, state.entry)))
         .await;
 
-    let sess = Arc::new(RwLock::new(Session::default()));
+    let state = Arc::new(state);
+    let sess = Arc::new(RwLock::new(Session::new(Protocol::WebSocket)));
 
     while let Some(Ok(msg)) = socket.recv().await {
         let text = match msg {
@@ -68,7 +63,7 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
         };
 
         let cmd = text.trim();
-        match process_command(cmd, state.registry.clone(), sess.clone(), state.lua_tx.clone()).await {
+        match process_command(cmd, state.clone(), sess.clone()).await {
             Ok(CommandResult::Success(msg)) => {
                 let resp = if msg.is_empty() {
                     String::new()
@@ -113,5 +108,6 @@ fn ensure_nl(mut s: String) -> String {
     if !s.ends_with("\n") {
         s.push('\n');
     }
+
     s
 }

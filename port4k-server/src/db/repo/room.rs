@@ -1,10 +1,6 @@
 use anyhow::Result;
-use uuid::Uuid;
-use std::collections::HashMap;
-use deadpool_postgres::Pool;
-use crate::db::models::account::Account;
 use crate::db::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts, RoomView, ZoneRoomState};
-use crate::db::types::{AccountId, BlueprintId, Direction, RoomId, ScriptSource, ZoneId};
+use crate::db::types::{RoomId, ScriptSource, ZoneId};
 
 #[async_trait::async_trait]
 pub trait RoomRepo: Send + Sync {

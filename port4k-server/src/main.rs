@@ -3,7 +3,6 @@ mod commands;
 mod config;
 mod db;
 mod hardening;
-mod http;
 mod import;
 mod lua;
 mod net;
@@ -16,7 +15,6 @@ mod ansi;
 mod services;
 
 pub use commands::process_command;
-pub use net::connection::handle_connection;
 pub use state::{
     registry::Registry,
     session::{ConnState, Editor, Session, WorldMode},
@@ -26,8 +24,9 @@ use crate::banner::{BANNER, ENTRY};
 use crate::lua::start_lua_worker;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::net::TcpListener;
 use tokio::runtime::Handle;
+use crate::net::telnet;
+use crate::net::http;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -44,59 +43,48 @@ async fn main() -> anyhow::Result<()> {
     // Start background tasks (spawning loot etc.)
     spawn_background_tasks(registry.clone());
 
-    let tcp_addr: SocketAddr = cfg.tcp_addr.parse()?;
-    let listener = TcpListener::bind(tcp_addr).await?;
-    tracing::info!(%tcp_addr, "Port4k server listening");
-
-
     // Start Lua worker thread
     let lua_tx = start_lua_worker(Handle::current());
 
+
     // Start HTTP server for WebSocket connections
-    let websocket_addr: SocketAddr = cfg.websocket_addr.parse()?;
-    let http_registry = registry.clone();
-    let lua_tx_for_http = lua_tx.clone();
-    let http_jh = tokio::spawn(async move {
-        tracing::info!(%websocket_addr, "Port4k server WS listening");
+    let ws_addr: SocketAddr = cfg.websocket_addr.parse()?;
+    let ws_registry = registry.clone();
+    let ws_lua_tx = lua_tx.clone();
+    let ws_jh = tokio::spawn(async move {
+        tracing::info!(%ws_addr, "Port4k server WS (http) listening");
 
         if let Err(e) = http::serve(
-            SocketAddr::from(websocket_addr),
-            http_registry,
+            SocketAddr::from(ws_addr),
+            ws_registry,
             BANNER,
             ENTRY,
-            lua_tx_for_http,
-        )
-        .await
-        {
+            ws_lua_tx,
+        ).await {
             eprintln!("HTTP server error: {e}");
         }
     });
 
-    let telnet_registry = registry.clone();
-    let telnet_jh = tokio::spawn(async move {
-        loop {
-            match listener.accept().await {
-                Ok((stream, peer)) => {
-                    tracing::info!(%peer, "client connected");
-                    let registry = telnet_registry.clone();
-                    let lua_tx_clone = lua_tx.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = handle_connection(stream, registry.clone(), BANNER, ENTRY, lua_tx_clone.clone()).await {
-                            tracing::error!(%peer, error=%e, "connection error");
-                        }
-                        tracing::info!(%peer, "client disconnected");
-                    });
-                }
-                Err(e) => {
-                    tracing::error!(error=%e, "failed to accept connection");
-                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                }
-            }
+    // Start TCP server for Telnet connections
+    let tcp_addr: SocketAddr = cfg.tcp_addr.parse()?;
+    let tcp_registry = registry.clone();
+    let tcp_lua_tx = lua_tx.clone();
+    let tcp_jh = tokio::spawn(async move {
+        tracing::info!(%tcp_addr, "Port4k server TCP (telnet) listening");
+
+        if let Err(e) = telnet::serve(
+            SocketAddr::from(tcp_addr),
+            tcp_registry.clone(),
+            BANNER,
+            ENTRY,
+            tcp_lua_tx,
+        ).await {
+            eprintln!("Telnet server error: {e}");
         }
     });
 
     // Wait for both servers to finish (they won't, unless there's an error)
-    match tokio::try_join!(http_jh, telnet_jh) {
+    match tokio::try_join!(ws_jh, tcp_jh) {
         Ok(_) => {}
         Err(e) => {
             tracing::error!(error=%e, "server task failed successfully");

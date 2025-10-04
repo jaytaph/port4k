@@ -1,11 +1,9 @@
 use std::collections::HashMap;
-use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use tokio_postgres::Row;
 use uuid::Uuid;
 use crate::db::json_string_vec;
-use crate::db::models::account::Account;
-use crate::db::types::{AccountId, BlueprintId, Direction, RoomId, ZoneId};
+use crate::db::types::{BlueprintId, Direction, RoomId, ZoneId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlueprintRoom {
