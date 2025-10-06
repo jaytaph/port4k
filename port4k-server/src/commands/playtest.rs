@@ -1,85 +1,89 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandResult};
-use crate::state::session::{ConnState, WorldMode};
+use crate::state::session::{ConnState, Cursor};
 use anyhow::Result;
-use crate::commands::blueprint::USAGE;
 use crate::commands::CommandResult::{Failure, Success};
-use crate::db::types::RoomId;
 use crate::input::parser::Intent;
 
+const USAGE: &str = "Usage:\n  playtest                # exit playtest\n  playtest <bp>           # enter playtest for blueprint <bp>\n";
+
+enum Next {
+    /// Contains the cursor to return to live mode
+    ExitToLive(Cursor),
+    /// Not currently in playtest mode
+    NotInPlaytest,
+    /// Not logged in
+    NotLoggedIn,
+    /// Some internal error
+    Error
+}
+
+
 pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
-    if intent.args.len() < 4 {
-        return Ok(Failure(USAGE.into()));
+    if intent.args.len() == 1 {
+        // No argument, so exit playtest
+        return exit_playtest(ctx.clone()).await;
     }
 
-    let sub_args = intent.args[1..].to_vec();
+    if intent.args.len() == 2 {
+        // One argument, so enter playtest for the given blueprint
+        return enter_playtest(ctx.clone(), intent.args[0].as_str()).await;
+    }
 
-    if sub_args.is_empty() {
-        // ----- Scope 1: Touch session, compute next action, DROP the guard
-        enum Next { ExitToLive(RoomId), NotInPlaytest }
-        let next = {
-            let mut s = ctx.sess.write().unwrap();        // <— guard starts
-            match &mut s.world {
-                Some(WorldMode::Playtest { prev_room_id, .. }) => {
-                    let room_id = prev_room_id
-                        .take()
-                        .ok_or_else(|| anyhow::anyhow!("no previous location"))?;
-                    s.world = Some(WorldMode::Live { room_id });
-                    Next::ExitToLive(room_id)
-                }
-                _ => Next::NotInPlaytest,
-            }
-        }; // <— guard dropped here
+    Ok(Failure(USAGE.into()))
+}
 
-        // ----- Scope 2: Now we can await safely
-        match next {
-            Next::ExitToLive(room_id) => {
-                let view = ctx.state.registry.db.room_view(room_id).await?;
-                Ok(Success(format!("[playtest] exited.\n{view}")))
-            }
-            Next::NotInPlaytest => Ok(Failure("[playtest] you are not in playtest.\n".into())),
+pub fn check_playtest(ctx: Arc<CmdCtx>) -> Next {
+    let Some(mut s) = ctx.sess.read().map_err(|_| anyhow::anyhow!("Could not acquire write lock")) else {
+        return Next::Error;
+    };
+
+    if s.state != ConnState::LoggedIn {
+        return Next::NotLoggedIn;
+    }
+
+    if s.prev_cursors.is_empty() {
+        return Next::NotInPlaytest;
+    }
+
+    let c = s.prev_cursors.first().unwrap().clone();
+    Next::ExitToLive(c)
+}
+
+pub async fn exit_playtest(ctx: Arc<CmdCtx>) -> Result<CommandResult> {
+    match check_playtest(ctx.clone()) {
+        Next::Error => Ok(Failure("Internal error.\n".into())),
+        Next::NotLoggedIn => Ok(Failure("Login required.\n".into())),
+        Next::NotInPlaytest => Ok(Failure("[playtest] you are not in playtest.\n".into())),
+        Next::ExitToLive(c) => {
+            let Some(mut s) = ctx.sess.write().map_err(|_| anyhow::anyhow!("Could not acquire write lock"))?;
+            s.prev_cursors.pop();
+            s.cursor = c;
+
+            Ok(Success(format!("[playtest] exited.\n")))
         }
-    } else {
-        // We need entry; fetch it BEFORE locking the session.
-        let bp = intent.args[1].as_str();
-        let entry = ctx
-            .state.registry
-            .db
-            .bp_entry(bp)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("blueprint has no entry room"))?;
+    }
+}
 
-        // ----- Scope 1: Update session state; DROP the guard before await
-        let prev_room_opt = {
-            let mut s = ctx.sess.write().unwrap();        // <— guard starts
+pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str) -> Result<CommandResult> {
+    let new_c = Cursor{};
 
-            if s.state != ConnState::LoggedIn {
-                // early return without any await, guard will drop at scope end
-                return Ok(Failure("Login required.\n".into()));
-            }
+    match check_playtest(ctx.clone()) {
+        Next::Error => Ok(Failure("Internal error.\n".into())),
+        Next::NotLoggedIn => Ok(Failure("Login required.\n".into())),
+        Next::ExitToLive(_) => {
+            let Some(mut s) = ctx.sess.write().map_err(|_| anyhow::anyhow!("Could not acquire write lock"))?;
+            s.prev_cursors.push(s.cursor);
+            s.cursor = new_c;
 
-            let prev = match &s.world {
-                Some(WorldMode::Live { room_id }) => Some(*room_id),
-                _ => None,
-            };
+            Ok(Success(format!("[playtest] entered recursive blueprint '{bp_key}'.\n")))
+        },
+        Next::NotInPlaytest => {
+            let Some(mut s) = ctx.sess.write().map_err(|_| anyhow::anyhow!("Could not acquire write lock"))?;
+            s.prev_cursors.push(s.cursor);
+            s.cursor = new_c;
 
-            s.world = Some(WorldMode::Playtest {
-                bp,
-                room: entry.clone(),
-                prev_room_id: prev,
-            });
-
-            prev
-        };
-
-        // ----- Scope 2: Now it’s safe to await
-        let view = ctx
-            .state.registry
-            .db
-            .bp_room_view(bp, &entry, 80)
-            .await?
-            .unwrap_or_else(|| "[playtest] empty room\n".into());
-
-        Ok(Success(format!("[playtest] entered `{}` at `{}`.\n{}", bp, entry, view)))
+            Ok(Success(format!("[playtest] entered blueprint '{bp_key}'.\n")))
+        }
     }
 }

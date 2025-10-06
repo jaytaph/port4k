@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use crate::state::session::WorldMode;
 use anyhow::Result;
 use crate::commands::CommandResult::{Failure, Success};
 

@@ -12,6 +12,7 @@ CREATE TABLE public.accounts
 (
     id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     username         citext NOT NULL UNIQUE,
+    email            citext NOT NULL UNIQUE,
     role             text   NOT NULL DEFAULT 'player',
     created_at       timestamptz NOT NULL DEFAULT now(),
     password_hash    text,                  -- Argon2id PHC string

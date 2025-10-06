@@ -1,6 +1,7 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
+use crate::db::models::room::{RoomExitRow, RoomView};
 
 pub struct Theme {
     pub room_title: String,
@@ -105,31 +106,33 @@ fn color_title(theme: &Theme, title: &str) -> String {
     format!("{col}{title}{RESET}")
 }
 
-fn color_exits(theme: &Theme, dirs: &[String]) -> String {
+fn color_exits(theme: &Theme, exits: &[RoomExitRow]) -> String {
     let col1 = &theme.exit_preface;
     let col2 = &theme.exits;
 
-    if dirs.is_empty() {
+    if exits.is_empty() {
         format!("{col1}Exits:{RESET} none")
     } else {
-        let joined = dirs.join(", ");
+        let exits: Vec<String> = exits.iter().map(|e| e.dir.to_string()).collect();
+        let joined = exits.join(", ");
         format!("{col1}Exits:{RESET} {col2}{joined}{RESET}")
     }
 }
 
 pub fn render_room(
     theme: &Theme,
-    title: &str,
-    body: &str,
-    objects: &HashMap<String, String>,
-    exits: &[String],
     width: usize,
+    room: RoomView,
+    // title: &str,
+    // body: &str,
+    // objects: &HashMap<String, String>,
+    // exits: &[String],
 ) -> String {
-    let border = color_title(theme, &"-".repeat(title.len().min(80)));
-    let title_line = color_title(theme, title);
-    let body_highlighted = render_objects(theme, body, objects);
+    let border = color_title(theme, &"-".repeat(room.room.title.len().min(80)));
+    let title_line = color_title(theme, room.room.title.as_str());
+    let body_highlighted = render_objects(theme, room.room.body.as_str(), room.objects);
     let body_wrapped = wrap_ansi(body_highlighted.as_str(), width.max(20));
-    let exits_line = color_exits(theme, exits);
+    let exits_line = color_exits(theme, room.exits.as_slice());
 
     format!("{border}\n{title_line}\n{border}\n\n{body_wrapped}\n\n{exits_line}\n")
 }

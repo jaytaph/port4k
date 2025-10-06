@@ -66,6 +66,24 @@ pub enum Direction {
     Custom(String), // fallback for user-defined directions
 }
 
+impl Into<String> for Direction {
+    fn into(self) -> String {
+        match self {
+            Direction::North => "north".to_string(),
+            Direction::South => "south".to_string(),
+            Direction::East  => "east".to_string(),
+            Direction::West  => "west".to_string(),
+            Direction::Up    => "up".to_string(),
+            Direction::Down  => "down".to_string(),
+            Direction::Northeast => "northeast".to_string(),
+            Direction::Northwest => "northwest".to_string(),
+            Direction::Southeast => "southeast".to_string(),
+            Direction::Southwest => "southwest".to_string(),
+            Direction::Custom(s) => s,
+        }
+    }
+}
+
 impl From<String> for Direction {
     fn from(s: String) -> Self {
         match s.to_lowercase().as_str() {

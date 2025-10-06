@@ -18,7 +18,7 @@ mod who;
 mod blueprint;
 mod debug_cmd;
 mod playtest;
-mod script;
+// mod script;
 mod admin;
 
 /// Command context passed to command handlers
@@ -67,7 +67,7 @@ pub async fn process_command(
 
         Verb::ScBlueprint => blueprint::blueprint(ctx.clone(), intent).await,
         Verb::ScPlaytest => playtest::playtest(ctx.clone(), intent).await,
-        Verb::ScScript => script::script(ctx.clone(), intent).await,
+        // Verb::ScScript => script::script(ctx.clone(), intent).await,
         Verb::ScDebug => debug_cmd::debug_cmd(ctx.clone(), intent).await,
 
         Verb::Unknown => Ok(Failure("Unknown command. Try `help`.\n".to_string())),
@@ -106,7 +106,6 @@ pub fn help_text() -> String {
 {bold}{fg_cyan}Special:{reset}
   {fg_green}@bp ...{reset}                      Manage blueprints and rooms
   {fg_green}@playtest [key|stop]{reset}         Enter/exit playtest mode
-  {fg_green}@script ...{reset}                  Edit/publish Lua scripts
   {fg_green}@debug where{reset}                 Show debug info
 "#,
     bold = ansi::BOLD,

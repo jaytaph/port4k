@@ -40,7 +40,7 @@ pub enum Verb {
     /// Special commands starting with '@'
     ScBlueprint,
     ScPlaytest,
-    ScScript,
+    // ScScript,
     ScDebug,
 }
 
@@ -385,7 +385,6 @@ fn verb_map() -> HashMap<&'static str, Verb> {
     // Special commands starting with '@'
     m.insert("@bp", ScBlueprint);
     m.insert("@playtest", ScPlaytest);
-    m.insert("@script", ScScript);
     m.insert("@debug", ScDebug);
 
     m

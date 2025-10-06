@@ -1,29 +1,23 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use crate::state::session::{ConnState, WorldMode};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use crate::commands::CommandResult::{Failure, Success};
+use crate::rendering::{render_room, Theme};
 
 pub async fn look(ctx: Arc<CmdCtx>, _intent: Intent) -> Result<CommandResult> {
-    let world = {
-        let s = ctx.sess.read().unwrap();
-        if s.state != ConnState::LoggedIn {
-            return Ok(Failure("You must `login` first.\n".into()));
-        }
+    let (room_view, width) = {
+        let s = ctx.sess.read().map_err(|_| anyhow!("Session lock poisoned"))?;
+        let c = match s.cursor.as_ref() {
+            Some(c) => c,
+            None => return Ok(Failure("You are nowhere.\n".into())),
+        };
 
-        s.world.clone()
+        let width = s.tty_cols.unwrap_or(80).max(20);
+
+        let room_view = c.room.clone();
+        (room_view, width)
     };
 
-    match &world {
-        Some(WorldMode::Live { room_id }) => {
-            let view = ctx.state.registry.db.room_view(*room_id).await?;
-            Ok(Success(view))
-        }
-        Some(WorldMode::Playtest { bp, room, .. }) => match ctx.state.registry.repos.room.bp_room_view(bp, room, 80).await? {
-            Some(view) => Ok(Success(view)),
-            None => Ok(Failure("[playtest] This room does not exist.\n".into())),
-        },
-        None => Ok(Failure("You are nowhere.\n".into())),
-    }
+    Ok(Success(render_room(&Theme::blue(), width, room_view)))
 }

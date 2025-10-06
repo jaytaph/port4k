@@ -39,6 +39,8 @@ pub struct Session {
     pub state: ConnState,
     /// Current world cursor (where am i?)
     pub cursor: Option<Cursor>,
+    /// Previous cursors (for backtracking)
+    pub prev_cursors: Vec<Cursor>,
     // Terminal size (if known)
     pub tty_cols: Option<usize>,
     pub tty_rows: Option<usize>,
