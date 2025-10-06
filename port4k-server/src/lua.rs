@@ -1,20 +1,21 @@
 use std::sync::Arc;
-use anyhow::{Context, Result};
+use anyhow::Context;
 use mlua::{Function, Lua, Table, Value};
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot};
 use crate::commands::CommandResult;
 use crate::db::Db;
-use crate::db::models::account::Account;
-use crate::db::models::blueprint::Blueprint;
-use crate::db::models::room::RoomView;
-use crate::db::models::zone::ZoneKind;
-use crate::db::types::{AccountId, BlueprintId, RoomId, ZoneId};
+use crate::models::account::Account;
+use crate::models::blueprint::Blueprint;
+use crate::models::room::RoomView;
+use crate::models::zone::ZoneKind;
+use crate::models::types::{AccountId, BlueprintId, RoomId, ZoneId};
+use crate::error::AppResult;
 use crate::input::parser::Intent;
 
 pub enum LuaJob {
     /// Called when a player enters a room
-    OnEnter { reply: oneshot::Sender<Result<()>> },
+    OnEnter { reply: oneshot::Sender<AppResult<()>> },
     /// Called when a player issues a command in a room
     OnCommand {
         zone_id: ZoneId,
@@ -33,7 +34,7 @@ pub enum LuaJob {
         account: Account,
         verb: String,
         args: Vec<String>,
-        reply: oneshot::Sender<Result<Option<String>>>,
+        reply: oneshot::Sender<AppResult<Option<String>>>,
     },
     // Called when we enter a room in playtest mode (no DB state, just ephemeral)
     OnEnterPlaytest {
@@ -41,7 +42,7 @@ pub enum LuaJob {
         bp: Blueprint,
         room: RoomView,
         account: Account,
-        reply: oneshot::Sender<Result<Option<String>>>,
+        reply: oneshot::Sender<AppResult<Option<String>>>,
     },
 }
 
@@ -57,7 +58,7 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
         while let Some(job) = rx.blocking_recv() {
             match job {
                 LuaJob::OnEnter { reply } => {
-                    let res = (|| -> Result<()> {
+                    let res = (|| -> AppResult<()> {
                         if let Ok(f) = lua.globals().get::<_, Function>("on_enter") {
                             f.call::<_, ()>(())?;
                         }
@@ -69,7 +70,7 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                 LuaJob::OnCommand { .. } => {}
 
                 LuaJob::OnCommandPlaytest { db, bp, room, account, verb, args, reply } => {
-                    let res = (|| -> Result<Option<String>> {
+                    let res = (|| -> AppResult<Option<String>> {
                         // Load live script (async) via runtime handle
                         let src = rt_handle
                             .block_on(db.bp_script_get_live(&bp, &room, "on_command"))?
@@ -182,7 +183,7 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                         }
 
                         // ----- Load & run on_command(bp:room) -----
-                        lua.load(&src).set_name(&format!("{bp}:{room}:on_command")).exec()?;
+                        lua.load(&src).set_name(&format!("{}:{}:on_command", bp.key, room.room.key)).exec()?;
 
                         if let Ok(func) = lua.globals().get::<_, Function>("on_command") {
                             let t: Table = lua.create_table()?;
@@ -206,7 +207,7 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                 }
 
                 LuaJob::OnEnterPlaytest { db, bp, room, account, reply, } => {
-                    let res = (|| -> Result<Option<String>> {
+                    let res = (|| -> AppResult<Option<String>> {
                         let src = rt_handle
                             .block_on(db.bp_script_get_live(&bp, &room, "on_enter"))?
                             .unwrap_or_default();
@@ -239,10 +240,10 @@ pub fn start_lua_worker(rt_handle: Handle) -> mpsc::Sender<LuaJob> {
                             )?;
                         }
 
-                        lua.load(&src).set_name(&format!("{bp}:{room}:on_enter")).exec()?;
+                        lua.load(&src).set_name(&format!("{}:{}:on_enter", bp.key, room.room.key)).exec()?;
 
                         if let Ok(f) = lua.globals().get::<_, Function>("on_enter") {
-                            f.call::<_, ()>((account.as_str(),))
+                            f.call::<_, ()>((account, room))
                                 .map_err(|e| anyhow::anyhow!(e))
                                 .context("on_enter failed")?;
                         }

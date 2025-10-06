@@ -12,6 +12,8 @@ mod util;
 mod input;
 mod ansi;
 mod services;
+mod error;
+mod models;
 
 pub use commands::process_command;
 pub use state::{

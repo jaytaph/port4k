@@ -1,7 +1,8 @@
+use crate::db::DbResult;
 use super::super::Db;
 
 impl Db {
-    pub async fn bp_room_kv_get(&self, bp: &str, room: &str, key: &str) -> anyhow::Result<Option<serde_json::Value>> {
+    pub async fn bp_room_kv_get(&self, bp: &str, room: &str, key: &str) -> DbResult<Option<serde_json::Value>> {
         let c = self.pool.get().await?;
         let row = c
             .query_opt(
@@ -19,7 +20,7 @@ impl Db {
         room: &str,
         key: &str,
         value: &serde_json::Value,
-    ) -> anyhow::Result<()> {
+    ) -> DbResult<()> {
         let c = self.pool.get().await?;
         c.execute(
             "INSERT INTO bp_room_kv (bp_key, room_key, key, value)
@@ -38,7 +39,7 @@ impl Db {
         account: &str,
         room: &str,
         key: &str,
-    ) -> anyhow::Result<Option<serde_json::Value>> {
+    ) -> DbResult<Option<serde_json::Value>> {
         let c = self.pool.get().await?;
         let row = c
             .query_opt(
@@ -57,7 +58,7 @@ impl Db {
         room: &str,
         key: &str,
         value: &serde_json::Value,
-    ) -> anyhow::Result<()> {
+    ) -> DbResult<()> {
         let c = self.pool.get().await?;
         c.execute(
             "INSERT INTO bp_player_kv (bp_key, account_name, room_key, key, value)

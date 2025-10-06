@@ -8,11 +8,11 @@ mod utils;
 
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use anyhow::Result;
 use std::sync::Arc;
 use crate::commands::CommandResult::Failure;
+use crate::error::AppResult;
 
-pub async fn blueprint(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
+pub async fn blueprint(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
     if intent.args.is_empty() {
         return Ok(Failure(USAGE.into()));
     }

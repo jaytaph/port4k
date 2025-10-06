@@ -1,11 +1,11 @@
 use std::sync::Arc;
-use anyhow::anyhow;
 use argon2::Argon2;
 use password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use rand_core::OsRng;
-use crate::db::models::account::Account;
+use crate::models::account::Account;
 use crate::db::repo::account::AccountRepo;
-use crate::db::types::AccountId;
+use crate::models::types::AccountId;
+use crate::error::{AppError, AppResult};
 
 pub struct AuthService {
     repo: Arc<dyn AccountRepo>,
@@ -18,7 +18,7 @@ impl AuthService {
         Self { repo, argon }
     }
 
-    pub async fn register(&self, username: &str, password: &str) -> anyhow::Result<bool> {
+    pub async fn register(&self, username: &str, password: &str) -> AppResult<bool> {
         if self.repo.get_by_username(username).await?.is_some() {
             return Ok(false);
         }
@@ -27,7 +27,8 @@ impl AuthService {
         let hash = self
             .argon
             .hash_password(password.as_bytes(), &salt)
-            .map_err(|e| anyhow!(e))?
+            .map_err(|e| AppError::Custom(e.to_string()))
+            .await?
             .to_string();
 
         let account = Account {
@@ -48,20 +49,20 @@ impl AuthService {
 
         match self.repo.insert_account(account).await {
             Ok(_) => Ok(true),
-            Err(e) => Err(anyhow!(e)),
+            Err(e) => Err(AppError::Custom(e.to_string())),
         }
     }
 
-    pub async fn authenticate(&self, username: &str, password: &str) -> anyhow::Result<bool> {
+    pub async fn authenticate(&self, username: &str, password: &str) -> AppResult<bool> {
         let Some(account) = self.repo.get_by_username(username).await? else {
             return Ok(false);
         };
 
-        let parsed = PasswordHash::new(&account.password_hash).map_err(|e| anyhow!(e))?;
+        let parsed = PasswordHash::new(&account.password_hash).map_err(|e| AppError::Custom(e.to_string()))?;
         Ok(self.argon.verify_password(password.as_bytes(), &parsed).is_ok())
     }
 
-    pub async fn update_last_login(&self, account_id: AccountId) -> anyhow::Result<()> {
+    pub async fn update_last_login(&self, account_id: AccountId) -> AppResult<()> {
         self.repo.update_last_login(account_id).await
     }
 }

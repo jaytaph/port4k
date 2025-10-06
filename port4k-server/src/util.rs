@@ -2,16 +2,17 @@ use crate::hardening::{ALLOW_SYMLINKS, MAX_FILE_BYTES, MAX_FILES_PER_IMPORT, MAX
 use anyhow::{Context, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
+use crate::error::{AppError, AppResult};
 
 pub mod args;
 pub mod telnet;
 
-pub fn resolve_content_subdir(base: &Path, subdir: &str) -> anyhow::Result<PathBuf> {
+pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
     if subdir.is_empty() || subdir == "." || subdir == ".." {
-        bail!("invalid subdir");
+        return AppError::Custom("invalid subdir name").into();
     }
     if subdir.contains('/') || subdir.contains('\\') {
-        bail!("subdir must be a single name");
+        return AppError::Custom("subdir must be a single name").into();
     }
 
     let base_can = base
@@ -40,7 +41,7 @@ pub fn resolve_content_subdir(base: &Path, subdir: &str) -> anyhow::Result<PathB
     Ok(target_can)
 }
 
-pub fn list_yaml_files_guarded(dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
+pub fn list_yaml_files_guarded(dir: &Path) -> AppResult<Vec<PathBuf>> {
     let mut files = Vec::new();
     let mut total = 0usize;
 

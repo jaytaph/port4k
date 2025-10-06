@@ -1,13 +1,13 @@
 //! @bp exit add <bp>:<from> <dir> <bp>:<to> [locked]
 
 use std::sync::Arc;
-use anyhow::Result;
 use crate::commands::{CmdCtx, CommandResult};
 use crate::commands::CommandResult::{Failure, Success};
+use crate::error::AppResult;
 use crate::input::parser::Intent;
 use crate::util::args::{normalize_dir, parse_bp_room_key};
 
-pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
+pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
     if intent.args.len() < 5 {
         return Ok(Failure(super::USAGE.into()));
     }

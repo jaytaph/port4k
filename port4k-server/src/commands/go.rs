@@ -1,21 +1,17 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use anyhow::Result;
 use crate::commands::CommandResult::{Failure, Success};
+use crate::error::AppResult;
 
-pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
+pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
     if intent.args.is_empty() {
         return Ok(Failure("Usage: go <direction>\n".into()));
     }
     let dir = intent.args[0].to_ascii_lowercase();
 
     let (account_id, world) = {
-        let s = ctx.sess.read().unwrap();
-        let account_id = match &s.account {
-            Some(a) => a.id,
-            None => return Ok(Failure("You must `login` first.\n".into())),
-        };
+        let account_id = ctx.account_id().map_err(|_| anyhow::anyhow!("Not logged in"))?;
 
         (account_id, s.world.clone())
     };

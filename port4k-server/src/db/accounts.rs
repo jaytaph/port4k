@@ -6,7 +6,7 @@
 //
 // impl Db {
     // /// Create a new user with Argon2id password hash. Returns false if name exists.
-    // pub async fn register_user(&self, username: &str, password: &str) -> anyhow::Result<bool> {
+    // pub async fn register_user(&self, username: &str, password: &str) -> AppResult<bool> {
     //     if self.account_by_username(username).await?.is_some() {
     //         return Ok(false);
     //     }
@@ -29,7 +29,7 @@
     // }
 
     // /// Verify username/password.
-    // pub async fn verify_user(&self, username: &str, password: &str) -> anyhow::Result<bool> {
+    // pub async fn verify_user(&self, username: &str, password: &str) -> AppResult<bool> {
     //     let Some(account) = self.account_by_username(username).await? else {
     //         return Ok(false);
     //     };

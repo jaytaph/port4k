@@ -1,13 +1,13 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use anyhow::{anyhow, Result};
 use crate::commands::CommandResult::{Failure, Success};
+use crate::error::AppResult;
 use crate::rendering::{render_room, Theme};
 
-pub async fn look(ctx: Arc<CmdCtx>, _intent: Intent) -> Result<CommandResult> {
+pub async fn look(ctx: Arc<CmdCtx>, _intent: Intent) -> AppResult<CommandResult> {
     let (room_view, width) = {
-        let s = ctx.sess.read().map_err(|_| anyhow!("Session lock poisoned"))?;
+        let s = ctx.sess.read();
         let c = match s.cursor.as_ref() {
             Some(c) => c,
             None => return Ok(Failure("You are nowhere.\n".into())),

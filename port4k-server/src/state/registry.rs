@@ -2,8 +2,8 @@ use crate::config::Config;
 use crate::db::Db;
 use std::collections::BTreeSet;
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use crate::db::models::account::Account;
+use parking_lot::RwLock;
+use crate::models::account::Account;
 use crate::db::repo::account::AccountRepo;
 use crate::db::repo::db_account::AccountRepository;
 use crate::db::repo::db_room::RoomRepository;
@@ -55,7 +55,7 @@ impl Registry {
     }
 
     pub async fn set_online(&self, account: &Account, online: bool) {
-        let mut g = self.online.write().await;
+        let mut g = self.online.write();
         if online {
             g.insert(account.username.clone());
         } else {
@@ -64,6 +64,6 @@ impl Registry {
     }
 
     pub async fn who(&self) -> Vec<String> {
-        self.online.read().await.iter().cloned().collect()
+        self.online.read().iter().cloned().collect()
     }
 }

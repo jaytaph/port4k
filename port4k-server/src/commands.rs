@@ -1,9 +1,12 @@
 use crate::input::parser::{Verb, parse_command};
 use crate::state::session::Session;
-use anyhow::Result;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use crate::ansi;
 use crate::commands::CommandResult::{Failure, Success};
+use crate::models::account::Account;
+use crate::models::types::AccountId;
+use crate::error::{AppError, AppResult};
 use crate::net::AppState;
 
 mod balance;
@@ -27,6 +30,28 @@ pub struct CmdCtx {
     pub sess: Arc<RwLock<Session>>,
 }
 
+impl CmdCtx {
+    #[inline]
+    fn with_sess<T>(&self, f: impl FnOnce(&Session) -> T) -> AppResult<T> {
+        let s = self.sess.read();
+        Ok(f(&s))
+    }
+
+    pub fn is_logged_in(&self) -> bool {
+        self.sess.try_read().map_or(false, |s| s.account.is_some())
+    }
+
+    pub fn account_id(&self) -> AppResult<AccountId> {
+        self.with_sess(|s| s.account.as_ref().map(|a| a.id))
+            .and_then(|opt| opt.ok_or(AppError::NotLoggedIn))
+    }
+
+    pub fn account(&self) -> AppResult<Account> {
+        self.with_sess(|s| s.account.clone())
+            .and_then(|opt| opt.ok_or(AppError::NotLoggedIn))
+    }
+}
+
 pub enum CommandResult {
     Success(String),
     Failure(String),
@@ -36,7 +61,7 @@ pub async fn process_command(
     raw: &str,
     state: Arc<AppState>,
     sess: Arc<RwLock<Session>>,
-) -> Result<CommandResult> {
+) -> AppResult<CommandResult> {
     let intent = parse_command(raw);
 
     let ctx = Arc::new(CmdCtx {

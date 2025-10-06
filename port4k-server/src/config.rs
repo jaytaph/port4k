@@ -1,6 +1,6 @@
-use anyhow::Result;
 use serde::Deserialize;
 use std::path::Path;
+use crate::error::{AppError, AppResult};
 
 /// Global configuration of the server
 #[derive(Debug, Clone, Deserialize)]
@@ -13,13 +13,13 @@ pub struct Config {
 
 impl Config {
     #[allow(unused)]
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let data = std::fs::read_to_string(path)?;
-        let cfg: Self = toml::from_str(&data)?;
+    pub fn load<P: AsRef<Path>>(path: P) -> AppResult<Self> {
+        let data = std::fs::read_to_string(path).map_err(|e| AppError::Config(format!("Failed to read config file: {}", e)))?;
+        let cfg: Self = toml::from_str(&data).map_err(|e| AppError::Config(format!("Failed to parse config file: {}", e)))?;
         Ok(cfg)
     }
 
-    pub fn from_env() -> Result<Self> {
+    pub fn from_env() -> AppResult<Self> {
         let _ = dotenvy::from_filename(".env");
         let cfg = Self {
             tcp_addr: std::env::var("TCP_ADDR").unwrap_or_else(|_| "0.0.0.0:4000".to_string()),

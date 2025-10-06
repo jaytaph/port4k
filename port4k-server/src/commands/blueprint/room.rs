@@ -1,7 +1,7 @@
 use std::sync::Arc;
-use anyhow::Result;
 use crate::commands::{CmdCtx, CommandResult};
 use crate::commands::CommandResult::{Failure, Success};
+use crate::error::{AppError, AppResult};
 use crate::input::parser::Intent;
 use crate::util::args::parse_bp_room_key;
 
@@ -10,7 +10,7 @@ const USAGE: &str = "Usage:
   @bp room lock <bp>:<room>
   @bp room unlock <bp>:<room>\n";
 
-pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
+pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
     if intent.args.len() < 2 {
         return Ok(Failure(USAGE.into()));
     }
@@ -26,7 +26,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
             }
 
             let (bp, room) = parse_bp_room_key(&sub_args[0])
-                .ok_or_else(|| anyhow::anyhow!("room key must be <bp>:<room>"))?;
+                .ok_or_else(|| AppError::Args("room key must be <bp>:<room>"))?;
 
             let title = &sub_args[1];
             let body  = &sub_args[2];

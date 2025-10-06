@@ -1,7 +1,7 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
-use crate::db::models::room::{RoomExitRow, RoomView};
+use crate::models::room::{RoomExitRow, RoomObject, RoomView};
 
 pub struct Theme {
     pub room_title: String,
@@ -40,9 +40,14 @@ const RESET: &str = "\x1b[0m";
 static ANSI_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\x1b\[[0-9;]*m").unwrap());
 static OBJ_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{obj:([a-zA-Z0-9_\-:]+)(?:\|([^}]+))?\}").unwrap());
 
-fn render_objects(theme: &Theme, body: &str, id_to_short: &HashMap<String, String>) -> String {
+fn render_objects(theme: &Theme, body: &str, objects: Vec<RoomObject>) -> String {
     let col1 = &theme.room_body;
     let col2 = &theme.objects;
+
+    let id_to_short: HashMap<String, String> = objects
+        .into_iter()
+        .map(|o| (o.name, o.short))
+        .collect();
 
     let s = OBJ_TAG_RE
         .replace_all(body, |caps: &regex::Captures| {

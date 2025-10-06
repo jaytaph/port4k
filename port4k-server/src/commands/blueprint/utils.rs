@@ -1,14 +1,12 @@
 use std::sync::Arc;
 use crate::commands::CmdCtx;
-use anyhow::{anyhow, Result};
+use crate::error::{AppError, AppResult};
 
 /// Get the current logged-in account name as String.
-pub fn current_owner(ctx: Arc<CmdCtx>) -> Result<String> {
-    ctx.sess
-        .read()
-        .unwrap()
-        .account
-        .as_ref()
-        .map(|a| a.username.clone())
-        .ok_or_else(|| anyhow!("login required"))
+pub fn current_owner(ctx: Arc<CmdCtx>) -> AppResult<String> {
+    if ! ctx.is_logged_in() {
+        return Err(AppError::NotLoggedIn);
+    }
+
+    Ok(ctx.account()?.username)
 }

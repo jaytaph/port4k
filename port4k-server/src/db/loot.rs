@@ -1,12 +1,12 @@
-use super::Db;
 use rand_core::OsRng;
-use crate::db::models::account::Account;
-use crate::db::types::RoomId;
+use crate::models::account::Account;
+use crate::models::types::RoomId;
+use super::{Db, DbResult};
 
 impl Db {
     /// Spawn due coin piles (and other loot) up to max_instances per spawn.
     /// Returns number of piles spawned.
-    pub async fn spawn_tick(&self) -> anyhow::Result<u64> {
+    pub async fn spawn_tick(&self) -> DbResult<u64> {
         use rand_core::RngCore;
         let mut spawned = 0u64;
         let mut client = self.pool.get().await?;
@@ -70,7 +70,7 @@ impl Db {
     }
 
     /// Atomically pick up to `want_qty` coins from the room. Returns actually picked.
-    pub async fn pickup_coins(&self, account: &Account, room_id: RoomId, want_qty: i32) -> anyhow::Result<i32> {
+    pub async fn pickup_coins(&self, account: &Account, room_id: RoomId, want_qty: i32) -> DbResult<i32> {
         let mut client = self.pool.get().await?;
         let tx = client.build_transaction().start().await?;
 

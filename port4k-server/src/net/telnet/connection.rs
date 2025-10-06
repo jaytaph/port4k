@@ -2,12 +2,14 @@ use std::collections::HashMap;
 use crate::input::readline::{EditEvent, LineEditor};
 use crate::util::telnet::{TelnetIn, TelnetMachine};
 use crate::{ConnState, process_command, Session};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::net::tcp::OwnedReadHalf;
 use crate::commands::CommandResult;
-use crate::db::models::account::Account;
+use crate::models::account::Account;
+use crate::error::{AppError, AppResult};
 use crate::net::AppState;
 use crate::net::telnet::crlf_wrapper::CrlfWriter;
 
@@ -15,7 +17,7 @@ pub async fn handle_connection(
     stream: TcpStream,
     state: Arc<AppState>,
     sess: Arc<RwLock<Session>>,
-) -> anyhow::Result<()> {
+) -> AppResult<()> {
     // Split stream into read/write halves and wrap write half to ensure CRLF outputs.
     let (r, mut w) = stream.into_split();
     let mut crlf_w = &mut CrlfWriter::new(&mut w);
@@ -24,8 +26,14 @@ pub async fn handle_connection(
     let mut editor = LineEditor::new("> ");
     let mut telnet = TelnetMachine::new();
 
-    start_session(&mut crlf_w, &mut telnet, &mut editor, state.clone(), sess.clone()).await?;
-    read_loop(&mut reader, &mut crlf_w, &mut telnet, &mut editor, state.clone(), sess.clone()).await?;
+    start_session(&mut crlf_w, &mut telnet, &mut editor, state.clone(), sess.clone()).await.map_err(|e| {
+        AppError::Telnet(format!("failed to start session: {}", e))
+    })?;
+
+    read_loop(&mut reader, &mut crlf_w, &mut telnet, &mut editor, state.clone(), sess.clone()).await.map_err(|e| {
+        AppError::Telnet(e.to_string())
+    })?;
+
     cleanup(sess.clone(), state.clone()).await;
 
     Ok(())
@@ -90,17 +98,17 @@ fn generate_prompt(sess: Arc<RwLock<Session>>, prompt: &str) -> String {
     vars.insert("world".to_string(), "World".to_string());
     vars.insert("room".to_string(), "Room".to_string());
     vars.insert("wall_time".to_string(), chrono::Local::now().format("%H:%M:%S").to_string());
-    vars.insert("online_time".to_string(), format!("{}", sess.read().unwrap().session_started.elapsed().as_secs()));
+    vars.insert("online_time".to_string(), format!("{}", sess.read().session_started.elapsed().as_secs()));
     vars.insert("online_users".to_string(), format!("{}", 123));
 
-    if let Some(account) = sess.read().unwrap().account.as_ref() {
+    if let Some(account) = sess.read().account.as_ref() {
         vars.insert("name".to_string(), account.username.to_string());
         vars.insert("role".to_string(), account.role.to_string());
         vars.insert("xp".to_string(), format!("{}", account.xp));
         vars.insert("health".to_string(), format!("{}", account.health));
         vars.insert("coins".to_string(), format!("{}", account.coins));
     }
-    if let Some(cursor) = sess.read().unwrap().cursor.as_ref() {
+    if let Some(cursor) = sess.read().cursor.as_ref() {
         vars.insert("zone".to_string(), cursor.zone.title.to_string());
         vars.insert("room".to_string(), cursor.room.room.title.to_string());
     }
@@ -115,7 +123,7 @@ fn generate_prompt(sess: Arc<RwLock<Session>>, prompt: &str) -> String {
 
 async fn cleanup(sess: Arc<RwLock<Session>>, state: Arc<AppState>) {
     let account_opt = {
-        let sess = sess.read().unwrap();
+        let sess = sess.read();
         sess.account.clone()
     };
 
@@ -132,7 +140,7 @@ async fn handle_data_byte<W: AsyncWrite + Unpin>(
     editor: &mut LineEditor,
     sess: Arc<RwLock<Session>>,
     state: Arc<AppState>,
-) -> anyhow::Result<()> {
+) -> AppResult<()> {
     match editor.handle_byte(b) {
         EditEvent::None => {}
         EditEvent::Redraw => {
@@ -161,12 +169,12 @@ async fn handle_data_byte<W: AsyncWrite + Unpin>(
 }
 
 async fn handle_naws(cols: u16, rows: u16, sess: Arc<RwLock<Session>>) {
-    let mut s = sess.write().unwrap();
+    let mut s = sess.write();
     s.tty_cols = Some(cols as usize);
     s.tty_rows = Some(rows as usize);
 }
 
-async fn dispatch_command<W: AsyncWrite + Unpin>(raw: &str, w: &mut W, state: Arc<AppState>, sess: Arc<RwLock<Session>>) -> anyhow::Result<()> {
+async fn dispatch_command<W: AsyncWrite + Unpin>(raw: &str, w: &mut W, state: Arc<AppState>, sess: Arc<RwLock<Session>>) -> AppResult<()> {
     match process_command(raw, state.clone(), sess.clone()).await {
         Ok(CommandResult::Success(out)) => {
             if !out.is_empty() {
@@ -199,7 +207,7 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
     telnet: &mut TelnetMachine,
     state: Arc<AppState>,
     sess: Arc<RwLock<Session>>
-) -> anyhow::Result<LoginOutcome> {
+) -> AppResult<LoginOutcome> {
     // Only handle `login <username>` with exactly one arg here
     let Some(rest) = raw.strip_prefix("login ") else {
         return Ok(LoginOutcome::NotHandled);
@@ -209,7 +217,7 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
         return Ok(LoginOutcome::NotHandled);
     }
 
-    if sess.read().unwrap().state == ConnState::LoggedIn {
+    if sess.read().state == ConnState::LoggedIn {
         write_with_newline(w, b"Already logged in.").await?;
         return Ok(LoginOutcome::Handled);
     }
@@ -249,7 +257,7 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
     };
 
     {
-        let mut s = sess.write().unwrap();
+        let mut s = sess.write();
         s.account = Some(account.clone());
         s.state = ConnState::LoggedIn;
     }

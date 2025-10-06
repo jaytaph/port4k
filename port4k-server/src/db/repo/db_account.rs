@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use crate::db::Db;
-use crate::db::models::account::Account;
+use crate::models::account::Account;
 use crate::db::repo::account::AccountRepo;
-use crate::db::types::AccountId;
+use crate::models::types::AccountId;
 
 pub struct AccountRepository {
     db: Arc<Db>,
@@ -16,7 +16,7 @@ impl AccountRepository {
 
 #[async_trait::async_trait]
 impl AccountRepo for AccountRepository {
-    async fn get_by_username(&self, username: &str) -> anyhow::Result<Option<Account>> {
+    async fn get_by_username(&self, username: &str) -> AppResult<Option<Account>> {
         let client = self.db.get_client().await?;
 
         let stmt = client.prepare_cached(
@@ -33,7 +33,7 @@ impl AccountRepo for AccountRepository {
         Ok(row_opt.map(Account::from_row))
     }
 
-    async fn get_by_id(&self, account_id: AccountId) -> anyhow::Result<Option<Account>> {
+    async fn get_by_id(&self, account_id: AccountId) -> AppResult<Option<Account>> {
         let client = self.db.get_client().await?;
 
         let stmt = client.prepare_cached(
@@ -50,7 +50,7 @@ impl AccountRepo for AccountRepository {
 
     }
 
-    async fn insert_account(&self, account: Account) -> anyhow::Result<Account> {
+    async fn insert_account(&self, account: Account) -> AppResult<Account> {
         let client = self.db.get_client().await?;
 
         let stmt = client.prepare_cached(
@@ -80,7 +80,7 @@ impl AccountRepo for AccountRepository {
 
     }
 
-    async fn update_last_login(&self, id: AccountId) -> anyhow::Result<()> {
+    async fn update_last_login(&self, id: AccountId) -> AppResult<()> {
         let client = self.db.get_client().await?;
 
         let stmt = client.prepare_cached(

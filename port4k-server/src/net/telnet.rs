@@ -1,10 +1,12 @@
 mod connection;
 mod crlf_wrapper;
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use crate::lua::LuaJob;
 use crate::{Registry, Session};
 use tokio::sync::mpsc;
+use crate::error::{AppError, AppResult};
 use crate::net::AppState;
 use crate::net::telnet::connection::handle_connection;
 use crate::state::session::Protocol;
@@ -16,8 +18,10 @@ pub async fn serve(
     banner: &'static str,
     entry: &'static str,
     lua_tx: mpsc::Sender<LuaJob>,
-) -> anyhow::Result<()> {
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
+) -> AppResult<()> {
+    let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|e| {
+        AppError::Custom(format!("failed to bind to {}: {}", addr, e))
+    })?;
 
     loop {
         match listener.accept().await {

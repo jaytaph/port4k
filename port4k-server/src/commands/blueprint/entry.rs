@@ -1,14 +1,14 @@
 //! @bp entry <bp>:<room>
 
 use std::sync::Arc;
-use anyhow::Result;
 use crate::commands::blueprint::USAGE;
 use crate::commands::{CmdCtx, CommandResult};
 use crate::commands::CommandResult::{Failure, Success};
+use crate::error::AppResult;
 use crate::input::parser::Intent;
 use crate::util::args::parse_bp_room_key;
 
-pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
+pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
     if intent.args.len() < 2 {
         return Ok(Failure(USAGE.into()));
     }

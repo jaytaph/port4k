@@ -1,11 +1,11 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use anyhow::Result;
 use crate::commands::CommandResult::{Failure, Success};
-use crate::db::models::account::Account;
+use crate::models::account::Account;
+use crate::error::AppResult;
 
-pub async fn register(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
+pub async fn register(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
     if intent.args.len() < 2 {
         return Ok(Failure("Usage: register <name> <password>\n".into()));
     }

@@ -2,11 +2,11 @@ use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use crate::state::session::ConnState;
-use anyhow::Result;
 use crate::commands::CommandResult::{Failure, Success};
-use crate::db::models::account::Account;
+use crate::models::account::Account;
+use crate::error::AppResult;
 
-pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
+pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
     if intent.args.len() < 3 {
         return Ok(Success("Usage: login <name> <password>\n".into()));
     }
@@ -26,7 +26,7 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
 
     let (_char_id, loc) = ctx.state.registry.db.get_or_create_character(account.id, &username).await?;
     {
-        let mut s = ctx.sess.write().unwrap();
+        let mut s = ctx.sess.write();
         s.account = Some(account.clone());
         s.state = ConnState::LoggedIn;
         s.cursor = None;

@@ -3,7 +3,7 @@
 // use crate::rendering::{Theme, render_room};
 //
 // impl Db {
-//     pub async fn bp_room_set_locked(&self, bp_key: &str, room_key: &str, locked: bool) -> anyhow::Result<bool> {
+//     pub async fn bp_room_set_locked(&self, bp_key: &str, room_key: &str, locked: bool) -> AppResult<bool> {
 //         let c = self.pool.get().await?;
 //         let n = c
 //             .execute(
@@ -15,7 +15,7 @@
 //         Ok(n == 1)
 //     }
 //
-//     pub async fn bp_room_is_locked(&self, bp_key: &str, room_key: &str) -> anyhow::Result<Option<bool>> {
+//     pub async fn bp_room_is_locked(&self, bp_key: &str, room_key: &str) -> AppResult<Option<bool>> {
 //         let c = self.pool.get().await?;
 //         let row = c
 //             .query_opt(
@@ -26,7 +26,7 @@
 //         Ok(row.and_then(|r| r.get::<_, Option<bool>>(0)))
 //     }
 //
-//     pub async fn bp_new(&self, bp_key: &str, title: &str, owner: &str) -> anyhow::Result<bool> {
+//     pub async fn bp_new(&self, bp_key: &str, title: &str, owner: &str) -> AppResult<bool> {
 //         let c = self.pool.get().await?;
 //         let n = c
 //             .execute(
@@ -39,7 +39,7 @@
 //         Ok(n == 1)
 //     }
 //
-//     pub async fn bp_room_add(&self, bp_key: &str, room_key: &str, title: &str, body: &str) -> anyhow::Result<bool> {
+//     pub async fn bp_room_add(&self, bp_key: &str, room_key: &str, title: &str, body: &str) -> AppResult<bool> {
 //         let c = self.pool.get().await?;
 //         let n = c
 //             .execute(
@@ -52,7 +52,7 @@
 //         Ok(n == 1)
 //     }
 //
-//     pub async fn bp_exit_add(&self, bp_key: &str, from_key: &str, dir: &str, to_key: &str) -> anyhow::Result<bool> {
+//     pub async fn bp_exit_add(&self, bp_key: &str, from_key: &str, dir: &str, to_key: &str) -> AppResult<bool> {
 //         let c = self.pool.get().await?;
 //         let n = c
 //             .execute(
@@ -65,7 +65,7 @@
 //         Ok(n == 1)
 //     }
 //
-//     pub async fn bp_set_entry(&self, bp_key: &str, room_key: &str) -> anyhow::Result<bool> {
+//     pub async fn bp_set_entry(&self, bp_key: &str, room_key: &str) -> AppResult<bool> {
 //         let c = self.pool.get().await?;
 //         let n = c
 //             .execute(
@@ -76,7 +76,7 @@
 //         Ok(n == 1)
 //     }
 //
-//     pub async fn bp_entry(&self, bp_key: &str) -> anyhow::Result<Option<String>> {
+//     pub async fn bp_entry(&self, bp_key: &str) -> AppResult<Option<String>> {
 //         let c = self.pool.get().await?;
 //         let row = c
 //             .query_opt("SELECT entry_room_key FROM blueprints WHERE key=$1", &[&bp_key])
@@ -85,7 +85,7 @@
 //     }
 //
 //     /// width: wrap column; pass 80 for now (you can later read from per-user setting like "\w 80")
-//     pub async fn bp_room_view(&self, bp_key: &str, room_key: &str, width: usize) -> anyhow::Result<Option<String>> {
+//     pub async fn bp_room_view(&self, bp_key: &str, room_key: &str, width: usize) -> AppResult<Option<String>> {
 //         let c = self.pool.get().await?;
 //
 //         let row = c
@@ -123,7 +123,7 @@
 //         )))
 //     }
 //
-//     pub async fn bp_move(&self, bp_key: &str, from_key: &str, dir: &str) -> anyhow::Result<Option<String>> {
+//     pub async fn bp_move(&self, bp_key: &str, from_key: &str, dir: &str) -> AppResult<Option<String>> {
 //         let c = self.pool.get().await?;
 //         let to = c
 //             .query_opt(

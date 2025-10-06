@@ -1,3 +1,4 @@
+use crate::db::DbResult;
 use super::super::Db;
 
 impl Db {
@@ -8,7 +9,7 @@ impl Db {
         event: &str,
         source: &str,
         author: &str,
-    ) -> anyhow::Result<()> {
+    ) -> DbResult<()> {
         let c = self.pool.get().await?;
         c.execute(
             "INSERT INTO bp_scripts_draft (bp_key, room_key, event, source, author)
@@ -22,7 +23,7 @@ impl Db {
         Ok(())
     }
 
-    pub async fn bp_script_publish(&self, bp_key: &str, room_key: &str, event: &str) -> anyhow::Result<bool> {
+    pub async fn bp_script_publish(&self, bp_key: &str, room_key: &str, event: &str) -> DbResult<bool> {
         let c = self.pool.get().await?;
         let n = c
             .execute(
@@ -44,7 +45,7 @@ impl Db {
         bp_key: &str,
         room_key: &str,
         event: &str,
-    ) -> anyhow::Result<Option<String>> {
+    ) -> DbResult<Option<String>> {
         let c = self.pool.get().await?;
         let row = c
             .query_opt(

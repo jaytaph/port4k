@@ -1,11 +1,12 @@
-use anyhow::Result;
 use uuid::Uuid;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::db::Db;
-use crate::db::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts, RoomView, ZoneRoomState};
+use crate::db::{Db, DbResult};
+use crate::models::blueprint::Blueprint;
+use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts, RoomView, ZoneRoomState};
 use crate::db::repo::room::RoomRepo;
-use crate::db::types::{RoomId, ScriptSource, ZoneId};
+use crate::models::types::{ObjectId, RoomId, ScriptSource, ZoneId};
+use crate::error::AppResult;
 
 pub struct RoomRepository {
     pub db: Arc<Db>,
@@ -16,7 +17,7 @@ impl RoomRepository {
         Self { db: db.clone() }
     }
 
-    async fn get_draft_scripts(&self, room_id: RoomId) -> Result<RoomScripts> {
+    async fn get_draft_scripts(&self, room_id: RoomId) -> DbResult<RoomScripts> {
         let client = self.db.get_client().await?;
 
         let rows = client.query(
@@ -44,7 +45,22 @@ impl RoomRepository {
 
 #[async_trait::async_trait]
 impl RoomRepo for RoomRepository {
-    async fn get_blueprint_room(&self, room_id: RoomId) -> Result<BlueprintRoom> {
+    async fn get_blueprint(&self, bp_key: &str) -> DbResult<Blueprint> {
+        let client = self.db.get_client().await?;
+
+        let row = client.query_one(
+            r#"
+            SELECT id, key, title, owner, entry_room_key, status, created_at, updated_at
+            FROM blueprints
+            WHERE key = $1
+            "#,
+            &[&bp_key],
+        ).await?;
+
+        Ok(Blueprint::from_row(row))
+    }
+
+    async fn get_blueprint_room(&self, room_id: RoomId) -> AppResult<BlueprintRoom> {
         let client = self.db.get_client().await?;
 
         let row = client.query_one(
@@ -59,7 +75,7 @@ impl RoomRepo for RoomRepository {
         Ok(BlueprintRoom::from_row(row))
     }
 
-    async fn get_exits(&self, room_id: RoomId) -> Result<Vec<RoomExitRow>> {
+    async fn get_exits(&self, room_id: RoomId) -> AppResult<Vec<RoomExitRow>> {
         let client = self.db.get_client().await?;
 
         let rows = client.query(
@@ -75,7 +91,7 @@ impl RoomRepo for RoomRepository {
         Ok(rows.into_iter().map(RoomExitRow::from_row).collect())
     }
 
-    async fn get_objects_with_nouns(&self, room_id: RoomId) -> Result<Vec<RoomObject>> {
+    async fn get_objects_with_nouns(&self, room_id: RoomId) -> AppResult<Vec<RoomObject>> {
         let client = self.db.get_client().await?;
 
         let obj_rows = client.query(
@@ -108,7 +124,7 @@ impl RoomRepo for RoomRepository {
         let objects = obj_rows.into_iter().map(|r| {
             let id: Uuid = r.get(0);
             RoomObject {
-                id,
+                id: ObjectId::from_uuid(id),
                 name: r.get(2),
                 short: r.get(3),
                 description: r.get(4),
@@ -117,13 +133,20 @@ impl RoomRepo for RoomRepository {
                 use_lua: r.get(7),
                 position: r.get(8),
                 nouns: nouns_by_obj.remove(&id).unwrap_or_default(),
+                initial_qty: None,
+                qty: None,
+                locked: false,
+                revealed: false,
+                takeable: false,
+                stackable: false,
+                is_coin: false,
             }
         }).collect();
 
         Ok(objects)
     }
 
-    async fn get_scripts(&self, room_id: RoomId, src: ScriptSource) -> Result<RoomScripts> {
+    async fn get_scripts(&self, room_id: RoomId, src: ScriptSource) -> AppResult<RoomScripts> {
         let client = self.db.get_client().await?;
 
         let (table, enter_col, cmd_col) = match src {
@@ -151,7 +174,7 @@ impl RoomRepo for RoomRepository {
         }
     }
 
-    async fn get_room_kv(&self, room_id: RoomId) -> Result<RoomKv> {
+    async fn get_room_kv(&self, room_id: RoomId) -> AppResult<RoomKv> {
         let client = self.db.get_client().await?;
 
         let rows = client.query(
@@ -182,7 +205,7 @@ impl RoomRepo for RoomRepository {
         Ok(kv)
     }
 
-    async fn get_zone_state(&self, zone_id: ZoneId, room_id: RoomId) -> Result<Option<ZoneRoomState>> {
+    async fn get_zone_state(&self, zone_id: ZoneId, room_id: RoomId) -> AppResult<Option<ZoneRoomState>> {
         let client = self.db.get_client().await?;
 
         let row = client.query_opt(
@@ -206,7 +229,7 @@ impl RoomRepo for RoomRepository {
         room_id: RoomId,
         zone_id: Option<ZoneId>,
         scripts: ScriptSource,
-    ) -> Result<RoomView> {
+    ) -> AppResult<RoomView> {
         let room = self.get_blueprint_room(room_id).await?;
         let (exits, objects, scripts, room_kv, zone_state) = tokio::try_join!(
             self.get_exits(room_id),
@@ -233,7 +256,7 @@ impl RoomRepo for RoomRepository {
     }
 
 
-    async fn set_entry(&self, bp_key: &str, room_key: &str) -> Result<bool> {
+    async fn set_entry(&self, bp_key: &str, room_key: &str) -> AppResult<bool> {
         let c = self.db.get_client().await?;
 
         let n = c.execute(
@@ -244,7 +267,7 @@ impl RoomRepo for RoomRepository {
         Ok(n == 1)
     }
 
-    async fn add_exit(&self, bp_key: &str, from_key: &str, dir: &str, to_key: &str) -> Result<bool> {
+    async fn add_exit(&self, bp_key: &str, from_key: &str, dir: &str, to_key: &str) -> AppResult<bool> {
         let c = self.db.get_client().await?;
 
         let n = c.execute(
@@ -262,7 +285,7 @@ impl RoomRepo for RoomRepository {
 
         Ok(n == 1)
     }
-    async fn set_locked(&self, bp_key: &str, room_key: &str, locked: bool) -> Result<bool> {
+    async fn set_locked(&self, bp_key: &str, room_key: &str, locked: bool) -> AppResult<bool> {
         let c = self.db.get_client().await?;
 
         let n = c.execute(
@@ -277,7 +300,7 @@ impl RoomRepo for RoomRepository {
 
         Ok(n == 1)
     }
-    async fn insert_blueprint(&self, bp_key: &str, title: &str, owner: &str) -> Result<bool> {
+    async fn insert_blueprint(&self, bp_key: &str, title: &str, owner: &str) -> AppResult<bool> {
         let c = self.db.get_client().await?;
 
         let n = c.execute(
@@ -291,7 +314,7 @@ impl RoomRepo for RoomRepository {
 
         Ok(n == 1)
     }
-    async fn insert_room(&self, bp_key: &str, room_key: &str, title: &str, body: &str) -> Result<bool> {
+    async fn insert_room(&self, bp_key: &str, room_key: &str, title: &str, body: &str) -> AppResult<bool> {
         let c = self.db.get_client().await?;
 
         let n = c.execute(
@@ -307,7 +330,7 @@ impl RoomRepo for RoomRepository {
 
         Ok(n == 1)
     }
-    async fn submit(&self, bp_key: &str) -> Result<bool> {
+    async fn submit(&self, bp_key: &str) -> AppResult<bool> {
         let c = self.db.get_client().await?;
 
         let n = c.execute(

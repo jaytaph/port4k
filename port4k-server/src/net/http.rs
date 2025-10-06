@@ -5,13 +5,15 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::lua::LuaJob;
 use crate::{Registry, Session, process_command};
 use tokio::sync::mpsc;
 use crate::commands::CommandResult;
+use crate::error::AppResult;
 use crate::net::AppState;
 use crate::state::session::Protocol;
 
@@ -22,7 +24,7 @@ pub async fn serve(
     banner: &'static str,
     entry: &'static str,
     lua_tx: mpsc::Sender<LuaJob>,
-) -> anyhow::Result<()> {
+) -> AppResult<()> {
     let app = Router::new()
         .route("/ws", get(ws_upgrade))
         .with_state(AppState {
@@ -95,13 +97,8 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
         // }
     }
 
-    let account = {
-        let s = sess.read().unwrap();
-        s.account.clone()
-    };
-    if let Some(a) = account {
-        state.registry.set_online(&a, false).await;
-    }
+    let account_id = ctx.account_id().map_err(|_| anyhow::anyhow!("Not logged in"))?;
+    state.registry.set_online(account_id, false).await;
 }
 
 fn ensure_nl(mut s: String) -> String {

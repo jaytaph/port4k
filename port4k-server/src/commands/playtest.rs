@@ -1,8 +1,9 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandResult};
 use crate::state::session::{ConnState, Cursor};
-use anyhow::Result;
 use crate::commands::CommandResult::{Failure, Success};
+use crate::models::zone::{Zone, ZoneKind};
+use crate::error::{AppError, AppResult};
 use crate::input::parser::Intent;
 
 const USAGE: &str = "Usage:\n  playtest                # exit playtest\n  playtest <bp>           # enter playtest for blueprint <bp>\n";
@@ -19,7 +20,7 @@ enum Next {
 }
 
 
-pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
+pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
     if intent.args.len() == 1 {
         // No argument, so exit playtest
         return exit_playtest(ctx.clone()).await;
@@ -34,7 +35,7 @@ pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult>
 }
 
 pub fn check_playtest(ctx: Arc<CmdCtx>) -> Next {
-    let Some(mut s) = ctx.sess.read().map_err(|_| anyhow::anyhow!("Could not acquire write lock")) else {
+    let Ok(s) = ctx.sess.read() else {
         return Next::Error;
     };
 
@@ -50,38 +51,57 @@ pub fn check_playtest(ctx: Arc<CmdCtx>) -> Next {
     Next::ExitToLive(c)
 }
 
-pub async fn exit_playtest(ctx: Arc<CmdCtx>) -> Result<CommandResult> {
+pub async fn exit_playtest(ctx: Arc<CmdCtx>) -> AppResult<CommandResult> {
     match check_playtest(ctx.clone()) {
         Next::Error => Ok(Failure("Internal error.\n".into())),
         Next::NotLoggedIn => Ok(Failure("Login required.\n".into())),
         Next::NotInPlaytest => Ok(Failure("[playtest] you are not in playtest.\n".into())),
         Next::ExitToLive(c) => {
-            let Some(mut s) = ctx.sess.write().map_err(|_| anyhow::anyhow!("Could not acquire write lock"))?;
+            let mut s = ctx.sess.write();
             s.prev_cursors.pop();
-            s.cursor = c;
+            s.cursor = Some(c);
 
             Ok(Success(format!("[playtest] exited.\n")))
         }
     }
 }
 
-pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str) -> Result<CommandResult> {
-    let new_c = Cursor{};
+pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str) -> AppResult<CommandResult> {
+    // Load blueprint
+    // Get entry of blueprint
+    // Create new zone
+
+    let account_id = ctx.account_id().map_err(|_| AppError::NotLoggedIn)?;
+
+    ctx.state.registry.services.blueprint.get_by_key(bp_key).await
+        .map_err(|e| anyhow::anyhow!("Database error: {e}"))?
+        .ok_or_else(|| anyhow::anyhow!("Blueprint '{bp_key}' not found."))?;
+
+    let new_c = Cursor{
+        zone: Zone::ephemeral(),
+        zone_kind: ZoneKind::Test { owner: account_id },      // @TODO: This will go wrong
+        bp,
+        room: RoomView {},
+    };
 
     match check_playtest(ctx.clone()) {
         Next::Error => Ok(Failure("Internal error.\n".into())),
         Next::NotLoggedIn => Ok(Failure("Login required.\n".into())),
         Next::ExitToLive(_) => {
-            let Some(mut s) = ctx.sess.write().map_err(|_| anyhow::anyhow!("Could not acquire write lock"))?;
-            s.prev_cursors.push(s.cursor);
-            s.cursor = new_c;
+            let s = ctx.sess.write();
+            if let Some(c) = s.cursor.clone() {
+                s.prev_cursors.push(c);
+            }
+            s.cursor = Some(new_c);
 
             Ok(Success(format!("[playtest] entered recursive blueprint '{bp_key}'.\n")))
         },
         Next::NotInPlaytest => {
-            let Some(mut s) = ctx.sess.write().map_err(|_| anyhow::anyhow!("Could not acquire write lock"))?;
-            s.prev_cursors.push(s.cursor);
-            s.cursor = new_c;
+            let s = ctx.sess.write();
+            if let Some(c) = s.cursor.clone() {
+                s.prev_cursors.push(c);
+            }
+            s.cursor = Some(new_c);
 
             Ok(Success(format!("[playtest] entered blueprint '{bp_key}'.\n")))
         }

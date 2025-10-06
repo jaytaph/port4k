@@ -1,6 +1,6 @@
 use crate::hardening::{ALLOWED_DIRS, FORBIDDEN_LUA_TOKENS, MAX_LUA_BYTES};
 use crate::util::{list_yaml_files_guarded, resolve_content_subdir};
-use anyhow::{Context, Result, bail};
+use anyhow::Context;
 use mlua::Lua;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -8,6 +8,7 @@ use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::{fs, path::Path};
 use tokio_postgres::Transaction;
+use crate::error::{AppError, AppResult};
 
 #[derive(Debug, Deserialize)]
 pub struct RoomYaml {
@@ -76,7 +77,7 @@ pub struct ScriptObjectHandlers {
     pub _use_compat: Option<String>, // compat alias
 }
 
-pub async fn import_blueprint_subdir(bp: &str, subdir: &str, content_base: &Path, db: &crate::db::Db) -> Result<()> {
+pub async fn import_blueprint_subdir(bp: &str, subdir: &str, content_base: &Path, db: &crate::db::Db) -> AppResult<()> {
     let dir = resolve_content_subdir(content_base, subdir)?;
     let files = list_yaml_files_guarded(&dir)?;
 
@@ -115,7 +116,7 @@ pub async fn import_blueprint_subdir(bp: &str, subdir: &str, content_base: &Path
     Ok(())
 }
 
-async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> Result<()> {
+async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> AppResult<()> {
     let title = &r.name;
     let short = r.short.as_deref().unwrap_or_default();
     let body = &r.full_desc;
@@ -183,7 +184,7 @@ async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> 
     Ok(())
 }
 
-fn validate_lua_for_room(room: &RoomYaml) -> Result<()> {
+fn validate_lua_for_room(room: &RoomYaml) -> AppResult<()> {
     // Fresh state per room (no std libs loaded by default)
     let lua = Lua::new();
 
@@ -211,32 +212,32 @@ fn validate_lua_for_room(room: &RoomYaml) -> Result<()> {
     Ok(())
 }
 
-pub fn validate_room_semantics(room: &RoomYaml) -> Result<()> {
+pub fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
     // id/name/desc basics
     if room.id.trim().is_empty() {
-        bail!("room id empty");
+        return Err(AppError::Validation("room id empty".into()));
     }
     if room.name.trim().is_empty() {
-        bail!("room name empty");
+        return Err(AppError::Validation("room name empty".into()));
     }
     if room.full_desc.trim().is_empty() {
-        bail!("room desc empty");
+        return Err(AppError::Validation("room desc empty".into()));
     }
     if room.id.len() > 64 {
-        bail!("room id too long");
+        return Err(AppError::Validation("room id too long".into()));
     }
     if room.name.len() > 128 {
-        bail!("room name too long");
+        return Err(AppError::Validation("room name too long".into()));
     }
 
     // unique object ids
     let mut ids = HashSet::new();
     for o in &room.objects {
         if o.id.trim().is_empty() {
-            bail!("object with empty id");
+            return Err(AppError::Validation("object with empty id".into()));
         }
         if !ids.insert(&o.id) {
-            bail!("duplicate object id: {}", o.id);
+            return Err(AppError::Validation(format!("duplicate object id: {}", o.id)));
         }
     }
 
@@ -245,7 +246,7 @@ pub fn validate_room_semantics(room: &RoomYaml) -> Result<()> {
     for cap in re.captures_iter(&room.full_desc) {
         let id = cap[1].to_string();
         if !ids.contains(&id) {
-            bail!("description references unknown object id: {}", id);
+            return Err(AppError::Validation("description references unknown object id: {}".into()));
         }
     }
 
@@ -254,31 +255,31 @@ pub fn validate_room_semantics(room: &RoomYaml) -> Result<()> {
     for ex in &room.exits {
         let d = ex.dir.to_ascii_lowercase();
         if !ALLOWED_DIRS.contains(&d.as_str()) {
-            bail!("invalid exit dir '{}'", d);
+            return Err(AppError::Validation(format!("invalid exit dir '{}'", d)));
         }
         if ex.to.trim().is_empty() || !slug.is_match(&ex.to) {
-            bail!("invalid exit target '{}'", ex.to);
+            return Err(AppError::Validation(format!("invalid exit target '{}'", ex.to)));
         }
     }
 
     Ok(())
 }
 
-fn check_lua_string(name: &str, code: &str) -> Result<()> {
+fn check_lua_string(name: &str, code: &str) -> AppResult<()> {
     let bytes = code.as_bytes();
     if bytes.len() > MAX_LUA_BYTES {
-        bail!("Lua chunk '{}' too large ({} bytes)", name, bytes.len());
+        return Err(AppError::Validation(format!("Lua chunk '{}' too large ({} bytes)", name, bytes.len())));
     }
     let lower = code.to_ascii_lowercase();
     for tok in FORBIDDEN_LUA_TOKENS {
         if lower.contains(&tok.to_ascii_lowercase()) {
-            bail!("Lua chunk '{}' contains forbidden token '{}'", name, tok);
+            return Err(AppError::Validation(format!("Lua chunk '{}' contains forbidden token '{}'", name, tok)));
         }
     }
     Ok(())
 }
 
-fn compile_lua_chunk(lua: &Lua, name: &str, code: &str) -> Result<()> {
+fn compile_lua_chunk(lua: &Lua, name: &str, code: &str) -> AppResult<()> {
     check_lua_string(name, code)?;
 
     lua.load(code)

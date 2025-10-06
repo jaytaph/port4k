@@ -1,8 +1,8 @@
-use crate::db::types::RoomId;
-use super::Db;
+use crate::models::types::RoomId;
+use super::{Db, DbResult};
 
 impl Db {
-    pub async fn room_view(&self, room_id: RoomId) -> anyhow::Result<String> {
+    pub async fn room_view(&self, room_id: RoomId) -> DbResult<String> {
         let client = self.pool.get().await?;
         let r = client
             .query_one("SELECT title, body FROM rooms WHERE id=$1", &[&room_id])
@@ -23,7 +23,7 @@ impl Db {
     }
 
     #[allow(unused)]
-    pub async fn room_coin_total(&self, room_id: i64) -> anyhow::Result<i64> {
+    pub async fn room_coin_total(&self, room_id: i64) -> DbResult<i64> {
         let client = self.pool.get().await?;
         let row = client
             .query_one(

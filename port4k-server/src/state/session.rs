@@ -1,7 +1,7 @@
-use crate::db::models::account::Account;
-use crate::db::models::blueprint::Blueprint;
-use crate::db::models::room::RoomView;
-use crate::db::models::zone::{Zone, ZoneKind};
+use crate::models::account::Account;
+use crate::models::blueprint::Blueprint;
+use crate::models::room::RoomView;
+use crate::models::zone::{Zone, ZoneKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnState {
@@ -54,6 +54,7 @@ impl Session {
             account: None,
             state: ConnState::PreLogin,
             cursor: None,
+            prev_cursors: Vec::new(),
             tty_cols: None,
             tty_rows: None,
         }

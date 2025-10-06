@@ -1,9 +1,9 @@
-use crate::db::types::{AccountId, CharacterId, RoomId};
-use super::Db;
+use crate::models::types::{AccountId, CharacterId, RoomId};
+use super::{Db, DbResult};
 
 impl Db {
     /// Returns the room ID of the starting room ("start" zone, "entry" room).
-    pub async fn start_room_id(&self) -> anyhow::Result<RoomId> {
+    pub async fn start_room_id(&self) -> DbResult<RoomId> {
         let client = self.pool.get().await?;
         let row = client
             .query_one(
@@ -18,7 +18,7 @@ impl Db {
         Ok(row.get::<_, RoomId>(0).into())
     }
 
-    pub async fn get_or_create_character(&self, account_id: AccountId, username: &str) -> anyhow::Result<(CharacterId, RoomId)> {
+    pub async fn get_or_create_character(&self, account_id: AccountId, username: &str) -> DbResult<(CharacterId, RoomId)> {
         let client = self.pool.get().await?;
 
         if let Some(row) = client
@@ -59,7 +59,7 @@ impl Db {
         Ok((row.get(0), row.get(1)))
     }
 
-    pub async fn move_character(&self, account_id: AccountId, dir: &str) -> anyhow::Result<Option<RoomId>> {
+    pub async fn move_character(&self, account_id: AccountId, dir: &str) -> DbResult<Option<RoomId>> {
         let client = self.pool.get().await?;
         let row = client
             .query_opt(

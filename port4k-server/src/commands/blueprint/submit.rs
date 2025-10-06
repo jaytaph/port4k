@@ -1,12 +1,12 @@
 //! @bp submit <bp>
 
 use std::sync::Arc;
-use anyhow::Result;
 use crate::commands::{CmdCtx, CommandResult};
 use crate::commands::CommandResult::{Failure, Success};
+use crate::error::AppResult;
 use crate::input::parser::Intent;
 
-pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> Result<CommandResult> {
+pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
     if intent.args.is_empty() {
         return Ok(Failure(super::USAGE.into()));
     }

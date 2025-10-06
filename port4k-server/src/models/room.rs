@@ -1,10 +1,15 @@
 use std::collections::HashMap;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_postgres::Row;
 use uuid::Uuid;
-use crate::db::json_string_vec;
-use crate::db::types::{BlueprintId, Direction, ObjectId, RoomId, ZoneId};
+use crate::db::DbResult;
+use crate::models::json_string_vec_opt;
+use crate::models::types::{BlueprintId, Direction, ObjectId, RoomId, ZoneId};
+
+static OBJ_REF_RE: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r"\{obj:([a-zA-Z0-9_\- ]+)}").unwrap());
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlueprintRoom {
@@ -20,21 +25,21 @@ pub struct BlueprintRoom {
 }
 
 impl BlueprintRoom {
-    pub fn from_row(row: Row) -> Self {
-        let hints_json: Option<Value> = row.try_get("hints").ok();
-        let scripts_json: Option<Value> = row.try_get("scripts").ok();
+    pub fn try_from_row(row: &Row) -> DbResult<Self> {
+        let hints = json_string_vec_opt(row.try_get::<_, Option<Value>>("hints")?, "hints")?;
+        let scripts_inline = json_string_vec_opt(row.try_get::<_, Option<Value>>("scripts")?, "scripts")?;
 
-        BlueprintRoom {
-            id: RoomId(row.get::<_, Uuid>("id")),
-            bp_id: BlueprintId(row.get::<_, Uuid>("bp_id")),
-            key: row.get("key"),
-            title: row.get("title"),
-            body: row.get("body"),
-            lockdown: row.get("lockdown"),
-            short: row.get::<_, Option<String>>("short"),
-            hints: json_string_vec(hints_json),
-            scripts_inline: json_string_vec(scripts_json),
-        }
+        Ok(BlueprintRoom {
+            id: RoomId(row.try_get::<_, Uuid>("id")?),
+            bp_id: BlueprintId(row.try_get::<_, Uuid>("bp_id")?),
+            key: row.try_get("key")?,
+            title: row.try_get("title")?,
+            body: row.try_get("body")?,
+            lockdown: row.try_get("lockdown")?,
+            short: row.try_get("short")?,
+            hints,
+            scripts_inline,
+        })
     }
 }
 
@@ -52,22 +57,25 @@ pub struct RoomExitRow {
 }
 
 impl RoomExitRow {
-    pub fn from_row(row: Row) -> Self {
-        RoomExitRow {
-            from_room_id: RoomId(row.get::<_, Uuid>("from_room_id")),
-            dir: Direction::from(row.get::<_, String>("dir")),
-            to_room_id: RoomId(row.get::<_, Uuid>("to_room_id")),
-            locked: row.get("locked"),
-            description: row.get::<_, Option<String>>("description"),
-            visible_when_locked: row.get("visible_when_locked"),
-        }
+    pub fn try_from_row(row: &Row) -> DbResult<Self> {
+        let dir_s: String = row.try_get("dir")?;
+        let dir = Direction::from(dir_s.as_str());
+
+        Ok(Self {
+            from_room_id: row.try_get("from_room_id")?,
+            dir,
+            to_room_id: row.try_get("to_room_id")?,
+            locked: row.try_get("locked")?,
+            description: row.try_get("description")?,
+            visible_when_locked: row.try_get("visible_when_locked")?,
+        })
     }
 }
 
 /// Row model for `bp_objects`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoomObjectRow {
-    /// Id of the objecct
+    /// The ID of the object
     pub id: ObjectId,
     /// Room the object resides in
     pub room_id: RoomId,
@@ -90,21 +98,20 @@ pub struct RoomObjectRow {
 }
 
 impl RoomObjectRow {
-    pub fn from_row(row: Row) -> Self {
-        let state_json: Option<Value> = row.try_get("state").ok();
-
-        RoomObjectRow {
-            id: row.get::<_, Uuid>("id"),
-            room_id: RoomId(row.get::<_, Uuid>("room_id")),
-            name: row.get("name"),
-            short: row.get("short"),
-            description: row.get("description"),
-            examine: row.get::<_, Option<String>>("examine"),
-            state: json_string_vec(state_json),
-            use_lua: row.get::<_, Option<String>>("use_lua"),
-            position: row.get::<_, Option<i32>>("position"),
-            props: row.get::<_, Option<Value>>("props"),
-        }
+    pub fn try_from_row(row: &Row) -> DbResult<Self> {
+        let state = json_string_vec_opt(row.try_get::<_, Option<Value>>("state")?, "state")?;
+        Ok(Self {
+            id: row.try_get("id")?,
+            room_id: row.try_get("room_id")?,
+            name: row.try_get("name")?,
+            short: row.try_get("short")?,
+            description: row.try_get("description")?,
+            examine: row.try_get("examine")?,
+            state,
+            use_lua: row.try_get("use_lua")?,
+            position: row.try_get("position")?,
+            props: row.try_get("props")?, // stays JSON
+        })
     }
 }
 
@@ -114,6 +121,16 @@ pub struct ObjectNounRow {
     pub room_id: RoomId,
     pub obj_id: ObjectId,
     pub noun: String,
+}
+
+impl ObjectNounRow {
+    pub fn try_from_row(row: &Row) -> DbResult<Self> {
+        Ok(Self {
+            room_id: row.try_get("room_id")?,
+            obj_id: row.try_get("obj_id")?,
+            noun: row.try_get("noun")?,
+        })
+    }
 }
 
 /// Scripts for a room (pulled from live or draft tables).
@@ -128,8 +145,19 @@ pub struct RoomScripts {
 pub struct ZoneRoomState {
     pub zone_id: ZoneId,
     pub room_id: RoomId,
-    pub state: Vec<String>, // arbitrary JSON map
+    pub state: Value,
 }
+
+impl ZoneRoomState {
+    pub fn try_from_row(row: &Row) -> DbResult<Self> {
+        Ok(Self {
+            zone_id: row.try_get("zone_id")?,
+            room_id: row.try_get("room_id")?,
+            state: row.try_get("state")?,
+        })
+    }
+}
+
 
 /// ZoneObjectState overlay for objects in a room in a zone.
 pub struct ZoneObjectState {
@@ -141,7 +169,7 @@ pub struct ZoneObjectState {
     pub obj_id: ObjectId,
     /// Quantity (if applicable)
     pub qty: Option<i32>,
-    /// Any overlayed flags (if any)
+    /// Any overlay flags (if any)
     pub flags: Vec<String>,
     /// additional arbitrary JSON data (if any)
     pub extra: Option<Value>,
@@ -199,14 +227,9 @@ pub struct RoomView {
 impl RoomView {
     /// from fn: `RoomView::visible_exits`
     pub fn visible_exits(&self) -> impl Iterator<Item = &RoomExitRow> {
-        self.exits.iter().filter(|e| {
-            // If room is under lockdown, you could choose to hide exits entirely, or still show visible_when_locked ones.
-            // Here we honor exit visibility rules:
-            if e.locked {
-                e.visible_when_locked
-            } else {
-                true
-            }
+        let lockdown = self.room.lockdown;
+        self.exits.iter().filter(move |e| {
+            if lockdown { e.visible_when_locked } else { !e.locked || e.visible_when_locked }
         })
     }
 
@@ -221,20 +244,17 @@ impl RoomView {
     /// from fn: `RoomView::render_body_with_object_refs`
     /// Replaces `{obj:name}` with the object's `short` text.
     pub fn render_body_with_object_refs(&self) -> String {
-        use regex::Regex;
-        let re = Regex::new(r"\{obj:([a-zA-Z0-9_\- ]+)}").unwrap();
-        re.replace_all(&self.room.body, |caps: &regex::Captures| {
-            let key = caps.get(1).unwrap().as_str();
-            if let Some(obj) = self.object_by_noun(key) {
-                obj.short.to_string()
-            } else {
-                key.to_string() // fallback if not found
-            }
+        OBJ_REF_RE.replace_all(&self.room.body, |caps: &regex::Captures| {
+            let key = &caps[1];
+            self.object_by_noun(key)
+                .map(|o| o.short.as_str())
+                .unwrap_or(key)
+                .to_string()
         }).into_owned()
     }
 
     pub fn with_overlay(mut self, overlay: &[ZoneObjectState]) -> Self {
-        let mut by_id: HashMap<ObjectId, &ZoneObjectState> = overlay.iter().map(|z| (z.obj_id, z)).collect();
+        let by_id: HashMap<ObjectId, &ZoneObjectState> = overlay.iter().map(|z| (z.obj_id, z)).collect();
 
         for o in &mut self.objects {
             if let Some(z) = by_id.get(&o.id) {
@@ -279,7 +299,7 @@ mod tests {
     fn exit(from: RoomId, to: RoomId, locked: bool, visible_when_locked: bool) -> RoomExitRow {
         RoomExitRow {
             from_room_id: from,
-            dir: Direction::from("east".to_string()),
+            dir: Direction::from("east"),
             to_room_id: to,
             locked,
             description: Some("A steel door".into()),
@@ -314,7 +334,7 @@ mod tests {
             qty,
             locked,
             revealed,
-            takable: takeable,
+            takeable,
             stackable,
             is_coin,
         }
