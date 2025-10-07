@@ -8,7 +8,9 @@ use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::{fs, path::Path};
 use tokio_postgres::Transaction;
+use crate::db::DbError;
 use crate::error::{AppError, AppResult};
+use crate::services::ServiceResult;
 
 #[derive(Debug, Deserialize)]
 pub struct RoomYaml {
@@ -77,12 +79,12 @@ pub struct ScriptObjectHandlers {
     pub _use_compat: Option<String>, // compat alias
 }
 
-pub async fn import_blueprint_subdir(bp: &str, subdir: &str, content_base: &Path, db: &crate::db::Db) -> AppResult<()> {
+pub async fn import_blueprint_subdir(bp: &str, subdir: &str, content_base: &Path, db: &crate::db::Db) -> ServiceResult<()> {
     let dir = resolve_content_subdir(content_base, subdir)?;
     let files = list_yaml_files_guarded(&dir)?;
 
-    let mut client = db.pool.get().await?;
-    let tx = client.build_transaction().start().await?;
+    let mut client = db.pool.get().await.map_err(DbError::from)?;
+    let tx = client.build_transaction().start().await.map_err(DbError::from)?;
 
     // Process sequentially for clear error reporting (can be parallelized if needed)
     for path in files {
@@ -112,7 +114,7 @@ pub async fn import_blueprint_subdir(bp: &str, subdir: &str, content_base: &Path
             .with_context(|| format!("upserting room {}", room.id))?;
     }
 
-    tx.commit().await?;
+    tx.commit().await.map_err(DbError::from)?;
     Ok(())
 }
 
@@ -215,38 +217,38 @@ fn validate_lua_for_room(room: &RoomYaml) -> AppResult<()> {
 pub fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
     // id/name/desc basics
     if room.id.trim().is_empty() {
-        return Err(AppError::Validation("room id empty".into()));
+        return Err(AppError::Validation{field: "room", message: "room id empty".into()});
     }
     if room.name.trim().is_empty() {
-        return Err(AppError::Validation("room name empty".into()));
+        return Err(AppError::Validation{field: "room", message: "room name empty".into()});
     }
     if room.full_desc.trim().is_empty() {
-        return Err(AppError::Validation("room desc empty".into()));
+        return Err(AppError::Validation{field: "room", message: "room desc empty".into()});
     }
     if room.id.len() > 64 {
-        return Err(AppError::Validation("room id too long".into()));
+        return Err(AppError::Validation{field: "room", message: "room id too long".into()});
     }
     if room.name.len() > 128 {
-        return Err(AppError::Validation("room name too long".into()));
+        return Err(AppError::Validation{field: "room", message: "room name too long".into()});
     }
 
     // unique object ids
     let mut ids = HashSet::new();
     for o in &room.objects {
         if o.id.trim().is_empty() {
-            return Err(AppError::Validation("object with empty id".into()));
+            return Err(AppError::Validation{field: "object", message: "object with empty id".into() });
         }
         if !ids.insert(&o.id) {
-            return Err(AppError::Validation(format!("duplicate object id: {}", o.id)));
+            return Err(AppError::Validation{field: "object", message: format!("duplicate object id: {}", o.id) });
         }
     }
 
     // {obj:ID} placeholders must reference existing objects
-    let re = Regex::new(r"\{obj:([a-zA-Z0-9_\-]+)\}").unwrap();
+    let re = Regex::new(r"\{obj:([a-zA-Z0-9_\-]+)}").unwrap();
     for cap in re.captures_iter(&room.full_desc) {
         let id = cap[1].to_string();
         if !ids.contains(&id) {
-            return Err(AppError::Validation("description references unknown object id: {}".into()));
+            return Err(AppError::Validation{field: "description", message: "description references unknown object id: {}".into() });
         }
     }
 
@@ -255,10 +257,10 @@ pub fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
     for ex in &room.exits {
         let d = ex.dir.to_ascii_lowercase();
         if !ALLOWED_DIRS.contains(&d.as_str()) {
-            return Err(AppError::Validation(format!("invalid exit dir '{}'", d)));
+            return Err(AppError::Validation{field: "exit", message: format!("invalid exit dir '{}'", d) });
         }
         if ex.to.trim().is_empty() || !slug.is_match(&ex.to) {
-            return Err(AppError::Validation(format!("invalid exit target '{}'", ex.to)));
+            return Err(AppError::Validation{field: "exit", message: format!("invalid exit target '{}'", ex.to) });
         }
     }
 
@@ -268,12 +270,12 @@ pub fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
 fn check_lua_string(name: &str, code: &str) -> AppResult<()> {
     let bytes = code.as_bytes();
     if bytes.len() > MAX_LUA_BYTES {
-        return Err(AppError::Validation(format!("Lua chunk '{}' too large ({} bytes)", name, bytes.len())));
+        return Err(AppError::Validation{field: "exit", message: format!("Lua chunk '{}' too large ({} bytes)", name, bytes.len()) });
     }
     let lower = code.to_ascii_lowercase();
     for tok in FORBIDDEN_LUA_TOKENS {
         if lower.contains(&tok.to_ascii_lowercase()) {
-            return Err(AppError::Validation(format!("Lua chunk '{}' contains forbidden token '{}'", name, tok)));
+            return Err(AppError::Validation{field: "exit", message: format!("Lua chunk '{}' contains forbidden token '{}'", name, tok) });
         }
     }
     Ok(())
@@ -285,7 +287,6 @@ fn compile_lua_chunk(lua: &Lua, name: &str, code: &str) -> AppResult<()> {
     lua.load(code)
         .set_name(name)
         // .context(format!("setting name for chunk {}", name))?
-        .into_function()
-        .with_context(|| format!("Lua syntax error in {}", name))?;
+        .into_function()?;
     Ok(())
 }

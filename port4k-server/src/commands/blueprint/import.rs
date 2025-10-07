@@ -3,12 +3,13 @@
 use std::path::Path;
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput};
-use crate::error::AppResult;
 use crate::input::parser::Intent;
+use crate::{failure, success};
+use crate::services::CommandResult;
 
-pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandOutput> {
+pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     if intent.args.len() < 4 {
-        return Ok(Failure(super::USAGE.into()));
+        return Ok(failure!(super::USAGE));
     }
 
     let bp     = &intent.args[2];
@@ -19,10 +20,10 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandOutput> {
 
     let base_path = Path::new(ctx.state.registry.config.import_dir.as_str());
     match crate::import::import_blueprint_subdir(bp, subdir, &base_path, &ctx.state.registry.db).await {
-        Ok(()) => Ok(Success(format!(
+        Ok(()) => Ok(success!(format!(
             "[bp] imported YAML rooms from {}/{} into `{}`.\n",
             base_path.display(), subdir, bp
         ))),
-        Err(e) => Ok(Failure(format!("[bp] import failed: {:#}\n", e))),
+        Err(e) => Ok(failure!(format!("[bp] import failed: {:#}\n", e))),
     }
 }

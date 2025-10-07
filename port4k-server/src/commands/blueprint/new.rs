@@ -1,21 +1,21 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput};
-use crate::commands::blueprint::utils::current_owner;
-use crate::error::AppResult;
 use crate::input::parser::Intent;
+use crate::{failure, success};
+use crate::services::CommandResult;
 
-pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandOutput> {
+pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     if intent.args.len() < 3 {
-        return Ok(Failure(super::USAGE.into()));
+        return Ok(failure!(super::USAGE));
     }
 
     let bp = &intent.args[2];
     let title = &intent.args[3];
-    let owner = current_owner(ctx.clone())?;
+    let account_id = ctx.account_id()?;
 
-    if ctx.state.registry.services.blueprint.new_blueprint(bp, title, &owner).await? {
-        Ok(Success(format!("[bp] created `{}`: {}\n", bp, title)))
+    if ctx.state.registry.services.blueprint.new_blueprint(bp, title, account_id).await? {
+        Ok(success!(format!("[bp] created `{}`: {}\n", bp, title)))
     } else {
-        Ok(Failure("[bp] already exists.\n".into()))
+        Ok(failure!("[bp] already exists.\n"))
     }
 }

@@ -175,15 +175,14 @@ async fn handle_naws(cols: u16, rows: u16, sess: Arc<RwLock<Session>>) {
 
 async fn dispatch_command<W: AsyncWrite + Unpin>(raw: &str, w: &mut W, state: Arc<AppState>, sess: Arc<RwLock<Session>>) -> AppResult<()> {
     match process_command(raw, state.clone(), sess.clone()).await {
-        Ok(CommandResult::Success(out)) => {
-            if !out.is_empty() {
-                write_with_newline(w, out.as_bytes()).await?;
-            }
-        }
-        Ok(CommandResult::Failure(out)) => {
-            if !out.is_empty() {
-                write_with_newline(w, format!("error: {out}").as_bytes()).await?;
-            }
+        Ok(res) => {
+            let out = if res.is_error {
+                format!("error: {}", res.message)
+            } else {
+                res.message
+            };
+
+            write_with_newline(w, out.as_bytes()).await?;
         }
         Err(e) => {
             write_with_newline(w, format!("error: {e}").as_bytes()).await?;

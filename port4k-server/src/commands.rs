@@ -5,7 +5,7 @@ use parking_lot::RwLock;
 use crate::ansi;
 use crate::models::account::Account;
 use crate::models::types::AccountId;
-use crate::error::{AppError, AppResult};
+use crate::error::CommandError;
 use crate::net::AppState;
 use crate::services::CommandResult;
 
@@ -32,7 +32,7 @@ pub struct CmdCtx {
 
 impl CmdCtx {
     #[inline]
-    fn with_sess<T>(&self, f: impl FnOnce(&Session) -> T) -> AppResult<T> {
+    fn with_sess<T>(&self, f: impl FnOnce(&Session) -> T) -> CommandResult<T> {
         let s = self.sess.read();
         Ok(f(&s))
     }
@@ -41,29 +41,29 @@ impl CmdCtx {
         self.sess.try_read().map_or(false, |s| s.account.is_some())
     }
 
-    pub fn account_id(&self) -> AppResult<AccountId> {
+    pub fn account_id(&self) -> CommandResult<AccountId> {
         self.with_sess(|s| s.account.as_ref().map(|a| a.id))
-            .and_then(|opt| opt.ok_or(AppError::NotLoggedIn))
+            .and_then(|opt| opt.ok_or(CommandError::NotLoggedIn))
     }
 
-    pub fn account(&self) -> AppResult<Account> {
+    pub fn account(&self) -> CommandResult<Account> {
         self.with_sess(|s| s.account.clone())
-            .and_then(|opt| opt.ok_or(AppError::NotLoggedIn))
+            .and_then(|opt| opt.ok_or(CommandError::NotLoggedIn))
     }
 
     pub fn has_cursor(&self) -> bool {
         self.sess.try_read().map_or(false, |s| s.cursor.is_some())
     }
 
-    pub fn cursor(&self) -> AppResult<Cursor> {
+    pub fn cursor(&self) -> CommandResult<Cursor> {
         self.with_sess(|s| s.cursor.clone())
-            .and_then(|opt| opt.ok_or(AppError::NoCursor))
+            .and_then(|opt| opt.ok_or(CommandError::NoCursor))
     }
 }
 
 pub struct CommandOutput {
-    message: String,
-    is_error: bool,
+    pub message: String,
+    pub is_error: bool,
 }
 
 #[macro_export]

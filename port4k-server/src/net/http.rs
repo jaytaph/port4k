@@ -12,6 +12,7 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::lua::LuaJob;
 use crate::{Registry, Session, process_command};
 use tokio::sync::mpsc;
+use crate::commands::CmdCtx;
 use crate::error::AppResult;
 use crate::net::AppState;
 use crate::state::session::Protocol;
@@ -51,6 +52,11 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
     let state = Arc::new(state);
     let sess = Arc::new(RwLock::new(Session::new(Protocol::WebSocket)));
 
+    let ctx = CmdCtx {
+        state: state.clone(),
+        sess: sess.clone(),
+    };
+
     while let Some(Ok(msg)) = socket.recv().await {
         let text = match msg {
             Message::Text(t) => t,
@@ -65,28 +71,20 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
 
         let cmd = text.trim();
         match process_command(cmd, state.clone(), sess.clone()).await {
-            Ok(CommandResult::Success(msg)) => {
-                let resp = if msg.is_empty() {
-                    String::new()
+            Ok(res) => {
+                let resp = if res.is_error {
+                    format!("error: {}\n", res.message)
                 } else {
-                    format!("{}\n", msg)
+                    format!("{}\n", res.message)
                 };
                 let _ = socket
                     .send(Message::Text(format!("{}> ", ensure_nl(resp))))
                     .await;
-                continue;
-            }
-            Ok(CommandResult::Failure(msg)) => {
-                let _ = socket
-                    .send(Message::Text(format!("error: {msg}\n{}> ", state.entry)))
-                    .await;
-                continue;
             }
             Err(e) => {
                 let _ = socket
-                    .send(Message::Text(format!("error: {e}\n{}> ", state.entry)))
+                    .send(Message::Text(format!("error: {}\n> ", e)))
                     .await;
-                continue;
             }
         }
 
@@ -96,8 +94,9 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
         // }
     }
 
-    let account_id = ctx.account_id().map_err(|_| anyhow::anyhow!("Not logged in"))?;
-    state.registry.set_online(account_id, false).await;
+    if let Ok(account) = ctx.account() {
+        state.registry.set_online(&account, false).await;
+    }
 }
 
 fn ensure_nl(mut s: String) -> String {

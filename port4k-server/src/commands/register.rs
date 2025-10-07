@@ -2,21 +2,22 @@ use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput};
 use crate::input::parser::Intent;
 use crate::models::account::Account;
-use crate::error::AppResult;
+use crate::{failure, success};
+use crate::services::CommandResult;
 
-pub async fn register(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandOutput> {
+pub async fn register(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     if intent.args.len() < 2 {
-        return Ok(Failure("Usage: register <name> <password>\n".into()));
+        return Ok(failure!("Usage: register <name> <password>\n"));
     }
 
     let (username, pass) = (intent.args[0].as_str(), intent.args[1].as_str());
     if Account::validate_username(username).is_err() {
-        return Ok(Failure("Invalid username.\n".into()));
+        return Ok(failure!("Invalid username.\n"));
     }
 
     if !ctx.state.registry.services.auth.register(&username, pass).await? {
-        return Ok(Failure("That name is taken.\n".into()))
+        return Ok(failure!("That name is taken.\n"))
     }
 
-    Ok(Success(format!("Account created. You can now `login {} <password>`.\n", username )))
+    Ok(success!(format!("Account created. You can now `login {} <password>`.\n", username )))
 }

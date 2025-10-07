@@ -1,5 +1,7 @@
 use thiserror::Error;
+use tokio::sync::mpsc::error::SendError;
 use crate::db::DbError;
+use crate::lua::LuaJob;
 use crate::models::types::{ObjectId, RoomId};
 
 pub type AppResult<T> = Result<T, AppError>;
@@ -23,6 +25,18 @@ pub enum ServiceError {
 
     #[error(transparent)]
     PasswordHash(#[from] password_hash::Error),
+
+    #[error("validation failed: {field}: {message}")]
+    Validation { field: &'static str, message: String },
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error("Internal error")]
+    Internal(#[from] anyhow::Error),
+
+    // #[error(transparent)]
+    // Postgres(#[from] tokio_postgres::Error),
 }
 
 #[derive(Debug, Error)]
@@ -38,6 +52,21 @@ pub enum CommandError {
 
     #[error(transparent)]
     Service(#[from] ServiceError),
+
+    #[error(transparent)]
+    Db(#[from] DbError),
+
+    #[error("not logged in")]
+    NotLoggedIn,
+
+    #[error("cursor not found")]
+    NoCursor,
+
+    #[error(transparent)]
+    Send(#[from] SendError<LuaJob>),
+
+    #[error("custom error: {0}")]
+    Custom(String),
 }
 
 #[derive(Debug, Error)]
@@ -51,14 +80,8 @@ pub enum AppError {
     #[error("Global error: {0}")]
     Custom(String),
 
-    #[error("Lua error: {0}")]
-    Lua(&'static str),
-
     #[error("Configuration error: {0}")]
     Config(String),
-
-    #[error("Database error: {0}")]
-    Db(String),
 
     #[error("Invalid arguments: {0}")]
     Args(&'static str),
@@ -67,7 +90,7 @@ pub enum AppError {
     NoCursor,
 
     #[error("validation failed: {field}: {message}")]
-    Validation { field: &'static str, message: &'static str },
+    Validation { field: &'static str, message: String },
 
     #[error("Telnet error: {0}")]
     Telnet(String),
@@ -86,12 +109,21 @@ pub enum AppError {
 
     #[error(transparent)]
     Service(#[from] ServiceError),
-}
 
-impl From<DbError> for AppError {
-    fn from(e: DbError) -> Self {
-        AppError::Db(e.to_string())
-    }
+    #[error(transparent)]
+    Postgres(#[from] tokio_postgres::Error),
+
+    #[error(transparent)]
+    Db(#[from] DbError),
+
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    Lua(#[from] mlua::Error),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 impl From<CommandError> for AppError {

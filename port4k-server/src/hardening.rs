@@ -11,7 +11,8 @@ pub const MAX_TOTAL_BYTES: usize = 32 * 1024 * 1024; // 32 MB per import
 pub const MAX_LUA_BYTES: usize = 64 * 1024; // 64 KB per Lua chunk
 
 /// Whether to allow symlinks when extracting zip files
-pub const ALLOW_SYMLINKS: bool = false;
+pub static ALLOW_SYMLINKS: bool = false;
+
 
 /// Allowed exit directions (case insensitive)
 pub const ALLOWED_DIRS: &[&str] = &[

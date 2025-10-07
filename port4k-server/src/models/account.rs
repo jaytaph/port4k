@@ -52,12 +52,12 @@ impl Account {
     pub fn validate_username(s: &str) -> AppResult<()> {
         let s = s.trim();
         if s.is_empty() {
-            return Err(AppError::Validation { field: "username", message: "cannot be empty" });
+            return Err(AppError::Validation { field: "username", message: "cannot be empty".into() });
         }
         if !s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' )) {
             return Err(AppError::Validation {
                 field: "username",
-                message: "only alphanumeric, hyphen, underscore allowed",
+                message: "only alphanumeric, hyphen, underscore allowed".into(),
             });
         }
         Ok(())

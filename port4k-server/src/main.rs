@@ -45,7 +45,7 @@ async fn main() -> anyhow::Result<()> {
     spawn_background_tasks(registry.clone());
 
     // Start Lua worker thread
-    let lua_tx = start_lua_worker(Handle::current());
+    let lua_tx = start_lua_worker(Handle::current(), registry.clone());
 
 
     // Start HTTP server for WebSocket connections

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::models::blueprint::Blueprint;
 use crate::db::repo::room::RoomRepo;
 use crate::error::ServiceError;
+use crate::models::types::AccountId;
 use crate::services::ServiceResult;
 
 pub struct BlueprintService {
@@ -39,8 +40,8 @@ impl BlueprintService {
     }
 
     /// Creates a new blueprint.
-    pub async fn new_blueprint(&self, bp: &str, title: &str, owner: &str) -> ServiceResult<bool> {
-        let res = self.repo.insert_blueprint(bp, title, owner).await?;
+    pub async fn new_blueprint(&self, bp: &str, title: &str, account_id: AccountId) -> ServiceResult<bool> {
+        let res = self.repo.insert_blueprint(bp, title, account_id).await?;
         Ok(res)
     }
 

@@ -5,7 +5,7 @@ use crate::db::{Db, DbError, DbResult};
 use crate::models::blueprint::Blueprint;
 use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts, RoomView, ZoneRoomState};
 use crate::db::repo::room::RoomRepo;
-use crate::models::types::{ObjectId, RoomId, ScriptSource, ZoneId};
+use crate::models::types::{AccountId, ObjectId, RoomId, ScriptSource, ZoneId};
 
 pub struct RoomRepository {
     pub db: Arc<Db>,
@@ -298,16 +298,16 @@ impl RoomRepo for RoomRepository {
 
         Ok(n == 1)
     }
-    async fn insert_blueprint(&self, bp_key: &str, title: &str, owner: &str) -> DbResult<bool> {
+    async fn insert_blueprint(&self, bp_key: &str, title: &str, account_id: AccountId) -> DbResult<bool> {
         let c = self.db.get_client().await?;
 
         let n = c.execute(
             r#"
-            INSERT INTO blueprints (key, title, owner, status)
+            INSERT INTO blueprints (key, title, owner_id, status)
             VALUES ($1, $2, $3, 'draft')
             ON CONFLICT (key) DO NOTHING
             "#,
-            &[&bp_key, &title, &owner],
+            &[&bp_key, &title, &account_id],
         ).await?;
 
         Ok(n == 1)

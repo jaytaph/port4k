@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use tokio_postgres::Row;
 use crate::db::{Db, DbError, DbResult};
+use crate::error::{AppError, AppResult};
 use crate::models::blueprint::Blueprint;
 use crate::models::room::RoomView;
 use crate::models::types::{AccountId, ObjectId, RoomId, ZoneId};
@@ -143,13 +144,13 @@ pub trait ZoneViewRepo: Send + Sync {
 
 #[async_trait]
 pub trait ZoneUnitOfWork: Send {
-    async fn commit(self: Box<Self>) -> DbResult<()>;
-    async fn rollback(self: Box<Self>) -> DbResult<()>;
+    async fn commit(self: Box<Self>) -> AppResult<()>;
+    async fn rollback(self: Box<Self>) -> AppResult<()>;
 
-    async fn update_inventory(&mut self, room_id: RoomId, obj_id: ObjectId, qty: i32) -> DbResult<bool>;
-    async fn update_xp(&mut self, account_id: AccountId, amount: i32) -> DbResult<bool>;
-    async fn update_health(&mut self, account_id: AccountId, amount: i32) -> DbResult<bool>;
-    async fn update_coins(&mut self, account_id: AccountId, amount: i32) -> DbResult<bool>;
+    async fn update_inventory(&mut self, room_id: RoomId, obj_id: ObjectId, qty: i32) -> AppResult<bool>;
+    async fn update_xp(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool>;
+    async fn update_health(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool>;
+    async fn update_coins(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool>;
 }
 
 #[async_trait]
@@ -171,12 +172,11 @@ impl DbBackend {
 #[async_trait]
 impl ZoneBackend for DbBackend {
     async fn begin(&self, zone_ctx: &ZoneContext) -> DbResult<Box<dyn ZoneUnitOfWork>> {
-        let mut client = self.db.get_client().await?;
+        let client = self.db.get_client().await?;
 
-        let tx = client.build_transaction().start().await?;
         Ok(Box::new(DbUow {
             zone_id: zone_ctx.zone.id,
-            tx: Some(tx),
+            client,
             pending: Pending::default(),
         }))
     }
@@ -195,15 +195,14 @@ impl ZoneViewRepo for DbBackend {
 // -----------------------------------------------------------------------------------------------
 struct DbUow {
     zone_id: ZoneId,
-    tx: Option<deadpool_postgres::Transaction<'static>>,
+    client: deadpool_postgres::Client,
     pending: Pending,
 }
 
 #[async_trait]
 impl ZoneUnitOfWork for DbUow {
-    async fn commit(mut self: Box<Self>) -> DbResult<()> {
-        // Take the tx so we can't use self after commit
-        let mut tx = self.tx.take().expect("transaction already consumed");
+    async fn commit(mut self: Box<Self>) -> AppResult<()> {
+        let tx = self.client.build_transaction().start().await?;
 
         // 1) validate and apply room decrements (with row lock)
         for (room_id, obj_id, need) in &self.pending.decs {
@@ -276,29 +275,27 @@ impl ZoneUnitOfWork for DbUow {
         Ok(())
     }
 
-    async fn rollback(mut self: Box<Self>) -> DbResult<()> {
-        if let Some(tx) = self.tx.take() {
-            tx.rollback().await?;
-        }
+    async fn rollback(mut self: Box<Self>) -> AppResult<()> {
+        // No need for rollback, as the transaction is not really started until commit
         Ok(())
     }
 
-    async fn update_inventory(&mut self, room_id: RoomId, obj_id: ObjectId, qty: i32) -> DbResult<bool> {
+    async fn update_inventory(&mut self, room_id: RoomId, obj_id: ObjectId, qty: i32) -> AppResult<bool> {
         self.pending.decs.push((room_id, obj_id, qty));
         Ok(true)
     }
 
-    async fn update_xp(&mut self, account_id: AccountId, amount: i32) -> DbResult<bool> {
+    async fn update_xp(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool> {
         self.pending.xp_adds.push((account_id, amount));
         Ok(true)
     }
 
-    async fn update_health(&mut self, account_id: AccountId, amount: i32) -> DbResult<bool> {
+    async fn update_health(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool> {
         self.pending.health_deltas.push((account_id, amount));
         Ok(true)
     }
 
-    async fn update_coins(&mut self, account_id: AccountId, amount: i32) -> DbResult<bool> {
+    async fn update_coins(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool> {
         self.pending.coin_adds.push((account_id, amount));
         Ok(true)
     }
@@ -366,7 +363,7 @@ struct MemUow {
 
 #[async_trait]
 impl ZoneUnitOfWork for MemUow {
-    async fn commit(self: Box<Self>) -> DbResult<()> {
+    async fn commit(self: Box<Self>) -> AppResult<()> {
         let _g = self.z.commit_lock.lock();
 
         // validate decs
@@ -392,26 +389,29 @@ impl ZoneUnitOfWork for MemUow {
             *self.z.items.entry((*acct, ObjectId::new())).or_insert(0) += *d; // placeholder
         }
         for (acct, amt) in &self.pending.xp_adds {
-            &self.z.xp.entry(*acct).or_insert(0) += *amt;
+            *self.z.xp.entry(*acct).or_insert(0) += *amt;
         }
         Ok(())
     }
 
-    async fn rollback(self: Box<Self>) -> DbResult<()> { Ok(()) }
+    async fn rollback(self: Box<Self>) -> AppResult<()> { Ok(()) }
 
-    async fn update_inventory(&mut self, room_id: RoomId, obj: ObjectId, qty: i32) -> DbResult<bool> {
+    async fn update_inventory(&mut self, room_id: RoomId, obj: ObjectId, qty: i32) -> AppResult<bool> {
         self.pending.decs.push((room_id, obj, qty));
         Ok(true) // final check in commit
     }
-    async fn update_xp(&mut self, acct: AccountId, amt: i32) -> DbResult<bool> {
+
+    async fn update_xp(&mut self, acct: AccountId, amt: i32) -> AppResult<bool> {
         self.pending.xp_adds.push((acct, amt));
         Ok(true)
     }
-    async fn update_health(&mut self, acct: AccountId, d: i32) -> DbResult<bool> {
+
+    async fn update_health(&mut self, acct: AccountId, d: i32) -> AppResult<bool> {
         self.pending.health_deltas.push((acct, d));
         Ok(true)
     }
-    async fn update_coins(&mut self, acct: AccountId, amt: i32) -> DbResult<bool> {
+
+    async fn update_coins(&mut self, acct: AccountId, amt: i32) -> AppResult<bool> {
         self.pending.coin_adds.push((acct, amt));
         Ok(true)
     }

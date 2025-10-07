@@ -3,16 +3,17 @@ use crate::commands::{CmdCtx, CommandOutput};
 use crate::input::parser::Intent;
 use crate::state::session::ConnState;
 use crate::services::CommandResult;
+use crate::{failure, success};
 
 pub async fn logout(ctx: Arc<CmdCtx>, _intent: Intent) -> CommandResult<CommandOutput> {
-    let mut s = ctx.sess.write();
-    if s.state == ConnState::PreLogin {
-        return Ok(Failure("You are already logged out.\n".into()));
+    if !ctx.is_logged_in() {
+        return Ok(failure!("You must be logged in to log out.\n"));
     }
 
+    let mut s = ctx.sess.write();
     s.state = ConnState::PreLogin;
     s.account = None;
     s.cursor = None;
 
-    Ok(Success("You have been logged out.\n".into()))
+    Ok(success!("You have been logged out.\n"))
 }

@@ -1,7 +1,7 @@
 use crate::db::DbResult;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts, RoomView, ZoneRoomState};
-use crate::models::types::{RoomId, ScriptSource, ZoneId};
+use crate::models::types::{AccountId, RoomId, ScriptSource, ZoneId};
 
 #[async_trait::async_trait]
 pub trait RoomRepo: Send + Sync {
@@ -17,7 +17,7 @@ pub trait RoomRepo: Send + Sync {
     async fn set_entry(&self, bp_key: &str, room_key: &str) -> DbResult<bool>;
     async fn add_exit(&self, bp_key: &str, from_key: &str, dir: &str, to_key: &str) -> DbResult<bool>;
     async fn set_locked(&self, bp_key: &str, room_key: &str, locked: bool) -> DbResult<bool>;
-    async fn insert_blueprint(&self, bp_key: &str, title: &str, owner: &str) -> DbResult<bool>;
+    async fn insert_blueprint(&self, bp_key: &str, title: &str, account_id: AccountId) -> DbResult<bool>;
     async fn insert_room(&self, bp_key: &str, room_key: &str, title: &str, body: &str) -> DbResult<bool>;
     async fn submit(&self, bp_key: &str) -> DbResult<bool>;
 }

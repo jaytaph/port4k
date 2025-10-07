@@ -1,82 +1,110 @@
 use crate::hardening::{ALLOW_SYMLINKS, MAX_FILE_BYTES, MAX_FILES_PER_IMPORT, MAX_TOTAL_BYTES};
-use anyhow::{Context, bail};
 use std::fs;
-use std::path::{Path, PathBuf};
-use crate::error::{AppError, AppResult};
+use std::path::{Component, Path, PathBuf};
+use crate::error::ServiceError;
+use crate::services::ServiceResult;
 
 pub mod args;
 pub mod telnet;
 
-pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
-    if subdir.is_empty() || subdir == "." || subdir == ".." {
-        return AppError::Custom("invalid subdir name").into();
-    }
-    if subdir.contains('/') || subdir.contains('\\') {
-        return AppError::Custom("subdir must be a single name").into();
-    }
+pub fn resolve_content_subdir(base: &Path, subdir: &str) -> ServiceResult<PathBuf> {
+    let p = Path::new(subdir);
 
-    let base_can = base
-        .canonicalize()
-        .with_context(|| format!("canonicalizing base dir {:?}", base))?;
-    let joined = base_can.join(subdir);
-
-    // Avoid following symlinks for the subdir itself when ALLOW_SYMLINKS = false
-    if !ALLOW_SYMLINKS {
-        let md = fs::symlink_metadata(&joined).with_context(|| format!("stat {}", joined.display()))?;
-        if md.file_type().is_symlink() {
-            bail!("subdir is a symlink, not allowed: {}", joined.display());
+    let mut comps = p.components();
+    match comps.next() {
+        Some(Component::Normal(_)) if comps.next().is_none() => {} // ok
+        _ => {
+            return Err(ServiceError::Validation {
+                field: "subdir",
+                message: "must be a single path segment".into(),
+            });
         }
     }
 
-    let target_can = joined
-        .canonicalize()
-        .with_context(|| format!("canonicalizing {}", joined.display()))?;
+    // Resolve base and join
+    let base_can = base.canonicalize()?;
+    let joined = base_can.join(p);
+
+    if !ALLOW_SYMLINKS {
+        let md = fs::symlink_metadata(&joined)?;
+        if md.file_type().is_symlink() {
+            return Err(ServiceError::Validation {
+                field: "subdir",
+                message: format!("symlink not allowed: {}", joined.display()).into(),
+            });
+        }
+    }
+
+    // Canonicalize the target and enforce containment
+    let target_can = joined.canonicalize()?;
     if !target_can.starts_with(&base_can) {
-        bail!("path escapes content base");
+        return Err(ServiceError::Validation {
+            field: "subdir",
+            message: "path escapes content base".into(),
+        });
     }
     if !target_can.is_dir() {
-        bail!("not a directory: {}", target_can.display());
+        return Err(ServiceError::Validation {
+            field: "subdir",
+            message: format!("not a directory: {}", target_can.display()).into(),
+        });
     }
 
     Ok(target_can)
 }
 
-pub fn list_yaml_files_guarded(dir: &Path) -> AppResult<Vec<PathBuf>> {
+pub fn list_yaml_files_guarded(dir: &Path) -> ServiceResult<Vec<PathBuf>> {
+    use std::fs;
+
     let mut files = Vec::new();
-    let mut total = 0usize;
+    let mut total: u64 = 0;
 
-    for e in fs::read_dir(dir).with_context(|| format!("read_dir {}", dir.display()))? {
-        let e = e?;
-        let p = e.path();
-        if !p.is_file() {
-            continue;
-        }
-        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        if !(name.ends_with(".yml") || name.ends_with(".yaml")) {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        // Only plain files
+        if !entry.file_type()?.is_file() {
             continue;
         }
 
-        if !ALLOW_SYMLINKS {
-            let md = fs::symlink_metadata(&p)?;
-            if md.file_type().is_symlink() {
-                // skip symlinked files
-                continue;
-            }
+        // Only .yml / .yaml
+        match path.extension().and_then(|s| s.to_str()) {
+            Some("yml") | Some("yaml") => {}
+            _ => continue,
         }
-        let len = fs::metadata(&p)?.len() as usize;
-        if len > MAX_FILE_BYTES {
-            bail!("file too large: {} ({} bytes)", p.display(), len);
+
+        if !ALLOW_SYMLINKS && fs::symlink_metadata(&path)?.file_type().is_symlink() {
+            continue;
         }
+
+        // Enforce per-file size and cumulative limits
+        let len = fs::metadata(&path)?.len(); // u64
+        if len > MAX_FILE_BYTES as u64 {
+            return Err(ServiceError::Validation {
+                field: "import",
+                message: format!("file too large: {} ({} bytes)", path.display(), len).into(),
+            });
+        }
+
         total = total.saturating_add(len);
-        if total > MAX_TOTAL_BYTES {
-            bail!("import exceeds total size limit");
+        if total > MAX_TOTAL_BYTES as u64 {
+            return Err(ServiceError::Validation {
+                field: "import",
+                message: "import exceeds total size limit".into(),
+            });
         }
 
-        files.push(p);
+        files.push(path);
+
         if files.len() > MAX_FILES_PER_IMPORT {
-            bail!("too many files (> {})", MAX_FILES_PER_IMPORT);
+            return Err(ServiceError::Validation {
+                field: "import",
+                message: format!("too many files (> {})", MAX_FILES_PER_IMPORT).into(),
+            });
         }
     }
+
     files.sort();
     Ok(files)
 }

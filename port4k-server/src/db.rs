@@ -21,6 +21,7 @@ pub enum DbError {
 
     #[error(transparent)]
     Pg(#[from] tokio_postgres::Error),
+
     #[error(transparent)]
     Migrate(#[from] refinery::Error),
 

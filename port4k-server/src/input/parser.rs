@@ -44,6 +44,36 @@ pub enum Verb {
     ScDebug,
 }
 
+impl Verb {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Verb::Look => "look",
+            Verb::Take => "take",
+            Verb::Drop => "drop",
+            Verb::Open => "open",
+            Verb::Close => "close",
+            Verb::Unlock => "unlock",
+            Verb::Lock => "lock",
+            Verb::Use => "use",
+            Verb::Put => "put",
+            Verb::Talk => "talk",
+            Verb::Go => "go",
+            Verb::Inventory => "inventory",
+            Verb::Help => "help",
+            Verb::Quit => "quit",
+            Verb::Who => "who",
+            Verb::Login => "login",
+            Verb::Logout => "logout",
+            Verb::Register => "register",
+            Verb::Unknown => "unknown",
+            Verb::ScBlueprint => "@bp",
+            Verb::ScPlaytest => "@playtest",
+            // Verb::ScScript => "@script",
+            Verb::ScDebug => "@debug",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Preposition {
     At,

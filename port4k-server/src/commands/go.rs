@@ -1,11 +1,13 @@
 use std::sync::Arc;
-use crate::commands::CmdCtx;
+use crate::commands::{CmdCtx, CommandOutput};
 use crate::input::parser::Intent;
 use crate::error::AppResult;
+use crate::{failure, success};
+use crate::services::CommandResult;
 
 pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     if intent.args.is_empty() {
-        return Ok(Failure("Usage: go <direction>\n".into()));
+        return Ok(failure!("Usage: go <direction>\n".into()));
     }
     let dir = intent.args[0].to_ascii_lowercase();
 
@@ -25,9 +27,9 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput
                     }
                 }
                 let view = ctx.state.registry.db.room_view(new_room).await?;
-                Ok(Success(view))
+                Ok(success!(view))
             }
-            None => Ok(Failure("You can't go that way.\n".into())),
+            None => Ok(failure!("You can't go that way.\n".into())),
         },
         Some(WorldMode::Playtest { bp, room, .. }) => {
             match ctx.state.registry.db.bp_move(&bp, &room, &dir).await? {
@@ -55,11 +57,11 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput
                         .bp_room_view(&bp, &next, 80)
                         .await?
                         .unwrap_or_else(|| "[playtest] room missing\n".into());
-                    Ok(Success(format!("{view}{extra}")))
+                    Ok(success!(format!("{view}{extra}")))
                 }
-                None => Ok(Failure("You can't go that way (playtest).\n".into())),
+                None => Ok(failure!("You can't go that way (playtest).\n".into())),
             }
         }
-        None => Ok(Failure("You are nowhere.\n".into())),
+        None => Ok(failure!("You are nowhere.\n".into())),
     }
 }
