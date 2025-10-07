@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use crate::db::repo::account::AccountRepo;
-use crate::error::AppResult;
+use crate::services::ServiceResult;
 
 pub struct AccountService {
     repo: Arc<dyn AccountRepo>,
@@ -11,7 +11,7 @@ impl AccountService {
         Self { repo }
     }
 
-    pub async fn exists(&self, username: &str) -> AppResult<bool> {
+    pub async fn exists(&self, username: &str) -> ServiceResult<bool> {
         Ok(self.repo.get_by_username(username).await?.is_some())
     }
 }

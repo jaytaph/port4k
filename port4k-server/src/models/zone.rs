@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use tokio_postgres::Row;
 use crate::db::{Db, DbError, DbResult};
-use crate::error::{AppError, AppResult};
 use crate::models::blueprint::Blueprint;
 use crate::models::room::RoomView;
 use crate::models::types::{AccountId, ObjectId, RoomId, ZoneId};
@@ -139,23 +138,23 @@ impl ZoneRouter {
 
 #[async_trait]
 pub trait ZoneViewRepo: Send + Sync {
-    async fn room_view(&self, zone_ctx: &ZoneContext, room_id: RoomId, width: u16) -> AppResult<RoomView>;
+    async fn room_view(&self, zone_ctx: &ZoneContext, room_id: RoomId, width: u16) -> DbResult<RoomView>;
 }
 
 #[async_trait]
 pub trait ZoneUnitOfWork: Send {
-    async fn commit(self: Box<Self>) -> AppResult<()>;
-    async fn rollback(self: Box<Self>) -> AppResult<()>;
+    async fn commit(self: Box<Self>) -> DbResult<()>;
+    async fn rollback(self: Box<Self>) -> DbResult<()>;
 
-    async fn update_inventory(&mut self, room_id: RoomId, obj_id: ObjectId, qty: i32) -> AppResult<bool>;
-    async fn update_xp(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool>;
-    async fn update_health(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool>;
-    async fn update_coins(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool>;
+    async fn update_inventory(&mut self, room_id: RoomId, obj_id: ObjectId, qty: i32) -> DbResult<bool>;
+    async fn update_xp(&mut self, account_id: AccountId, amount: i32) -> DbResult<bool>;
+    async fn update_health(&mut self, account_id: AccountId, amount: i32) -> DbResult<bool>;
+    async fn update_coins(&mut self, account_id: AccountId, amount: i32) -> DbResult<bool>;
 }
 
 #[async_trait]
 pub trait ZoneBackend: Send + Sync {
-    async fn begin(&self, zone_ctx: &ZoneContext) -> AppResult<Box<dyn ZoneUnitOfWork>>;
+    async fn begin(&self, zone_ctx: &ZoneContext) -> DbResult<Box<dyn ZoneUnitOfWork>>;
 }
 
 // -----------------------------------------------------------------------------------------------
@@ -171,10 +170,10 @@ impl DbBackend {
 
 #[async_trait]
 impl ZoneBackend for DbBackend {
-    async fn begin(&self, zone_ctx: &ZoneContext) -> AppResult<Box<dyn ZoneUnitOfWork>> {
+    async fn begin(&self, zone_ctx: &ZoneContext) -> DbResult<Box<dyn ZoneUnitOfWork>> {
         let mut client = self.db.get_client().await?;
 
-        let tx = client.build_transaction().start().await.map_err(|e| AppError::Db(e.to_string()))?;
+        let tx = client.build_transaction().start().await?;
         Ok(Box::new(DbUow {
             zone_id: zone_ctx.zone.id,
             tx: Some(tx),
@@ -185,7 +184,7 @@ impl ZoneBackend for DbBackend {
 
 #[async_trait]
 impl ZoneViewRepo for DbBackend {
-    async fn room_view(&self, zone: &ZoneContext, room_id: RoomId, width: u16) -> AppResult<RoomView> {
+    async fn room_view(&self, zone: &ZoneContext, room_id: RoomId, width: u16) -> DbResult<RoomView> {
         let _ = zone;
         let _ = room_id;
         let _ = width;
@@ -202,7 +201,7 @@ struct DbUow {
 
 #[async_trait]
 impl ZoneUnitOfWork for DbUow {
-    async fn commit(mut self: Box<Self>) -> AppResult<()> {
+    async fn commit(mut self: Box<Self>) -> DbResult<()> {
         // Take the tx so we can't use self after commit
         let mut tx = self.tx.take().expect("transaction already consumed");
 
@@ -277,29 +276,29 @@ impl ZoneUnitOfWork for DbUow {
         Ok(())
     }
 
-    async fn rollback(mut self: Box<Self>) -> AppResult<()> {
+    async fn rollback(mut self: Box<Self>) -> DbResult<()> {
         if let Some(tx) = self.tx.take() {
             tx.rollback().await?;
         }
         Ok(())
     }
 
-    async fn update_inventory(&mut self, room_id: RoomId, obj_id: ObjectId, qty: i32) -> AppResult<bool> {
+    async fn update_inventory(&mut self, room_id: RoomId, obj_id: ObjectId, qty: i32) -> DbResult<bool> {
         self.pending.decs.push((room_id, obj_id, qty));
         Ok(true)
     }
 
-    async fn update_xp(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool> {
+    async fn update_xp(&mut self, account_id: AccountId, amount: i32) -> DbResult<bool> {
         self.pending.xp_adds.push((account_id, amount));
         Ok(true)
     }
 
-    async fn update_health(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool> {
+    async fn update_health(&mut self, account_id: AccountId, amount: i32) -> DbResult<bool> {
         self.pending.health_deltas.push((account_id, amount));
         Ok(true)
     }
 
-    async fn update_coins(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool> {
+    async fn update_coins(&mut self, account_id: AccountId, amount: i32) -> DbResult<bool> {
         self.pending.coin_adds.push((account_id, amount));
         Ok(true)
     }
@@ -334,14 +333,14 @@ struct MemZone {
 
 #[async_trait]
 impl ZoneBackend for MemoryBackend {
-    async fn begin(&self, zone_ctx: &ZoneContext) -> AppResult<Box<dyn ZoneUnitOfWork>> {
+    async fn begin(&self, zone_ctx: &ZoneContext) -> DbResult<Box<dyn ZoneUnitOfWork>> {
         Ok(Box::new(MemUow { z: self.zone(zone_ctx.zone.id), pending: Default::default() }))
     }
 }
 
 #[async_trait]
 impl ZoneViewRepo for MemoryBackend {
-    async fn room_view(&self, zone_ctx: &ZoneContext, room_id: RoomId, width: u16) -> AppResult<RoomView> {
+    async fn room_view(&self, zone_ctx: &ZoneContext, room_id: RoomId, width: u16) -> DbResult<RoomView> {
         let _ = zone_ctx;
         let _ = room_id;
         let _width = width;
@@ -367,7 +366,7 @@ struct MemUow {
 
 #[async_trait]
 impl ZoneUnitOfWork for MemUow {
-    async fn commit(self: Box<Self>) -> AppResult<()> {
+    async fn commit(self: Box<Self>) -> DbResult<()> {
         let _g = self.z.commit_lock.lock();
 
         // validate decs
@@ -398,21 +397,21 @@ impl ZoneUnitOfWork for MemUow {
         Ok(())
     }
 
-    async fn rollback(self: Box<Self>) -> AppResult<()> { Ok(()) }
+    async fn rollback(self: Box<Self>) -> DbResult<()> { Ok(()) }
 
-    async fn update_inventory(&mut self, room_id: RoomId, obj: ObjectId, qty: i32) -> AppResult<bool> {
+    async fn update_inventory(&mut self, room_id: RoomId, obj: ObjectId, qty: i32) -> DbResult<bool> {
         self.pending.decs.push((room_id, obj, qty));
         Ok(true) // final check in commit
     }
-    async fn update_xp(&mut self, acct: AccountId, amt: i32) -> AppResult<bool> {
+    async fn update_xp(&mut self, acct: AccountId, amt: i32) -> DbResult<bool> {
         self.pending.xp_adds.push((acct, amt));
         Ok(true)
     }
-    async fn update_health(&mut self, acct: AccountId, d: i32) -> AppResult<bool> {
+    async fn update_health(&mut self, acct: AccountId, d: i32) -> DbResult<bool> {
         self.pending.health_deltas.push((acct, d));
         Ok(true)
     }
-    async fn update_coins(&mut self, acct: AccountId, amt: i32) -> AppResult<bool> {
+    async fn update_coins(&mut self, acct: AccountId, amt: i32) -> DbResult<bool> {
         self.pending.coin_adds.push((acct, amt));
         Ok(true)
     }

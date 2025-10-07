@@ -1,10 +1,9 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandResult};
+use crate::commands::{CmdCtx, CommandOutput};
 use crate::input::parser::Intent;
-use crate::commands::CommandResult::{Failure, Success};
 use crate::error::AppResult;
 
-pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
+pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandOutput> {
     if intent.args.is_empty() {
         return Ok(Failure("Usage: take coin [N]\n".into()));
     }

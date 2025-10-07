@@ -7,7 +7,6 @@ use parking_lot::RwLock;
 use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::net::tcp::OwnedReadHalf;
-use crate::commands::CommandResult;
 use crate::models::account::Account;
 use crate::error::{AppError, AppResult};
 use crate::net::AppState;

@@ -1,12 +1,15 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandResult};
+use crate::commands::{CmdCtx, CommandOutput};
 use crate::state::session::{ConnState, Cursor};
-use crate::commands::CommandResult::{Failure, Success};
 use crate::models::zone::{Zone, ZoneKind};
 use crate::error::{AppError, AppResult};
 use crate::input::parser::Intent;
+use crate::services::CommandResult;
 
-const USAGE: &str = "Usage:\n  playtest                # exit playtest\n  playtest <bp>           # enter playtest for blueprint <bp>\n";
+const USAGE: &str = r#"Usage:
+  playtest                # exit playtest
+  playtest <bp>           # enter playtest for blueprint <bp>
+"#;
 
 enum Next {
     /// Contains the cursor to return to live mode
@@ -20,7 +23,7 @@ enum Next {
 }
 
 
-pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
+pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     if intent.args.len() == 1 {
         // No argument, so exit playtest
         return exit_playtest(ctx.clone()).await;

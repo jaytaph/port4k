@@ -1,8 +1,8 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandResult};
-use crate::commands::CommandResult::{Failure, Success};
-use crate::error::{AppError, AppResult};
+use crate::commands::{CmdCtx, CommandOutput};
+use crate::error::AppError;
 use crate::input::parser::Intent;
+use crate::services::CommandResult;
 use crate::util::args::parse_bp_room_key;
 
 const USAGE: &str = "Usage:
@@ -10,7 +10,7 @@ const USAGE: &str = "Usage:
   @bp room lock <bp>:<room>
   @bp room unlock <bp>:<room>\n";
 
-pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
+pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     if intent.args.len() < 2 {
         return Ok(Failure(USAGE.into()));
     }

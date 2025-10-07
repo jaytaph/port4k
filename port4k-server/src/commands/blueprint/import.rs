@@ -2,12 +2,11 @@
 
 use std::path::Path;
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandResult};
-use crate::commands::CommandResult::{Failure, Success};
+use crate::commands::{CmdCtx, CommandOutput};
 use crate::error::AppResult;
 use crate::input::parser::Intent;
 
-pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
+pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandOutput> {
     if intent.args.len() < 4 {
         return Ok(Failure(super::USAGE.into()));
     }

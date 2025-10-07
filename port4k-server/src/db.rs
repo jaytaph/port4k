@@ -27,6 +27,9 @@ pub enum DbError {
     #[error(transparent)]
     Build(#[from] BuildError),
 
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+    
     #[error("row decode error: {0}")]
     Decode(&'static str),
 }

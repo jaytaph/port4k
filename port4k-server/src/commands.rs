@@ -1,13 +1,13 @@
 use crate::input::parser::{Verb, parse_command};
-use crate::state::session::Session;
+use crate::state::session::{Cursor, Session};
 use std::sync::Arc;
 use parking_lot::RwLock;
 use crate::ansi;
-use crate::commands::CommandResult::{Failure, Success};
 use crate::models::account::Account;
 use crate::models::types::AccountId;
 use crate::error::{AppError, AppResult};
 use crate::net::AppState;
+use crate::services::CommandResult;
 
 mod balance;
 mod fallback;
@@ -50,18 +50,41 @@ impl CmdCtx {
         self.with_sess(|s| s.account.clone())
             .and_then(|opt| opt.ok_or(AppError::NotLoggedIn))
     }
+
+    pub fn has_cursor(&self) -> bool {
+        self.sess.try_read().map_or(false, |s| s.cursor.is_some())
+    }
+
+    pub fn cursor(&self) -> AppResult<Cursor> {
+        self.with_sess(|s| s.cursor.clone())
+            .and_then(|opt| opt.ok_or(AppError::NoCursor))
+    }
 }
 
-pub enum CommandResult {
-    Success(String),
-    Failure(String),
+pub struct CommandOutput {
+    message: String,
+    is_error: bool,
+}
+
+#[macro_export]
+macro_rules! success {
+    ($msg:expr) => {
+        CommandOutput { is_error: false, message: $msg.to_string() }
+    };
+}
+
+#[macro_export]
+macro_rules! failure {
+    ($msg:expr) => {
+        CommandOutput { is_error: true, message: $msg.to_string() }
+    };
 }
 
 pub async fn process_command(
     raw: &str,
     state: Arc<AppState>,
     sess: Arc<RwLock<Session>>,
-) -> AppResult<CommandResult> {
+) -> CommandResult<CommandOutput> {
     let intent = parse_command(raw);
 
     let ctx = Arc::new(CmdCtx {
@@ -70,20 +93,20 @@ pub async fn process_command(
     });
 
     match intent.verb {
-        Verb::Close => Ok(Success("Goodbye!\n".to_string())),
-        Verb::Help => Ok(Success(help_text())),
+        Verb::Close => Ok(success!("Goodbye!\n".to_string())),
+        Verb::Help => Ok(success!(help_text())),
         Verb::Look => look::look(ctx.clone(), intent).await,
         Verb::Take => take::take(ctx.clone(), intent).await,
-        Verb::Drop => Ok(Failure("Drop command not implemented yet.\n".to_string())),
-        Verb::Open => Ok(Failure("Open command not implemented yet.\n".to_string())),
-        Verb::Unlock => Ok(Failure("Unlock command not implemented yet.\n".to_string())),
-        Verb::Lock => Ok(Failure("Lock command not implemented yet.\n".to_string())),
-        Verb::Use => Ok(Failure("Use command not implemented yet.\n".to_string())),
-        Verb::Put => Ok(Failure("Put command not implemented yet.\n".to_string())),
-        Verb::Talk => Ok(Failure("Talk command not implemented yet.\n".to_string())),
+        Verb::Drop => Ok(failure!("Drop command not implemented yet.\n".to_string())),
+        Verb::Open => Ok(failure!("Open command not implemented yet.\n".to_string())),
+        Verb::Unlock => Ok(failure!("Unlock command not implemented yet.\n".to_string())),
+        Verb::Lock => Ok(failure!("Lock command not implemented yet.\n".to_string())),
+        Verb::Use => Ok(failure!("Use command not implemented yet.\n".to_string())),
+        Verb::Put => Ok(failure!("Put command not implemented yet.\n".to_string())),
+        Verb::Talk => Ok(failure!("Talk command not implemented yet.\n".to_string())),
         Verb::Go => go::go(ctx.clone(), intent).await,
-        Verb::Inventory => Ok(Failure("Inventory command not implemented yet.\n".to_string())),
-        Verb::Quit => Ok(Success("Goodbye!\n".to_string())),
+        Verb::Inventory => Ok(failure!("Inventory command not implemented yet.\n".to_string())),
+        Verb::Quit => Ok(success!("Goodbye!\n".to_string())),
         Verb::Who => who::who(ctx.clone()).await,
 
         Verb::Logout => logout::logout(ctx.clone(), intent).await,
@@ -95,8 +118,7 @@ pub async fn process_command(
         // Verb::ScScript => script::script(ctx.clone(), intent).await,
         Verb::ScDebug => debug_cmd::debug_cmd(ctx.clone(), intent).await,
 
-        Verb::Unknown => Ok(Failure("Unknown command. Try `help`.\n".to_string())),
-
+        Verb::Unknown => Ok(failure!("Unknown command. Try `help`.\n".to_string())),
 
         // // Namespaced commands
         // v if v.starts_with('@') => match &v[1..] {

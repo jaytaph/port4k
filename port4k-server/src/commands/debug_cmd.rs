@@ -1,10 +1,10 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandResult};
-use crate::commands::CommandResult::{Failure, Success};
+use crate::commands::{CmdCtx, CommandOutput};
 use crate::error::AppResult;
 use crate::input::parser::Intent;
+use crate::services::CommandResult;
 
-pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
+pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     if intent.args.len() < 2 {
         return Ok(Failure("Usage: debug where\n".into()));
     }

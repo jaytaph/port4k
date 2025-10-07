@@ -5,7 +5,7 @@ use rand_core::OsRng;
 use crate::models::account::Account;
 use crate::db::repo::account::AccountRepo;
 use crate::models::types::AccountId;
-use crate::error::{AppError, AppResult};
+use crate::services::ServiceResult;
 
 pub struct AuthService {
     repo: Arc<dyn AccountRepo>,
@@ -18,7 +18,7 @@ impl AuthService {
         Self { repo, argon }
     }
 
-    pub async fn register(&self, username: &str, password: &str) -> AppResult<bool> {
+    pub async fn register(&self, username: &str, password: &str) -> ServiceResult<bool> {
         if self.repo.get_by_username(username).await?.is_some() {
             return Ok(false);
         }
@@ -26,9 +26,7 @@ impl AuthService {
         let salt = SaltString::generate(&mut OsRng);
         let hash = self
             .argon
-            .hash_password(password.as_bytes(), &salt)
-            .map_err(|e| AppError::Custom(e.to_string()))
-            .await?
+            .hash_password(password.as_bytes(), &salt)?
             .to_string();
 
         let account = Account {
@@ -49,20 +47,21 @@ impl AuthService {
 
         match self.repo.insert_account(account).await {
             Ok(_) => Ok(true),
-            Err(e) => Err(AppError::Custom(e.to_string())),
+            Err(e) => Err(e.into()),
         }
     }
 
-    pub async fn authenticate(&self, username: &str, password: &str) -> AppResult<bool> {
+    pub async fn authenticate(&self, username: &str, password: &str) -> ServiceResult<bool> {
         let Some(account) = self.repo.get_by_username(username).await? else {
             return Ok(false);
         };
 
-        let parsed = PasswordHash::new(&account.password_hash).map_err(|e| AppError::Custom(e.to_string()))?;
+        let parsed = PasswordHash::new(&account.password_hash)?;
         Ok(self.argon.verify_password(password.as_bytes(), &parsed).is_ok())
     }
 
-    pub async fn update_last_login(&self, account_id: AccountId) -> AppResult<()> {
-        self.repo.update_last_login(account_id).await
+    pub async fn update_last_login(&self, account_id: AccountId) -> ServiceResult<()> {
+        self.repo.update_last_login(account_id).await?;
+        Ok(())
     }
 }

@@ -8,20 +8,17 @@ use crate::db::Db;
 use crate::models::account::Account;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::RoomView;
-use crate::models::zone::ZoneKind;
-use crate::models::types::{AccountId, BlueprintId, RoomId, ZoneId};
+use crate::models::types::AccountId;
 use crate::error::AppResult;
 use crate::input::parser::Intent;
+use crate::state::session::Cursor;
 
 pub enum LuaJob {
     /// Called when a player enters a room
     OnEnter { reply: oneshot::Sender<AppResult<()>> },
     /// Called when a player issues a command in a room
     OnCommand {
-        zone_id: ZoneId,
-        zone_kind: ZoneKind,
-        bp_id: BlueprintId,
-        room_id: RoomId,
+        cursor: Cursor,
         account_id: AccountId,
         intent: Intent,
         reply: oneshot::Sender<CommandResult>,

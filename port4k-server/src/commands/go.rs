@@ -1,10 +1,9 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandResult};
+use crate::commands::CmdCtx;
 use crate::input::parser::Intent;
-use crate::commands::CommandResult::{Failure, Success};
 use crate::error::AppResult;
 
-pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> AppResult<CommandResult> {
+pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     if intent.args.is_empty() {
         return Ok(Failure("Usage: go <direction>\n".into()));
     }

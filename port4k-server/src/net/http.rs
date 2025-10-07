@@ -12,7 +12,6 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::lua::LuaJob;
 use crate::{Registry, Session, process_command};
 use tokio::sync::mpsc;
-use crate::commands::CommandResult;
 use crate::error::AppResult;
 use crate::net::AppState;
 use crate::state::session::Protocol;

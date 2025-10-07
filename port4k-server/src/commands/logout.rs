@@ -1,11 +1,10 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandResult};
+use crate::commands::{CmdCtx, CommandOutput};
 use crate::input::parser::Intent;
 use crate::state::session::ConnState;
-use crate::commands::CommandResult::{Failure, Success};
-use crate::error::AppResult;
+use crate::services::CommandResult;
 
-pub async fn logout(ctx: Arc<CmdCtx>, _intent: Intent) -> AppResult<CommandResult> {
+pub async fn logout(ctx: Arc<CmdCtx>, _intent: Intent) -> CommandResult<CommandOutput> {
     let mut s = ctx.sess.write();
     if s.state == ConnState::PreLogin {
         return Ok(Failure("You are already logged out.\n".into()));

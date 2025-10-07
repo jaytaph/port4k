@@ -1,8 +1,8 @@
 use std::sync::Arc;
-use crate::db::Db;
+use crate::db::{Db, DbResult};
 use crate::models::account::Account;
-use crate::db::repo::account::AccountRepo;
 use crate::models::types::AccountId;
+use crate::db::repo::account::AccountRepo;
 
 pub struct AccountRepository {
     db: Arc<Db>,
@@ -16,7 +16,7 @@ impl AccountRepository {
 
 #[async_trait::async_trait]
 impl AccountRepo for AccountRepository {
-    async fn get_by_username(&self, username: &str) -> AppResult<Option<Account>> {
+    async fn get_by_username(&self, username: &str) -> DbResult<Option<Account>> {
         let client = self.db.get_client().await?;
 
         let stmt = client.prepare_cached(
@@ -30,10 +30,10 @@ impl AccountRepo for AccountRepository {
         ).await?;
 
         let row_opt = client.query_opt(&stmt, &[&username]).await?;
-        Ok(row_opt.map(Account::from_row))
+        row_opt.as_ref().map(Account::try_from_row).transpose()
     }
 
-    async fn get_by_id(&self, account_id: AccountId) -> AppResult<Option<Account>> {
+    async fn get_by_id(&self, account_id: AccountId) -> DbResult<Option<Account>> {
         let client = self.db.get_client().await?;
 
         let stmt = client.prepare_cached(
@@ -46,11 +46,10 @@ impl AccountRepo for AccountRepository {
         "#).await?;
 
         let row_opt = client.query_opt(&stmt, &[&account_id]).await?;
-        Ok(row_opt.map(Account::from_row))
-
+        row_opt.as_ref().map(Account::try_from_row).transpose()
     }
 
-    async fn insert_account(&self, account: Account) -> AppResult<Account> {
+    async fn insert_account(&self, account: Account) -> DbResult<Account> {
         let client = self.db.get_client().await?;
 
         let stmt = client.prepare_cached(
@@ -76,11 +75,10 @@ impl AccountRepo for AccountRepository {
             &serde_json::to_value(&account.flags)?,
         ]).await?;
 
-        Ok(Account::from_row(row))
-
+        Account::try_from_row(&row)
     }
 
-    async fn update_last_login(&self, id: AccountId) -> AppResult<()> {
+    async fn update_last_login(&self, id: AccountId) -> DbResult<()> {
         let client = self.db.get_client().await?;
 
         let stmt = client.prepare_cached(
