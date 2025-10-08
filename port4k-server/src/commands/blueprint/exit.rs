@@ -1,8 +1,7 @@
 //! @bp exit add <bp>:<from> <dir> <bp>:<to> [locked]
 
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
-use crate::error::CommandError;
+use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use crate::{failure, success};
 use crate::util::args::{normalize_dir, parse_bp_room_key};

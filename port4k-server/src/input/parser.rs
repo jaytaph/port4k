@@ -14,6 +14,7 @@
 //!   match intent.verb { Verb::Open => { /* inspect intent.direct/instrument */ }, _ => {} }
 
 use std::collections::{HashMap, HashSet};
+use crate::models::types::Direction;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verb {
@@ -84,16 +85,6 @@ pub enum Preposition {
     From,
     Through,
     Off,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Direction {
-    North,
-    South,
-    East,
-    West,
-    Up,
-    Down,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -8,7 +8,7 @@ use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::net::tcp::OwnedReadHalf;
 use crate::models::account::Account;
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
 use crate::net::AppState;
 use crate::net::telnet::crlf_wrapper::CrlfWriter;
 
@@ -25,14 +25,8 @@ pub async fn handle_connection(
     let mut editor = LineEditor::new("> ");
     let mut telnet = TelnetMachine::new();
 
-    start_session(&mut crlf_w, &mut telnet, &mut editor, state.clone(), sess.clone()).await.map_err(|e| {
-        AppError::Telnet(format!("failed to start session: {}", e))
-    })?;
-
-    read_loop(&mut reader, &mut crlf_w, &mut telnet, &mut editor, state.clone(), sess.clone()).await.map_err(|e| {
-        AppError::Telnet(e.to_string())
-    })?;
-
+    start_session(&mut crlf_w, &mut telnet, &mut editor, state.clone(), sess.clone()).await?;
+    read_loop(&mut reader, &mut crlf_w, &mut telnet, &mut editor, state.clone(), sess.clone()).await?;
     cleanup(sess.clone(), state.clone()).await;
 
     Ok(())
@@ -44,7 +38,7 @@ async fn start_session<W: AsyncWrite + Unpin>(
     editor: &mut LineEditor,
     state: Arc<AppState>,
     sess: Arc<RwLock<Session>>,
-) -> anyhow::Result<()> {
+) -> AppResult<()> {
     // Telnet option negotiation: character-at-a-time + SGA + (server) echo + NAWS
     telnet.start_negotiation(w).await?;
 
@@ -73,7 +67,7 @@ async fn read_loop<W: AsyncWrite + Unpin>(
     editor: &mut LineEditor,
     state: Arc<AppState>,
     sess: Arc<RwLock<Session>>,
-) -> anyhow::Result<()> {
+) -> AppResult<()> {
     let mut one = [0u8; 1];
 
     loop {

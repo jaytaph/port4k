@@ -1,6 +1,5 @@
 use crate::hardening::{ALLOWED_DIRS, FORBIDDEN_LUA_TOKENS, MAX_LUA_BYTES};
 use crate::util::{list_yaml_files_guarded, resolve_content_subdir};
-use anyhow::Context;
 use mlua::Lua;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -8,9 +7,8 @@ use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::{fs, path::Path};
 use tokio_postgres::Transaction;
-use crate::db::DbError;
-use crate::error::{AppError, AppResult};
-use crate::services::ServiceResult;
+use crate::db::error::DbError;
+use crate::error::{AppResult, DomainError, InfraError};
 
 #[derive(Debug, Deserialize)]
 pub struct RoomYaml {
@@ -79,7 +77,7 @@ pub struct ScriptObjectHandlers {
     pub _use_compat: Option<String>, // compat alias
 }
 
-pub async fn import_blueprint_subdir(bp: &str, subdir: &str, content_base: &Path, db: &crate::db::Db) -> ServiceResult<()> {
+pub async fn import_blueprint_subdir(bp: &str, subdir: &str, content_base: &Path, db: &crate::db::Db) -> AppResult<()> {
     let dir = resolve_content_subdir(content_base, subdir)?;
     let files = list_yaml_files_guarded(&dir)?;
 
@@ -88,9 +86,9 @@ pub async fn import_blueprint_subdir(bp: &str, subdir: &str, content_base: &Path
 
     // Process sequentially for clear error reporting (can be parallelized if needed)
     for path in files {
-        let text = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+        let text = fs::read_to_string(&path).map_err(InfraError::from)?;
         let mut room: RoomYaml =
-            serde_yaml::from_str(&text).with_context(|| format!("parsing YAML {}", path.display()))?;
+            serde_yaml::from_str(&text)?;
 
         // normalize "use"
         for o in &mut room.objects {
@@ -104,14 +102,12 @@ pub async fn import_blueprint_subdir(bp: &str, subdir: &str, content_base: &Path
             }
         }
 
-        validate_room_semantics(&room).with_context(|| format!("schema validation failed for {}", room.id))?;
+        validate_room_semantics(&room)?;
 
         // Note we don't await here
-        validate_lua_for_room(&room).with_context(|| format!("Lua validation failed for {}", room.id))?;
+        validate_lua_for_room(&room)?;
 
-        upsert_room_and_exits(bp, &room, &tx)
-            .await
-            .with_context(|| format!("upserting room {}", room.id))?;
+        upsert_room_and_exits(bp, &room, &tx).await?;
     }
 
     tx.commit().await.map_err(DbError::from)?;
@@ -156,7 +152,7 @@ async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> 
             &scripts_json,
         ],
     )
-    .await?;
+    .await.map_err(DbError::from)?;
 
     // Upsert exits: we’ll do simple merge (insert or update desc/locked/visible)
     for ex in &r.exits {
@@ -180,7 +176,7 @@ async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> 
                 &ex.visible_when_locked,
             ],
         )
-        .await?;
+        .await.map_err(DbError::from)?;
     }
 
     Ok(())
@@ -217,29 +213,29 @@ fn validate_lua_for_room(room: &RoomYaml) -> AppResult<()> {
 pub fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
     // id/name/desc basics
     if room.id.trim().is_empty() {
-        return Err(AppError::Validation{field: "room", message: "room id empty".into()});
+        return Err(DomainError::Validation{field: "room", message: "room id empty".into()});
     }
     if room.name.trim().is_empty() {
-        return Err(AppError::Validation{field: "room", message: "room name empty".into()});
+        return Err(DomainError::Validation{field: "room", message: "room name empty".into()});
     }
     if room.full_desc.trim().is_empty() {
-        return Err(AppError::Validation{field: "room", message: "room desc empty".into()});
+        return Err(DomainError::Validation{field: "room", message: "room desc empty".into()});
     }
     if room.id.len() > 64 {
-        return Err(AppError::Validation{field: "room", message: "room id too long".into()});
+        return Err(DomainError::Validation{field: "room", message: "room id too long".into()});
     }
     if room.name.len() > 128 {
-        return Err(AppError::Validation{field: "room", message: "room name too long".into()});
+        return Err(DomainError::Validation{field: "room", message: "room name too long".into()});
     }
 
     // unique object ids
     let mut ids = HashSet::new();
     for o in &room.objects {
         if o.id.trim().is_empty() {
-            return Err(AppError::Validation{field: "object", message: "object with empty id".into() });
+            return Err(DomainError::Validation{field: "object", message: "object with empty id".into() });
         }
         if !ids.insert(&o.id) {
-            return Err(AppError::Validation{field: "object", message: format!("duplicate object id: {}", o.id) });
+            return Err(DomainError::Validation{field: "object", message: format!("duplicate object id: {}", o.id) });
         }
     }
 
@@ -248,7 +244,7 @@ pub fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
     for cap in re.captures_iter(&room.full_desc) {
         let id = cap[1].to_string();
         if !ids.contains(&id) {
-            return Err(AppError::Validation{field: "description", message: "description references unknown object id: {}".into() });
+            return Err(DomainError::Validation{field: "description", message: "description references unknown object id: {}".into() });
         }
     }
 
@@ -257,10 +253,10 @@ pub fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
     for ex in &room.exits {
         let d = ex.dir.to_ascii_lowercase();
         if !ALLOWED_DIRS.contains(&d.as_str()) {
-            return Err(AppError::Validation{field: "exit", message: format!("invalid exit dir '{}'", d) });
+            return Err(DomainError::Validation{field: "exit", message: format!("invalid exit dir '{}'", d) });
         }
         if ex.to.trim().is_empty() || !slug.is_match(&ex.to) {
-            return Err(AppError::Validation{field: "exit", message: format!("invalid exit target '{}'", ex.to) });
+            return Err(DomainError::Validation{field: "exit", message: format!("invalid exit target '{}'", ex.to) });
         }
     }
 
@@ -270,12 +266,12 @@ pub fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
 fn check_lua_string(name: &str, code: &str) -> AppResult<()> {
     let bytes = code.as_bytes();
     if bytes.len() > MAX_LUA_BYTES {
-        return Err(AppError::Validation{field: "exit", message: format!("Lua chunk '{}' too large ({} bytes)", name, bytes.len()) });
+        return Err(DomainError::Validation{field: "exit", message: format!("Lua chunk '{}' too large ({} bytes)", name, bytes.len()) });
     }
     let lower = code.to_ascii_lowercase();
     for tok in FORBIDDEN_LUA_TOKENS {
         if lower.contains(&tok.to_ascii_lowercase()) {
-            return Err(AppError::Validation{field: "exit", message: format!("Lua chunk '{}' contains forbidden token '{}'", name, tok) });
+            return Err(DomainError::Validation{field: "exit", message: format!("Lua chunk '{}' contains forbidden token '{}'", name, tok) });
         }
     }
     Ok(())

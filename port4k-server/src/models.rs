@@ -1,5 +1,6 @@
 use serde_json::Value;
-use crate::db::{DbError, DbResult};
+use crate::db::DbResult;
+use crate::db::error::DbError;
 
 pub mod account;
 pub mod character;

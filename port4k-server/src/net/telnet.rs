@@ -6,7 +6,7 @@ use parking_lot::RwLock;
 use crate::lua::LuaJob;
 use crate::{Registry, Session};
 use tokio::sync::mpsc;
-use crate::error::{AppError, AppResult};
+use crate::error::{AppResult, InfraError};
 use crate::net::AppState;
 use crate::net::telnet::connection::handle_connection;
 use crate::state::session::Protocol;
@@ -19,9 +19,7 @@ pub async fn serve(
     entry: &'static str,
     lua_tx: mpsc::Sender<LuaJob>,
 ) -> AppResult<()> {
-    let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|e| {
-        AppError::Custom(format!("failed to bind to {}: {}", addr, e))
-    })?;
+    let listener = tokio::net::TcpListener::bind(&addr).await.map_err(InfraError::from)?;
 
     loop {
         match listener.accept().await {

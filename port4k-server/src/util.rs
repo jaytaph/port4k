@@ -1,70 +1,69 @@
 use crate::hardening::{ALLOW_SYMLINKS, MAX_FILE_BYTES, MAX_FILES_PER_IMPORT, MAX_TOTAL_BYTES};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use crate::error::ServiceError;
-use crate::services::ServiceResult;
+use crate::error::{AppResult, DomainError, InfraError};
 
 pub mod args;
 pub mod telnet;
 
-pub fn resolve_content_subdir(base: &Path, subdir: &str) -> ServiceResult<PathBuf> {
+pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
     let p = Path::new(subdir);
 
     let mut comps = p.components();
     match comps.next() {
         Some(Component::Normal(_)) if comps.next().is_none() => {} // ok
         _ => {
-            return Err(ServiceError::Validation {
+            return Err(DomainError::Validation {
                 field: "subdir",
                 message: "must be a single path segment".into(),
-            });
+            }.into());
         }
     }
 
     // Resolve base and join
-    let base_can = base.canonicalize()?;
+    let base_can = base.canonicalize().map_err(InfraError::from)?;
     let joined = base_can.join(p);
 
     if !ALLOW_SYMLINKS {
-        let md = fs::symlink_metadata(&joined)?;
+        let md = fs::symlink_metadata(&joined).map_err(InfraError::from)?;
         if md.file_type().is_symlink() {
-            return Err(ServiceError::Validation {
+            return Err(DomainError::Validation {
                 field: "subdir",
                 message: format!("symlink not allowed: {}", joined.display()).into(),
-            });
+            }.into());
         }
     }
 
     // Canonicalize the target and enforce containment
-    let target_can = joined.canonicalize()?;
+    let target_can = joined.canonicalize().map_err(InfraError::from)?;
     if !target_can.starts_with(&base_can) {
-        return Err(ServiceError::Validation {
+        return Err(DomainError::Validation {
             field: "subdir",
             message: "path escapes content base".into(),
-        });
+        }.into());
     }
     if !target_can.is_dir() {
-        return Err(ServiceError::Validation {
+        return Err(DomainError::Validation {
             field: "subdir",
             message: format!("not a directory: {}", target_can.display()).into(),
-        });
+        }.into());
     }
 
     Ok(target_can)
 }
 
-pub fn list_yaml_files_guarded(dir: &Path) -> ServiceResult<Vec<PathBuf>> {
+pub fn list_yaml_files_guarded(dir: &Path) -> AppResult<Vec<PathBuf>> {
     use std::fs;
 
     let mut files = Vec::new();
     let mut total: u64 = 0;
 
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
+    for entry in fs::read_dir(dir).map_err(InfraError::from)? {
+        let entry = entry.map_err(InfraError::from)?;
         let path = entry.path();
 
         // Only plain files
-        if !entry.file_type()?.is_file() {
+        if !entry.file_type().map_err(InfraError::from)?.is_file() {
             continue;
         }
 
@@ -74,34 +73,34 @@ pub fn list_yaml_files_guarded(dir: &Path) -> ServiceResult<Vec<PathBuf>> {
             _ => continue,
         }
 
-        if !ALLOW_SYMLINKS && fs::symlink_metadata(&path)?.file_type().is_symlink() {
+        if !ALLOW_SYMLINKS && fs::symlink_metadata(&path).map_err(InfraError::from)?.file_type().is_symlink() {
             continue;
         }
 
         // Enforce per-file size and cumulative limits
-        let len = fs::metadata(&path)?.len(); // u64
+        let len = fs::metadata(&path).map_err(InfraError::from)?.len(); // u64
         if len > MAX_FILE_BYTES as u64 {
-            return Err(ServiceError::Validation {
+            return Err(DomainError::Validation {
                 field: "import",
                 message: format!("file too large: {} ({} bytes)", path.display(), len).into(),
-            });
+            }.into());
         }
 
         total = total.saturating_add(len);
         if total > MAX_TOTAL_BYTES as u64 {
-            return Err(ServiceError::Validation {
+            return Err(DomainError::Validation {
                 field: "import",
                 message: "import exceeds total size limit".into(),
-            });
+            }.into());
         }
 
         files.push(path);
 
         if files.len() > MAX_FILES_PER_IMPORT {
-            return Err(ServiceError::Validation {
+            return Err(DomainError::Validation {
                 field: "import",
                 message: format!("too many files (> {})", MAX_FILES_PER_IMPORT).into(),
-            });
+            }.into());
         }
     }
 

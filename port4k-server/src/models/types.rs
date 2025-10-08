@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use crate::error::DomainError;
 
 #[macro_export]
 macro_rules! define_id {
@@ -88,7 +89,8 @@ impl Direction {
 }
 
 impl core::str::FromStr for Direction {
-    type Err = crate::db::DbError; // your infra error
+    type Err = DomainError;
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "north" => Ok(Direction::North),
@@ -101,7 +103,7 @@ impl core::str::FromStr for Direction {
             "northwest" => Ok(Direction::Northwest),
             "southeast" => Ok(Direction::Southeast),
             "southwest" => Ok(Direction::Southwest),
-            _ => Err(crate::db::DbError::Decode("invalid direction")),
+            _ => Err(DomainError::InvalidDirection(s.to_string())),
         }
     }
 }

@@ -98,6 +98,7 @@ pub struct RoomObjectRow {
 }
 
 impl RoomObjectRow {
+    #[allow(unused)]
     pub fn try_from_row(row: &Row) -> DbResult<Self> {
         let state = json_string_vec_opt(row.try_get::<_, Option<Value>>("state")?, "state")?;
         Ok(Self {
@@ -124,6 +125,7 @@ pub struct ObjectNounRow {
 }
 
 impl ObjectNounRow {
+    #[allow(unused)]
     pub fn try_from_row(row: &Row) -> DbResult<Self> {
         Ok(Self {
             room_id: row.try_get("room_id")?,
@@ -177,6 +179,7 @@ pub struct ZoneObjectState {
 
 /// `bp_room_kv` & `bp_player_kv` shapes at runtime.
 pub type RoomKv = HashMap<String, Vec<String>>;
+#[allow(unused)]
 pub type PlayerKv = HashMap<String, Vec<String>>; // flattened per player; usually fetched later for a specific account
 
 /// Runtime-friendly object with resolved nouns.
@@ -207,6 +210,7 @@ impl RoomObject {
         list.iter().any(|s| s.eq_ignore_ascii_case(flag))
     }
 
+    #[allow(unused)]
     fn is_visible(&self) -> bool {
         !self.locked || self.revealed
     }

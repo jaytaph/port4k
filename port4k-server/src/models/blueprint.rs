@@ -1,5 +1,6 @@
 use tokio_postgres::Row;
-use crate::db::{DbError, DbResult};
+use crate::db::DbResult;
+use crate::db::error::DbError;
 use crate::models::types::{AccountId, BlueprintId, RoomId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]

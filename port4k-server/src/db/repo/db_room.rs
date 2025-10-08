@@ -1,7 +1,8 @@
 use uuid::Uuid;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::db::{Db, DbError, DbResult};
+use crate::db::{Db, DbResult};
+use crate::db::error::DbError;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts, RoomView, ZoneRoomState};
 use crate::db::repo::room::RoomRepo;

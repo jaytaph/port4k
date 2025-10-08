@@ -1,6 +1,7 @@
 use tokio_postgres::Row;
-use crate::db::{DbError, DbResult};
-use crate::error::{AppError, AppResult};
+use crate::db::DbResult;
+use crate::db::error::DbError;
+use crate::error::{AppResult, DomainError};
 use crate::models::types::{AccountId, RoomId, ZoneId};
 
 #[derive(Debug, Clone)]
@@ -52,10 +53,10 @@ impl Account {
     pub fn validate_username(s: &str) -> AppResult<()> {
         let s = s.trim();
         if s.is_empty() {
-            return Err(AppError::Validation { field: "username", message: "cannot be empty".into() });
+            return Err(DomainError::Validation { field: "username", message: "cannot be empty".into() });
         }
         if !s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' )) {
-            return Err(AppError::Validation {
+            return Err(DomainError::Validation {
                 field: "username",
                 message: "only alphanumeric, hyphen, underscore allowed".into(),
             });

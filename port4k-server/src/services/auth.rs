@@ -4,8 +4,8 @@ use password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use rand_core::OsRng;
 use crate::models::account::Account;
 use crate::db::repo::account::AccountRepo;
+use crate::error::{AppResult, DomainError};
 use crate::models::types::AccountId;
-use crate::services::ServiceResult;
 
 pub struct AuthService {
     repo: Arc<dyn AccountRepo>,
@@ -18,7 +18,7 @@ impl AuthService {
         Self { repo, argon }
     }
 
-    pub async fn register(&self, username: &str, password: &str) -> ServiceResult<bool> {
+    pub async fn register(&self, username: &str, password: &str) -> AppResult<bool> {
         if self.repo.get_by_username(username).await?.is_some() {
             return Ok(false);
         }
@@ -26,7 +26,7 @@ impl AuthService {
         let salt = SaltString::generate(&mut OsRng);
         let hash = self
             .argon
-            .hash_password(password.as_bytes(), &salt)?
+            .hash_password(password.as_bytes(), &salt).map_err(DomainError::Password)?
             .to_string();
 
         let account = Account {
@@ -51,16 +51,16 @@ impl AuthService {
         }
     }
 
-    pub async fn authenticate(&self, username: &str, password: &str) -> ServiceResult<bool> {
+    pub async fn authenticate(&self, username: &str, password: &str) -> AppResult<bool> {
         let Some(account) = self.repo.get_by_username(username).await? else {
             return Ok(false);
         };
 
-        let parsed = PasswordHash::new(&account.password_hash)?;
+        let parsed = PasswordHash::new(&account.password_hash).map_err(DomainError::Password)?;
         Ok(self.argon.verify_password(password.as_bytes(), &parsed).is_ok())
     }
 
-    pub async fn update_last_login(&self, account_id: AccountId) -> ServiceResult<()> {
+    pub async fn update_last_login(&self, account_id: AccountId) -> AppResult<()> {
         self.repo.update_last_login(account_id).await?;
         Ok(())
     }

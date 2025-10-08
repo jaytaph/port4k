@@ -1,65 +1,31 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
-use crate::{failure, success};
+use crate::{success};
+use crate::error::DomainError;
+use crate::models::types::Direction;
 
 pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    if intent.args.is_empty() {
-        return Ok(failure!("Usage: go <direction>\n".into()));
-    }
-    let dir = intent.args[0].to_ascii_lowercase();
 
-    let (account_id, world) = {
-        let account_id = ctx.account_id().map_err(|_| anyhow::anyhow!("Not logged in"))?;
-
-        (account_id, s.world.clone())
+    let Some(dir) = intent.direction else {
+        return Err(CommandError::InvalidArgs("No direction specified".to_string()));
     };
+    let dir = Direction::from(dir);
 
-    match world {
-        Some(WorldMode::Live { .. }) => match ctx.state.registry.db.move_character(&account_id, &dir).await? {
-            Some(new_room) => {
-                {
-                    let mut s = ctx.sess.write().unwrap();
-                    if let Some(WorldMode::Live { room_id }) = &mut s.world {
-                        *room_id = new_room;
-                    }
-                }
-                let view = ctx.state.registry.db.room_view(new_room).await?;
-                Ok(success!(view))
-            }
-            None => Ok(failure!("You can't go that way.\n".into())),
-        },
-        Some(WorldMode::Playtest { bp, room, .. }) => {
-            match ctx.state.registry.db.bp_move(&bp, &room, &dir).await? {
-                Some(next) => {
-                    {
-                        let mut s = ctx.sess.write().unwrap();
-                        if let Some(WorldMode::Playtest { room, .. }) = &mut s.world {
-                            *room = next.clone();
-                        }
-                    }
-                    // fire on_enter (playtest)
-                    let (tx, rx) = tokio::sync::oneshot::channel();
-                    ctx.state.lua_tx
-                        .send(crate::lua::LuaJob::OnEnterPlaytest {
-                            db: ctx.state.registry.db.clone(),
-                            blueprint_id: bp.clone(),
-                            room_id: next.clone(),
-                            account_id: account_id,
-                            reply: tx,
-                        })
-                        .await?;
-                    let extra = rx.await??.unwrap_or_default();
-
-                    let view = ctx.state.registry.db
-                        .bp_room_view(&bp, &next, 80)
-                        .await?
-                        .unwrap_or_else(|| "[playtest] room missing\n".into());
-                    Ok(success!(format!("{view}{extra}")))
-                }
-                None => Ok(failure!("You can't go that way (playtest).\n".into())),
-            }
-        }
-        None => Ok(failure!("You are nowhere.\n".into())),
+    if !ctx.has_cursor() {
+        return Err(CommandError::Domain(DomainError::NoCurrentRoom));
     }
+
+    let c = ctx.cursor()?;
+    let account_id = ctx.account_id()?;
+    let (_from, _to) = ctx.state.registry.services.navigator.go(&c.zone_ctx, account_id, dir).await?;
+
+    // // reuse your render path
+    // let view_repo = ctx.state.registry.services.zone_router.view_repo_for(&ctx.zone_ctx);
+    // let room_view = view_repo.room_view(&ctx.zone_ctx, to, ctx.screen_width).await?;
+    // let text = render_room(&room_view);
+
+    let text = "we moved to another room".to_string();
+
+    Ok(success!(text))
 }

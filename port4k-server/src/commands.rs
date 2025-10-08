@@ -2,11 +2,16 @@ use crate::input::parser::{Verb, parse_command};
 use crate::state::session::{Cursor, Session};
 use std::sync::Arc;
 use parking_lot::RwLock;
+use thiserror::Error;
+use tokio::sync::mpsc::error::SendError;
 use crate::ansi;
+use crate::db::error::DbError;
+use crate::error::{AppResult, DomainError};
 use crate::models::account::Account;
 use crate::models::types::AccountId;
-use crate::error::CommandError;
+use crate::lua::LuaJob;
 use crate::net::AppState;
+use crate::services::ServiceError;
 
 mod balance;
 mod fallback;
@@ -24,6 +29,42 @@ mod admin;
 
 pub type CommandResult<T> = Result<T, CommandError>;
 
+#[derive(Debug, Error)]
+pub enum CommandError {
+    #[error("unknown command: {0}")]
+    UnknownCommand(String),
+
+    #[error("usage: {0}")]
+    Usage(String),
+
+    #[error("permission denied")]
+    PermissionDenied,
+
+    #[error("not logged in")]
+    NotLoggedIn,
+
+    #[error("cursor not found")]
+    NoCursor,
+
+    #[error(transparent)]
+    Send(#[from] SendError<LuaJob>),
+
+    #[error("custom error: {0}")]
+    Custom(String),
+
+    #[error(transparent)]
+    Domain(#[from] DomainError),
+
+    #[error(transparent)]
+    Service(#[from] ServiceError),
+
+    #[error(transparent)]
+    Db(#[from] DbError),
+
+    #[error("invalid arguments: {0}")]
+    InvalidArgs(String),
+}
+
 /// Command context passed to command handlers
 pub struct CmdCtx {
     pub state: Arc<AppState>,
@@ -32,7 +73,7 @@ pub struct CmdCtx {
 
 impl CmdCtx {
     #[inline]
-    fn with_sess<T>(&self, f: impl FnOnce(&Session) -> T) -> CommandResult<T> {
+    fn with_sess<T>(&self, f: impl FnOnce(&Session) -> T) -> AppResult<T> {
         let s = self.sess.read();
         Ok(f(&s))
     }
@@ -41,23 +82,23 @@ impl CmdCtx {
         self.sess.try_read().map_or(false, |s| s.account.is_some())
     }
 
-    pub fn account_id(&self) -> CommandResult<AccountId> {
+    pub fn account_id(&self) -> AppResult<AccountId> {
         self.with_sess(|s| s.account.as_ref().map(|a| a.id))
-            .and_then(|opt| opt.ok_or(CommandError::NotLoggedIn))
+            .and_then(|opt| opt.ok_or(DomainError::NotLoggedIn))
     }
 
-    pub fn account(&self) -> CommandResult<Account> {
+    pub fn account(&self) -> AppResult<Account> {
         self.with_sess(|s| s.account.clone())
-            .and_then(|opt| opt.ok_or(CommandError::NotLoggedIn))
+            .and_then(|opt| opt.ok_or(DomainError::NotLoggedIn))
     }
 
     pub fn has_cursor(&self) -> bool {
         self.sess.try_read().map_or(false, |s| s.cursor.is_some())
     }
 
-    pub fn cursor(&self) -> CommandResult<Cursor> {
+    pub fn cursor(&self) -> AppResult<Cursor> {
         self.with_sess(|s| s.cursor.clone())
-            .and_then(|opt| opt.ok_or(CommandError::NoCursor))
+            .and_then(|opt| opt.ok_or(DomainError::NoCurrentRoom))
     }
 }
 

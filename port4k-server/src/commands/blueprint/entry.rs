@@ -2,9 +2,8 @@
 
 use std::sync::Arc;
 use crate::commands::blueprint::USAGE;
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
 use crate::{failure, success};
-use crate::error::CommandError;
 use crate::input::parser::Intent;
 use crate::util::args::parse_bp_room_key;
 

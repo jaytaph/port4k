@@ -1,5 +1,5 @@
-use deadpool_postgres::{BuildError, Pool, PoolError};
-use thiserror::Error;
+use deadpool_postgres::Pool;
+use crate::db::error::DbError;
 
 // keep public API surface by re-exporting submodules
 mod migrations;
@@ -12,28 +12,7 @@ pub mod loot;
 pub mod rooms;
 
 pub mod repo;
-
-
-#[derive(Debug, Error)]
-pub enum DbError {
-    #[error(transparent)]
-    Pool(#[from] PoolError),
-
-    #[error(transparent)]
-    Pg(#[from] tokio_postgres::Error),
-
-    #[error(transparent)]
-    Migrate(#[from] refinery::Error),
-
-    #[error(transparent)]
-    Build(#[from] BuildError),
-
-    #[error(transparent)]
-    Json(#[from] serde_json::Error),
-    
-    #[error("row decode error: {0}")]
-    Decode(&'static str),
-}
+pub mod error;
 
 pub type DbResult<T> = Result<T, DbError>;
 

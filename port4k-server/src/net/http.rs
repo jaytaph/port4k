@@ -13,7 +13,7 @@ use crate::lua::LuaJob;
 use crate::{Registry, Session, process_command};
 use tokio::sync::mpsc;
 use crate::commands::CmdCtx;
-use crate::error::AppResult;
+use crate::error::{AppResult, InfraError};
 use crate::net::AppState;
 use crate::state::session::Protocol;
 
@@ -35,8 +35,8 @@ pub async fn serve(
         })
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any));
 
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app).await?;
+    let listener = tokio::net::TcpListener::bind(&addr).await.map_err(InfraError::from)?;
+    axum::serve(listener, app).await.map_err(InfraError::from)?;
     Ok(())
 }
 

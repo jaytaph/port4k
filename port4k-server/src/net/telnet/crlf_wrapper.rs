@@ -17,7 +17,7 @@ impl<W: AsyncWrite + Unpin> CrlfWriter<W> {
     pub fn new(inner: W) -> Self {
         Self { inner, out_buf: Vec::new(), out_pos: 0 }
     }
-    pub fn into_inner(self) -> W { self.inner }
+    // pub fn into_inner(self) -> W { self.inner }
 
     #[inline]
     fn expand_crlf(dst: &mut Vec<u8>, src: &[u8]) {

@@ -10,7 +10,8 @@ use crate::db::repo::db_kv::KvRepository;
 use crate::db::repo::db_room::RoomRepository;
 use crate::db::repo::kv::KvRepo;
 use crate::db::repo::room::RoomRepo;
-use crate::services::{AccountService, AuthService, BlueprintService, RoomService};
+use crate::models::zone::{DbBackend, MemoryBackend, ZoneRouter};
+use crate::services::{AccountService, AuthService, BlueprintService, RoomService, CursorService, NavigatorService};
 
 /// We are entering container / DI territory here. We have to be careful that we don't create
 /// circular references.
@@ -27,6 +28,7 @@ pub struct Services {
     pub blueprint: Arc<BlueprintService>,
     pub room: Arc<RoomService>,
     pub cursor: Arc<CursorService>,
+    pub navigator: Arc<NavigatorService>,
 }
 
 pub struct Registry {
@@ -45,11 +47,16 @@ impl Registry {
             kv: Arc::new(KvRepository::new(db.clone())),
         });
 
+        let zone_db = Arc::new(DbBackend::new(db.clone()));
+        let zone_mem = Arc::new(MemoryBackend::new());
+
         let services = Arc::new(Services {
             auth: Arc::new(AuthService::new(repos.account.clone())),
             account: Arc::new(AccountService::new(repos.account.clone())),
             blueprint: Arc::new(BlueprintService::new(repos.room.clone())),
             room: Arc::new(RoomService::new(repos.kv.clone())),
+            cursor: Arc::new(CursorService::new(repos.room.clone())),
+            navigator: Arc::new(NavigatorService::new(Arc::new(ZoneRouter::new(zone_db, zone_mem)))),
         });
 
         Self {

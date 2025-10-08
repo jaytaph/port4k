@@ -8,6 +8,7 @@ use crate::{failure, success};
 use crate::input::parser::Intent;
 use crate::lua::LuaJob;
 
+#[allow(unused)]
 const LUA_CMD_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Handles non-matched commands:

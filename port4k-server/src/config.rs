@@ -1,6 +1,6 @@
 use serde::Deserialize;
-use std::path::Path;
-use crate::error::{AppError, AppResult};
+use std::path::{Path, PathBuf};
+use crate::error::{ConfigErrorKind, InfraError};
 
 /// Global configuration of the server
 #[derive(Debug, Clone, Deserialize)]
@@ -13,20 +13,35 @@ pub struct Config {
 
 impl Config {
     #[allow(unused)]
-    pub fn load<P: AsRef<Path>>(path: P) -> AppResult<Self> {
-        let data = std::fs::read_to_string(path).map_err(|e| AppError::Config(format!("Failed to read config file: {}", e)))?;
-        let cfg: Self = toml::from_str(&data).map_err(|e| AppError::Config(format!("Failed to parse config file: {}", e)))?;
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, InfraError> {
+        let path_buf = path.as_ref().to_path_buf();
+
+        let data = std::fs::read_to_string(&path_buf).map_err(|e| InfraError::Config { path: path_buf.clone(), source: ConfigErrorKind::Read(e) })?;
+        let cfg: Self = toml::from_str(&data).map_err(|e| InfraError::Config { path: path_buf.clone(), source: ConfigErrorKind::Parse(e) })?;
+
         Ok(cfg)
     }
 
-    pub fn from_env() -> AppResult<Self> {
+    pub fn from_env() -> Result<Self, InfraError> {
         let _ = dotenvy::from_filename(".env");
+
+        #[allow(unused)]
+        fn req(key: &'static str) -> Result<String, InfraError> {
+            std::env::var(key).map_err(|_| InfraError::Config {
+                path: PathBuf::from(".env"),
+                source: ConfigErrorKind::MissingEnv(key.to_string())
+            })
+        }
+        fn opt(key: &'static str, default: &'static str) -> String {
+            std::env::var(key).unwrap_or_else(|_| default.to_string())
+        }
+
         let cfg = Self {
-            tcp_addr: std::env::var("TCP_ADDR").unwrap_or_else(|_| "0.0.0.0:4000".to_string()),
-            websocket_addr: std::env::var("WS_ADDR").unwrap_or_else(|_| "0.0.0.0:4001".to_string()),
-            database_url: std::env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://user:pass@localhost:5432/port4k".to_string()),
-            import_dir: std::env::var("IMPORT_DIR").unwrap_or_else(|_| "import".to_string()),
+            tcp_addr: opt("TCP_ADDR", "0.0.0.0:4000"),
+            websocket_addr: opt("WS_ADDR", "0.0.0.0:4001"),
+            database_url: opt("DATABASE_URL", "postgres://user:pass@localhost:5432/port4k"),
+            import_dir: opt("IMPORT_DIR", "import"),
+            // important_token: req("IMPORTANT_TOKEN")?,
         };
 
         Ok(cfg)

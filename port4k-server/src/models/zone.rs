@@ -4,8 +4,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use tokio_postgres::Row;
-use crate::db::{Db, DbError, DbResult};
-use crate::error::{AppError, AppResult};
+use crate::db::{Db, DbResult};
+use crate::db::error::DbError;
+use crate::error::{AppResult, DomainError};
 use crate::models::blueprint::Blueprint;
 use crate::models::room::RoomView;
 use crate::models::types::{AccountId, ObjectId, RoomId, ZoneId};
@@ -20,7 +21,7 @@ pub enum ZoneKind {
 
 /// How the zone is persisted.
 #[derive(Clone, Debug)]
-enum Persistence { Ephemeral, Persistent }
+pub enum Persistence { Ephemeral, Persistent }
 
 impl Persistence {
     #[inline] pub fn is_ephemeral(&self) -> bool { matches!(self, Persistence::Ephemeral) }
@@ -122,6 +123,13 @@ impl ZoneRouter {
         Self { db, mem }
     }
 
+    pub fn state_repo_for(&self, zone_ctx: &ZoneContext) -> Arc<dyn ZoneStateRepo> {
+        match zone_ctx.policy.persistence {
+            Persistence::Ephemeral => self.mem.clone(),
+            Persistence::Persistent => self.db.clone(),
+        }
+    }
+
     pub fn backend_for(&self, zone_ctx: &ZoneContext) -> Arc<dyn ZoneBackend> {
         match zone_ctx.policy.persistence {
             Persistence::Ephemeral => self.mem.clone(),
@@ -151,6 +159,9 @@ pub trait ZoneUnitOfWork: Send {
     async fn update_xp(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool>;
     async fn update_health(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool>;
     async fn update_coins(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool>;
+
+    async fn set_current_room(&mut self, account_id: AccountId, to_room: RoomId) -> AppResult<()>;
+    async fn record_travel(&mut self, account_id: AccountId, from: RoomId, to: RoomId) -> AppResult<()>;
 }
 
 #[async_trait]
@@ -183,6 +194,19 @@ impl ZoneBackend for DbBackend {
 }
 
 #[async_trait]
+impl ZoneStateRepo for DbBackend {
+    // [DbBackend::current_room] read current room from DB
+    async fn current_room(&self, _zone: &ZoneContext, account_id: AccountId) -> AppResult<RoomId> {
+        let client = self.db.get_client().await?;
+        let row = client.query_one(
+            "SELECT current_room_id FROM accounts WHERE id = $1",
+            &[&account_id],
+        ).await.map_err(DbError::from)?;
+        Ok(row.get::<_, RoomId>(0))
+    }
+}
+
+#[async_trait]
 impl ZoneViewRepo for DbBackend {
     async fn room_view(&self, zone: &ZoneContext, room_id: RoomId, width: u16) -> DbResult<RoomView> {
         let _ = zone;
@@ -202,7 +226,7 @@ struct DbUow {
 #[async_trait]
 impl ZoneUnitOfWork for DbUow {
     async fn commit(mut self: Box<Self>) -> AppResult<()> {
-        let tx = self.client.build_transaction().start().await?;
+        let tx = self.client.build_transaction().start().await.map_err(DbError::from)?;
 
         // 1) validate and apply room decrements (with row lock)
         for (room_id, obj_id, need) in &self.pending.decs {
@@ -212,10 +236,10 @@ impl ZoneUnitOfWork for DbUow {
                  WHERE zone_id = $1 AND room_id = $2 AND obj_id = $3
                  FOR UPDATE",
                 &[&self.zone_id, room_id, obj_id],
-            ).await?;
+            ).await.map_err(DbError::from)?;
             let have: i32 = row.as_ref().map(|r| r.get(0)).unwrap_or(0);
             if have < *need {
-                return Err(AppError::InsufficientQuantity {
+                return Err(DomainError::InsufficientQuantity {
                     room_id: *room_id, obj_id: *obj_id, have, need: *need
                 });
             }
@@ -226,7 +250,7 @@ impl ZoneUnitOfWork for DbUow {
                      SET qty = qty - $4
                      WHERE zone_id = $1 AND room_id = $2 AND obj_id = $3",
                     &[&self.zone_id, room_id, obj_id, need],
-                ).await?;
+                ).await.map_err(DbError::from)?;
             }
         }
 
@@ -235,7 +259,7 @@ impl ZoneUnitOfWork for DbUow {
             tx.execute(
                 "UPDATE accounts SET coins = coins + $2 WHERE id = $1",
                 &[acct, amt],
-            ).await?;
+            ).await.map_err(DbError::from)?;
         }
 
         // 3) apply health deltas
@@ -243,7 +267,7 @@ impl ZoneUnitOfWork for DbUow {
             tx.execute(
                 "UPDATE accounts SET health = health + $2 WHERE id = $1",
                 &[acct, d],
-            ).await?;
+            ).await.map_err(DbError::from)?;
         }
 
         // 4) apply xp deltas
@@ -251,7 +275,7 @@ impl ZoneUnitOfWork for DbUow {
             tx.execute(
                 "UPDATE accounts SET xp = xp + $2 WHERE id = $1",
                 &[acct, amt],
-            ).await?;
+            ).await.map_err(DbError::from)?;
         }
 
         // 5) apply item adds (per-account inventory)
@@ -263,15 +287,32 @@ impl ZoneUnitOfWork for DbUow {
                  ON CONFLICT (account_id, object_id)
                  DO UPDATE SET qty = account_items.qty + EXCLUDED.qty",
                 &[acct, obj, qty],
-            ).await?;
+            ).await.map_err(DbError::from)?;
             // Optional: clamp to >= 0 (delete if <= 0)
             tx.execute(
                 "DELETE FROM account_items WHERE account_id=$1 AND object_id=$2 AND qty <= 0",
                 &[acct, obj],
-            ).await?;
+            ).await.map_err(DbError::from)?;
         }
 
-        tx.commit().await?;
+        // 6) apply movement (set_current_room)
+        for (acct, to_room) in &self.pending.moves {
+            tx.execute(
+                "UPDATE accounts SET current_room_id = $2 WHERE id = $1",
+                &[acct, to_room],
+            ).await.map_err(DbError::from)?;
+        }
+
+        // 7) audit travels (optional)
+        for (acct, from, to) in &self.pending.travels {
+            tx.execute(
+                "INSERT INTO travel_audit (account_id, zone_id, from_room_id, to_room_id, at)
+                 VALUES ($1, $2, $3, $4, now())",
+                &[acct, &self.zone_id, from, to],
+            ).await.map_err(DbError::from)?;
+        }
+
+        tx.commit().await.map_err(DbError::from)?;
         Ok(())
     }
 
@@ -299,6 +340,22 @@ impl ZoneUnitOfWork for DbUow {
         self.pending.coin_adds.push((account_id, amount));
         Ok(true)
     }
+
+    async fn set_current_room(&mut self, account_id: AccountId, to_room: RoomId) -> AppResult<()> {
+        self.pending.moves.push((account_id, to_room));
+        Ok(())
+    }
+
+    // [DbUow::record_travel]
+    async fn record_travel(&mut self, account_id: AccountId, from: RoomId, to: RoomId) -> AppResult<()> {
+        self.pending.travels.push((account_id, from, to));
+        Ok(())
+    }
+}
+
+#[async_trait]
+pub trait ZoneStateRepo: Send + Sync {
+    async fn current_room(&self, zone_ctx: &ZoneContext, account_id: AccountId) -> AppResult<RoomId>;
 }
 
 // -----------------------------------------------------------------------------------------------
@@ -325,6 +382,10 @@ struct MemZone {
     items: DashMap<(AccountId, ObjectId), i32>,
     health: DashMap<AccountId, i32>,
     xp: DashMap<AccountId, i32>,
+
+    current_room: DashMap<AccountId, RoomId>,
+    trail: DashMap<AccountId, Vec<(RoomId, RoomId)>>,
+
     commit_lock: Mutex<()>,
 }
 
@@ -332,6 +393,17 @@ struct MemZone {
 impl ZoneBackend for MemoryBackend {
     async fn begin(&self, zone_ctx: &ZoneContext) -> DbResult<Box<dyn ZoneUnitOfWork>> {
         Ok(Box::new(MemUow { z: self.zone(zone_ctx.zone.id), pending: Default::default() }))
+    }
+}
+
+#[async_trait]
+impl ZoneStateRepo for MemoryBackend {
+    // [MemoryBackend::current_room]
+    async fn current_room(&self, zone_ctx: &ZoneContext, account_id: AccountId) -> AppResult<RoomId> {
+        let z = self.zone(zone_ctx.zone.id);
+        z.current_room.get(&account_id)
+            .map(|e| *e)
+            .ok_or_else(|| DomainError::NotFound)
     }
 }
 
@@ -354,6 +426,9 @@ struct Pending {
     item_adds: Vec<(AccountId, ObjectId, i32)>,
     health_deltas: Vec<(AccountId, i32)>,
     xp_adds: Vec<(AccountId, i32)>,
+
+    moves: Vec<(AccountId, RoomId)>,
+    travels: Vec<(AccountId, RoomId, RoomId)>
 }
 
 struct MemUow {
@@ -370,7 +445,7 @@ impl ZoneUnitOfWork for MemUow {
         for (room, obj, qty) in &self.pending.decs {
             let cur = self.z.room_qty.get(&(*room, *obj)).map(|v| *v).unwrap_or(0);
             if cur < *qty {
-                return Err(AppError::InsufficientQuantity { room_id: *room, obj_id: *obj, have: cur, need: *qty });
+                return Err(DomainError::InsufficientQuantity { room_id: *room, obj_id: *obj, have: cur, need: *qty });
             }
         }
         // apply decs
@@ -386,11 +461,21 @@ impl ZoneUnitOfWork for MemUow {
             *self.z.items.entry((*acct, *obj)).or_insert(0) += *qty;
         }
         for (acct, d) in &self.pending.health_deltas {
-            *self.z.items.entry((*acct, ObjectId::new())).or_insert(0) += *d; // placeholder
+            *self.z.health.entry(*acct).or_insert(0) += *d;
         }
         for (acct, amt) in &self.pending.xp_adds {
             *self.z.xp.entry(*acct).or_insert(0) += *amt;
         }
+
+        // apply movement
+        for (acct, to_room) in &self.pending.moves {
+            self.z.current_room.insert(*acct, *to_room);
+        }
+        for (acct, from, to) in &self.pending.travels {
+            let mut v = self.z.trail.entry(*acct).or_insert_with(Vec::new);
+            v.push((*from, *to));
+        }
+
         Ok(())
     }
 
@@ -414,5 +499,15 @@ impl ZoneUnitOfWork for MemUow {
     async fn update_coins(&mut self, acct: AccountId, amt: i32) -> AppResult<bool> {
         self.pending.coin_adds.push((acct, amt));
         Ok(true)
+    }
+
+    async fn set_current_room(&mut self, acct: AccountId, to_room: RoomId) -> AppResult<()> {
+        self.pending.moves.push((acct, to_room));
+        Ok(())
+    }
+
+    async fn record_travel(&mut self, acct: AccountId, from: RoomId, to: RoomId) -> AppResult<()> {
+        self.pending.travels.push((acct, from, to));
+        Ok(())
     }
 }

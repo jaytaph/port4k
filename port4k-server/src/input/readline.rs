@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 //! Minimal telnet-friendly line editor with history and cursor movement.
 //!
 //! Usage pattern (pseudo):

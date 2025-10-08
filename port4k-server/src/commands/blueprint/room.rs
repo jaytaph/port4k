@@ -1,6 +1,5 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
-use crate::error::CommandError;
+use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
 use crate::{failure, success};
 use crate::input::parser::Intent;
 use crate::util::args::parse_bp_room_key;
