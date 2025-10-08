@@ -78,12 +78,12 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                         )?;
 
                         let chunk = lua.load(&src)
-                            .set_name(&format!("{}:{}:on_enter", cursor.bp.key, cursor.room.room.key))
+                            .set_name(&format!("{}:{}:on_enter", cursor.zone_ctx.blueprint.key, cursor.room.room.key))
                             .set_environment(env.clone());
                         chunk.exec()?;
 
                         if let Ok(f) = env.get::<_, Function>("on_enter") {
-                            let ctx = make_enter_ctx(&lua, &cursor.bp, &cursor.room, &account)?;
+                            let ctx = make_enter_ctx(&lua, &cursor.zone_ctx.blueprint, &cursor.room, &account)?;
                             f.call::<_, ()>(ctx)?;
                         }
 
@@ -117,7 +117,7 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                         )?;
 
                         // ----- Load & run on_command(bp:room) -----
-                        lua.load(&src).set_name(&format!("{}:{}:on_command", cursor.bp.key, cursor.room.room.key)).exec()?;
+                        lua.load(&src).set_name(&format!("{}:{}:on_command", cursor.zone_ctx.blueprint.key, cursor.room.room.key)).exec()?;
 
                         if let Ok(func) = lua.globals().get::<_, Function>("on_command") {
                             let t: Table = lua.create_table()?;
@@ -204,30 +204,28 @@ fn install_host_api(
 
     // get_state(key) -> any (JSON)
     {
-        let bp = cursor.bp.clone();
-        let room = cursor.room.clone();
+        let room_id = cursor.room.room.id;
         let handle = handle.clone();
+        let registry = registry.clone();
         let f = lua.create_function(move |lua_ctx, (key,): (String,)| {
             let v = handle
-                .block_on(registry.services.blueprint.room_kv_get(&bp, &room, &key))
+                .block_on(registry.services.room.room_kv_get(room_id, &key))
                 .map_err(mlua::Error::external)?;
-            Ok(match v {
-                Some(v) => serde_json_to_lua(lua_ctx, v)?,
-                None => Value::Nil,
-            })
+
+            serde_json_to_lua(lua_ctx, v)
         })?;
         env.set("get_state", f)?;
     }
 
     // set_state(key, value)
     {
-        let bp = cursor.bp.clone();
-        let room = cursor.room.clone();
+        let room_id = cursor.room.room.id;
         let handle = handle.clone();
+        let registry = registry.clone();
         let f = lua.create_function(move |lua_ctx, (key, value): (String, Value)| {
             let v = lua_to_serde_json(lua_ctx, value)?;
             handle
-                .block_on(registry.services.blueprint.bp_room_kv_set(&bp, &room, &key, &v))
+                .block_on(registry.services.room.room_kv_set(room_id, &key, &v))
                 .map_err(mlua::Error::external)?;
             Ok(())
         })?;
@@ -236,32 +234,33 @@ fn install_host_api(
 
     // get_player(key) -> any (JSON)
     {
-        let bp = cursor.bp.clone();
-        let room = cursor.room.room.clone();
-        let account = account.clone();
+        let room_id = cursor.room.room.id;
+        let account_id = account.id;
+        let registry = registry.clone();
         let handle = handle.clone();
         let f = lua.create_function(move |lua_ctx, (key,): (String,)| {
             let v = handle
-                .block_on(registry.services.blueprint.bp_player_kv_get(&bp, &account, &room, &key))
+                .block_on(registry.services.room.player_kv_get(room_id, account_id, &key))
                 .map_err(mlua::Error::external)?;
-            Ok(match v {
-                Some(v) => serde_json_to_lua(lua_ctx, v)?,
-                None => Value::Nil,
-            })
+
+            match v {
+                None => Ok(Value::Nil),
+                Some(v) => serde_json_to_lua(lua_ctx, v),
+            }
         })?;
         env.set("get_player", f)?;
     }
 
     // set_player(key, value)
     {
-        let bp = cursor.bp.clone();
-        let room = cursor.room.room.clone();
-        let account = account.clone();
+        let room_id = cursor.room.room.id;
+        let account_id = account.id;
+        let registry = registry.clone();
         let handle = handle.clone();
         let f = lua.create_function(move |lua_ctx, (key, value): (String, Value)| {
             let v = lua_to_serde_json(lua_ctx, value)?;
             handle
-                .block_on(registry.services.blueprint.bp_player_kv_set(&bp, &account, &room, &key, &v))
+                .block_on(registry.services.room.player_kv_set(room_id, account_id, &key, &v))
                 .map_err(mlua::Error::external)?;
             Ok(())
         })?;

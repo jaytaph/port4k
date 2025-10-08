@@ -1,13 +1,12 @@
 use std::sync::Arc;
 use std::time::Duration;
-use crate::commands::{CmdCtx, CommandOutput};
+use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 use crate::models::zone::ZoneKind;
 use crate::{failure, success};
 use crate::input::parser::Intent;
 use crate::lua::LuaJob;
-use crate::services::CommandResult;
 
 const LUA_CMD_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -19,7 +18,7 @@ pub async fn fallback(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Command
     let cursor = ctx.cursor()?;
 
     // @TODO: why are we only doing lua scripting in ZoneKind::Test?
-    let scripting_enabled = matches!(cursor.zone_kind, ZoneKind::Test { .. });
+    let scripting_enabled = matches!(cursor.zone_ctx.kind, ZoneKind::Test { .. });
     if !scripting_enabled {
         return Ok(failure!("Unknown command. Try `help`.\n"));
     }

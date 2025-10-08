@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::models::blueprint::Blueprint;
 use crate::db::repo::room::RoomRepo;
 use crate::error::ServiceError;
+use crate::models::room::RoomView;
 use crate::models::types::AccountId;
 use crate::services::ServiceResult;
 
@@ -20,6 +21,11 @@ impl BlueprintService {
         let blueprint = self.repo.get_blueprint(bp_key).await?;
         Ok(blueprint)
     }
+
+    // pub async fn get_roomview(&self, bp_key: &str) -> ServiceResult<RoomView> {
+    //     let room_view = self.repo.get_view(bp_key).await?;
+    //     Ok(room_view)
+    // }
 
     /// Adds an exit from one room to another in a blueprint.
     pub async fn add_exit(&self, bp: &str, from: &str, dir: &str, to: &str) -> ServiceResult<bool> {

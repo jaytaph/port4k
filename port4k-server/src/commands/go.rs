@@ -1,9 +1,7 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandOutput};
+use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
-use crate::error::AppResult;
 use crate::{failure, success};
-use crate::services::CommandResult;
 
 pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     if intent.args.is_empty() {

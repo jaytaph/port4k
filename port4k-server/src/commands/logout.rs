@@ -1,8 +1,7 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandOutput};
+use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use crate::state::session::ConnState;
-use crate::services::CommandResult;
 use crate::{failure, success};
 
 pub async fn logout(ctx: Arc<CmdCtx>, _intent: Intent) -> CommandResult<CommandOutput> {

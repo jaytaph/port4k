@@ -6,11 +6,10 @@ pub mod room;
 pub mod submit;
 mod utils;
 
-use crate::commands::{CmdCtx, CommandOutput};
+use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use std::sync::Arc;
 use crate::failure;
-use crate::services::CommandResult;
 
 pub async fn blueprint(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     if intent.args.is_empty() {

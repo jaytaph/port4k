@@ -1,7 +1,6 @@
 use crate::models::account::Account;
-use crate::models::blueprint::Blueprint;
 use crate::models::room::RoomView;
-use crate::models::zone::{Zone, ZoneKind};
+use crate::models::zone::ZoneContext;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnState {
@@ -20,9 +19,7 @@ pub enum Protocol {
 
 #[derive(Debug, Clone)]
 pub struct Cursor {
-    pub zone: Zone,
-    pub zone_kind: ZoneKind,
-    pub bp: Blueprint,
+    pub zone_ctx: ZoneContext,
     pub room: RoomView,
 }
 

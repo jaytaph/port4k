@@ -1,6 +1,5 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandOutput};
-use crate::services::CommandResult;
+use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::success;
 
 pub async fn who(ctx: Arc<CmdCtx>) -> CommandResult<CommandOutput> {

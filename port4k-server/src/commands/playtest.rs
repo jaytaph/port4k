@@ -1,10 +1,9 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandOutput};
+use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::state::session::Cursor;
-use crate::models::zone::{Zone, ZoneKind};
+use crate::models::zone::ZoneContext;
 use crate::{failure, success};
 use crate::input::parser::Intent;
-use crate::services::CommandResult;
 
 const USAGE: &str = r#"Usage:
   playtest                # exit playtest
@@ -34,7 +33,7 @@ pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Command
         return enter_playtest(ctx.clone(), intent.args[0].as_str()).await;
     }
 
-    Ok(failure!(USAGE.into()))
+    Ok(failure!(USAGE))
 }
 
 pub fn check_playtest(ctx: Arc<CmdCtx>) -> Next {
@@ -66,19 +65,11 @@ pub async fn exit_playtest(ctx: Arc<CmdCtx>) -> CommandResult<CommandOutput> {
 }
 
 pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str) -> CommandResult<CommandOutput> {
-    // Load blueprint
-    // Get entry of blueprint
-    // Create new zone
-
     let account_id = ctx.account_id()?;
     let blueprint = ctx.state.registry.services.blueprint.get_by_key(bp_key).await?;
 
-    let new_c = Cursor{
-        zone: Zone::ephemeral(),
-        zone_kind: ZoneKind::Test { owner: account_id },      // @TODO: This will go wrong
-        bp: blueprint,
-        room: RoomView {},
-    };
+    let new_c = ctx.state.registry.services.cursor.enter_playtest(&account_id, &blueprint).await?;
+    // let room_view = ctx.state.registry.services.blueprint.get_roomview(&blueprint, &blueprint.start_room).await?;
 
     match check_playtest(ctx.clone()) {
         Next::Error => Ok(failure!("Internal error.\n".into())),

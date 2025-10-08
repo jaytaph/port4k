@@ -108,7 +108,7 @@ fn generate_prompt(sess: Arc<RwLock<Session>>, prompt: &str) -> String {
         vars.insert("coins".to_string(), format!("{}", account.coins));
     }
     if let Some(cursor) = sess.read().cursor.as_ref() {
-        vars.insert("zone".to_string(), cursor.zone.title.to_string());
+        vars.insert("zone".to_string(), cursor.zone_ctx.zone.title.to_string());
         vars.insert("room".to_string(), cursor.room.room.title.to_string());
     }
 

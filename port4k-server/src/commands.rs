@@ -7,7 +7,6 @@ use crate::models::account::Account;
 use crate::models::types::AccountId;
 use crate::error::CommandError;
 use crate::net::AppState;
-use crate::services::CommandResult;
 
 mod balance;
 mod fallback;
@@ -21,8 +20,9 @@ mod who;
 mod blueprint;
 mod debug_cmd;
 mod playtest;
-// mod script;
 mod admin;
+
+pub type CommandResult<T> = Result<T, CommandError>;
 
 /// Command context passed to command handlers
 pub struct CmdCtx {

@@ -283,6 +283,7 @@ impl RoomRepo for RoomRepository {
 
         Ok(n == 1)
     }
+
     async fn set_locked(&self, bp_key: &str, room_key: &str, locked: bool) -> DbResult<bool> {
         let c = self.db.get_client().await?;
 
@@ -298,6 +299,7 @@ impl RoomRepo for RoomRepository {
 
         Ok(n == 1)
     }
+
     async fn insert_blueprint(&self, bp_key: &str, title: &str, account_id: AccountId) -> DbResult<bool> {
         let c = self.db.get_client().await?;
 
@@ -312,6 +314,7 @@ impl RoomRepo for RoomRepository {
 
         Ok(n == 1)
     }
+
     async fn insert_room(&self, bp_key: &str, room_key: &str, title: &str, body: &str) -> DbResult<bool> {
         let c = self.db.get_client().await?;
 
@@ -328,6 +331,7 @@ impl RoomRepo for RoomRepository {
 
         Ok(n == 1)
     }
+
     async fn submit(&self, bp_key: &str) -> DbResult<bool> {
         let c = self.db.get_client().await?;
 

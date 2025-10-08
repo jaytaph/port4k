@@ -2,11 +2,10 @@
 
 use std::sync::Arc;
 use crate::commands::blueprint::USAGE;
-use crate::commands::{CmdCtx, CommandOutput};
+use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::{failure, success};
 use crate::error::CommandError;
 use crate::input::parser::Intent;
-use crate::services::CommandResult;
 use crate::util::args::parse_bp_room_key;
 
 pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {

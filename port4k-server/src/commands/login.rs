@@ -1,10 +1,9 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandOutput};
+use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use crate::state::session::ConnState;
 use crate::models::account::Account;
 use crate::{failure, success};
-use crate::services::CommandResult;
 
 pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     if intent.args.len() < 3 {
