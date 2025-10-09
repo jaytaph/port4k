@@ -18,7 +18,7 @@ impl AuthService {
         Self { repo, argon }
     }
 
-    pub async fn register(&self, username: &str, password: &str) -> AppResult<bool> {
+    pub async fn register(&self, username: &str, email: &str, password: &str) -> AppResult<bool> {
         if self.repo.get_by_username(username).await?.is_some() {
             return Ok(false);
         }
@@ -31,6 +31,7 @@ impl AuthService {
 
         let account = Account {
             id: AccountId::new(),
+            email: email.to_string(),
             username: username.to_string(),
             role: "player".to_string(),
             password_hash: hash,
@@ -51,13 +52,15 @@ impl AuthService {
         }
     }
 
-    pub async fn authenticate(&self, username: &str, password: &str) -> AppResult<bool> {
+    pub async fn authenticate(&self, username: &str, password: &str) -> AppResult<Account> {
         let Some(account) = self.repo.get_by_username(username).await? else {
-            return Ok(false);
+            return Err(DomainError::NotFound);
         };
 
         let parsed = PasswordHash::new(&account.password_hash).map_err(DomainError::Password)?;
-        Ok(self.argon.verify_password(password.as_bytes(), &parsed).is_ok())
+        self.argon.verify_password(password.as_bytes(), &parsed)?;
+
+        Ok(account)
     }
 
     pub async fn update_last_login(&self, account_id: AccountId) -> AppResult<()> {

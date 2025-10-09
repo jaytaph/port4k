@@ -15,10 +15,8 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOut
         return Ok(failure!("Invalid username.\n"));
     }
 
-    if !ctx.state.registry.services.auth.authenticate(&username, pass).await? {
-        return Ok(failure!("Invalid credentials.\n"))
-    }
-
+    let account = ctx.state.registry.services.auth.authenticate(&username, pass).await?;
+    ctx.sess.write().account = Some(account);
 
     let account = ctx.account()?;
     let (_char_id, loc) = ctx.state.registry.db.get_or_create_character(account.id, &username).await?;

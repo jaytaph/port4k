@@ -11,7 +11,7 @@
 //     pub zone_id: ZoneId,
 //     pub room_id: RoomId,
 //     pub stats: Vec<String>,
-//     pub created_at: chrono::NaiveDateTime,
+//     pub created_at: chrono::DateTime<chrono::Utc>,
 // }
 //
 // impl Character {

@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
     let registry = Arc::new(Registry::new(db.clone(), cfg.clone()));
 
     // Start background tasks (spawning loot etc.)
-    spawn_background_tasks(registry.clone());
+    // spawn_background_tasks(registry.clone());
 
     // Start Lua worker thread
     let lua_tx = start_lua_worker(Handle::current(), registry.clone());
@@ -109,10 +109,17 @@ fn spawn_background_tasks(registry: Arc<Registry>) {
 fn init_tracing() {
     use tracing_subscriber::{EnvFilter, prelude::*};
 
-    let fmt_layer = tracing_subscriber::fmt::layer().with_target(false);
-    let filter = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info,port4k_server=debug"))
-        .unwrap();
+    color_eyre::install().unwrap();
 
-    tracing_subscriber::registry().with(filter).with(fmt_layer).init();
+    tracing_subscriber::registry()
+        .with(EnvFilter::from_default_env().add_directive("port4k=debug".parse().unwrap()))
+        .with(tracing_subscriber::fmt::layer().with_target(false).with_timer(tracing_subscriber::fmt::time::uptime()))
+        .with(tracing_error::ErrorLayer::default())
+        .init();
+
+    // let fmt_layer = tracing_subscriber::fmt::layer().with_target(false);
+    // let filter = EnvFilter::try_from_default_env()
+    //     .or_else(|_| EnvFilter::try_new("info,port4k_server=debug"))
+    //     .unwrap();
+    // tracing_subscriber::registry().with(filter).with(fmt_layer).init();
 }

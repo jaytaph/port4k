@@ -8,28 +8,29 @@ use crate::models::types::{AccountId, RoomId, ZoneId};
 pub struct Account {
     pub id: AccountId,
     pub username: String,
+    pub email: String,
     pub password_hash: String,
     pub role: String,
-    pub created_at: chrono::NaiveDateTime,
-    pub last_login: Option<chrono::NaiveDateTime>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub last_login: Option<chrono::DateTime<chrono::Utc>>,
     pub zone_id: Option<ZoneId>,
     pub current_room_id: Option<RoomId>,
-    pub xp: u64,
-    pub health: u64,
-    pub coins: u64,
+    pub xp: u32,
+    pub health: u32,
+    pub coins: u32,
     pub inventory: Vec<String>,
     pub flags: Vec<String>,
 }
 
 impl Account {
     pub fn try_from_row(row: &Row) -> DbResult<Self> {
-        let xp_i: i64     = row.try_get("xp")?;
-        let health_i: i64 = row.try_get("health")?;
-        let coins_i: i64  = row.try_get("coins")?;
+        let xp_i: i32     = row.try_get("xp")?;
+        let health_i: i32 = row.try_get("health")?;
+        let coins_i: i32  = row.try_get("coins")?;
 
-        let xp     = u64::try_from(xp_i).map_err(|_| DbError::Decode("xp < 0"))?;
-        let health = u64::try_from(health_i).map_err(|_| DbError::Decode("health < 0"))?;
-        let coins  = u64::try_from(coins_i).map_err(|_| DbError::Decode("coins < 0"))?;
+        let xp     = u32::try_from(xp_i).map_err(|_| DbError::Decode("xp < 0"))?;
+        let health = u32::try_from(health_i).map_err(|_| DbError::Decode("health < 0"))?;
+        let coins  = u32::try_from(coins_i).map_err(|_| DbError::Decode("coins < 0"))?;
 
         // Prefer decoding JSON directly if schema is jsonb array of text
         let inventory: Option<Vec<String>> = row.try_get("inventory").ok();
@@ -38,6 +39,7 @@ impl Account {
         Ok(Self {
             id: row.try_get::<_, AccountId>("id")?,
             username: row.try_get("username")?,
+            email: row.try_get("email")?,
             password_hash: row.try_get("password_hash")?,
             role: row.try_get("role")?,
             created_at: row.try_get("created_at")?,

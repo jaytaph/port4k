@@ -40,3 +40,5 @@ uuid = { version = "1", features = ["v4", "serde"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres", "uuid"] }
 async-trait = "0.1.89"
 dashmap = "7.0.0-rc2"
+tracing-error = "0.2"
+color-eyre = "0.6"

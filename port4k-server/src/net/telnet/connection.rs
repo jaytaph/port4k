@@ -236,17 +236,13 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
     }
 
     let password = pw.trim_matches(['\r', '\n']);
-    if !state.registry.services.auth.authenticate(&username, password).await.unwrap_or(false) {
-        write_with_newline(w, b"Invalid credentials.").await?;
-        return Ok(LoginOutcome::Handled);
-    }
+    let account = state.registry.services.auth.authenticate(&username, password).await?;
 
-
-    // All is ok
-    let Some(account) = state.registry.repos.account.get_by_username(&username).await? else {
-        write_with_newline(w, b"Account retrieval error.").await?;
-        return Ok(LoginOutcome::Handled);
-    };
+    // // All is ok
+    // let Some(account) = state.registry.repos.account.get_by_username(&username).await? else {
+    //     write_with_newline(w, b"Account retrieval error.").await?;
+    //     return Ok(LoginOutcome::Handled);
+    // };
 
     {
         let mut s = sess.write();

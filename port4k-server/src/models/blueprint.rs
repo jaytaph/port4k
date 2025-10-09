@@ -25,7 +25,7 @@ pub struct Blueprint {
     pub owner: AccountId,
     pub status: BlueprintStatus,
     pub entry_room_id: RoomId,
-    pub created_at: chrono::NaiveDateTime,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl Blueprint {
