@@ -21,7 +21,6 @@ pub use state::{
     session::{ConnState, Session},
 };
 
-use crate::banner::{BANNER, ENTRY};
 use crate::lua::start_lua_worker;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -58,8 +57,6 @@ async fn main() -> anyhow::Result<()> {
         if let Err(e) = http::serve(
             SocketAddr::from(ws_addr),
             ws_registry,
-            BANNER,
-            ENTRY,
             ws_lua_tx,
         ).await {
             eprintln!("HTTP server error: {e}");
@@ -76,8 +73,6 @@ async fn main() -> anyhow::Result<()> {
         if let Err(e) = telnet::serve(
             SocketAddr::from(tcp_addr),
             tcp_registry.clone(),
-            BANNER,
-            ENTRY,
             tcp_lua_tx,
         ).await {
             eprintln!("Telnet server error: {e}");

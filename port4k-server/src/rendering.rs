@@ -1,7 +1,10 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
+use std::sync::Arc;
+use parking_lot::RwLock;
 use crate::models::room::{RoomExitRow, RoomObject, RoomView};
+use crate::Session;
 
 pub struct Theme {
     pub room_title: String,
@@ -128,10 +131,6 @@ pub fn render_room(
     theme: &Theme,
     width: usize,
     room: RoomView,
-    // title: &str,
-    // body: &str,
-    // objects: &HashMap<String, String>,
-    // exits: &[String],
 ) -> String {
     let border = color_title(theme, &"-".repeat(room.room.title.len().min(80)));
     let title_line = color_title(theme, room.room.title.as_str());
@@ -140,4 +139,43 @@ pub fn render_room(
     let exits_line = color_exits(theme, room.exits.as_slice());
 
     format!("{border}\n{title_line}\n{border}\n\n{body_wrapped}\n\n{exits_line}\n")
+}
+
+pub fn get_vars(sess: Arc<RwLock<Session>>) -> HashMap<String, String> {
+    let mut vars = HashMap::new();
+
+    // Generic vars not tied to account or location
+    vars.insert("wall_time".to_string(), chrono::Local::now().format("%H:%M:%S").to_string());
+    vars.insert("online_time".to_string(), format!("{}", sess.read().session_started.elapsed().as_secs()));
+    vars.insert("online_users".to_string(), format!("{}", 123));
+    vars.insert("unread_messages".to_string(), format!("{}", 0));
+    vars.insert("active_quests".to_string(), format!("{}", 0));
+    vars.insert("now_utc".to_string(), chrono::Utc::now().to_rfc3339());
+    vars.insert("now_local".to_string(), chrono::Local::now().to_rfc3339());
+
+    if let Some(account) = sess.read().account.as_ref() {
+        vars.insert("account.name".to_string(), account.username.to_string());
+        vars.insert("account.role".to_string(), account.role.to_string());
+        vars.insert("account.xp".to_string(), format!("{}", account.xp));
+        vars.insert("account.health".to_string(), format!("{}", account.health));
+        vars.insert("account.coins".to_string(), format!("{}", account.coins));
+    }
+    if let Some(cursor) = sess.read().cursor.as_ref() {
+        vars.insert("cursor.zone".to_string(), cursor.zone_ctx.zone.title.to_string());
+        vars.insert("cursor.room".to_string(), cursor.room.room.title.to_string());
+    }
+
+    vars
+}
+
+pub fn resolve_vars(
+    template: &str,
+    vars: &HashMap<&str, String>,
+) -> String {
+    let re = Regex::new(r"\{([a-zA-Z0-9_]+)\}").unwrap();
+    re.replace_all(template, |caps: &regex::Captures| {
+        let key = &caps[1];
+        vars.get(key).cloned().unwrap_or_else(|| caps[0].to_string())
+    })
+    .into_owned()
 }

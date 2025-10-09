@@ -14,7 +14,7 @@ pub async fn register(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Command
         return Ok(failure!("Invalid username.\n"));
     }
 
-    if !ctx.state.registry.services.auth.register(&username, email, pass).await? {
+    if !ctx.registry.services.auth.register(&username, email, pass).await? {
         return Ok(failure!("That name or email is taken.\n"))
     }
 

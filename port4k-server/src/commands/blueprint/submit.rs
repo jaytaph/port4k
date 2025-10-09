@@ -12,7 +12,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
 
     let bp = &intent.args[0];
 
-    if ctx.state.registry.services.blueprint.submit(bp).await? {
+    if ctx.registry.services.blueprint.submit(bp).await? {
         Ok(success!("[bp] submitted for review.\n"))
     } else {
         Ok(failure!("[bp] not found.\n"))

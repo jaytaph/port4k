@@ -7,15 +7,17 @@ impl Db {
         let client = self.pool.get().await?;
         let row = client
             .query_one(
-                "SELECT r.id
-                    FROM rooms r
-                    JOIN zones z ON z.id = r.zone_id
-                    WHERE z.key = 'start' AND r.key = 'entry'",
-                    &[],
+                r#"
+            SELECT r.id
+            FROM bp_rooms r
+            JOIN blueprints b ON b.id = r.bp_id
+            JOIN zones z ON z.key = b.key
+            WHERE z.key = 'hub' AND r.key = 'entry'
+            "#,
+                &[],
             )
             .await?;
-
-        Ok(row.get::<_, RoomId>(0).into())
+        Ok(row.get(0))
     }
 
     pub async fn get_or_create_character(&self, account_id: AccountId, username: &str) -> DbResult<(CharacterId, RoomId)> {

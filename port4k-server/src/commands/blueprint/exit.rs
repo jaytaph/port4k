@@ -42,14 +42,14 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
             use std::fmt::Write as _;
             let mut msg = String::new();
 
-            if ctx.state.registry.services.blueprint.add_exit(&bp1, &from, &dir, &to).await? {
+            if ctx.registry.services.blueprint.add_exit(&bp1, &from, &dir, &to).await? {
                 let _ = writeln!(&mut msg, "[bp] exit {}:{} --{}--> {} added.", bp1, from, dir, to);
             } else {
                 let _ = writeln!(&mut msg, "[bp] exit already exists.");
             }
 
             if want_locked {
-                match ctx.state.registry.services.blueprint.set_locked(&bp1, &to, true).await {
+                match ctx.registry.services.blueprint.set_locked(&bp1, &to, true).await {
                     Ok(true)  => { let _ = writeln!(&mut msg, "[bp] room {}:{} set to LOCKED.", bp1, to); }
                     Ok(false) => { let _ = writeln!(&mut msg, "[bp] could not lock destination (room not found?)."); }
                     Err(e)    => { let _ = writeln!(&mut msg, "[bp] failed to lock destination: {}", e); }

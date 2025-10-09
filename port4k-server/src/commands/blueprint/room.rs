@@ -34,7 +34,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
                 return Ok(failure!("[bp] title and body cannot be empty.\n"));
             }
 
-            if ctx.state.registry.services.blueprint.new_room(&bp, &room, title, body).await? {
+            if ctx.registry.services.blueprint.new_room(&bp, &room, title, body).await? {
                 Ok(success!(format!("[bp] room {}:{} added.\n", bp, room)))
             } else {
                 Ok(failure!("[bp] room already exists.\n"))
@@ -50,7 +50,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
             let (bp, room) = parse_bp_room_key(&sub_args[0])
                 .ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
 
-            if ctx.state.registry.services.blueprint.set_locked(&bp, &room, true).await? {
+            if ctx.registry.services.blueprint.set_locked(&bp, &room, true).await? {
                 Ok(success!(format!("[bp] room {}:{} set to LOCKED.\n", bp, room)))
             } else {
                 Ok(failure!("[bp] blueprint/room not found.\n"))
@@ -66,7 +66,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
             let (bp, room) = parse_bp_room_key(&sub_args[0])
                 .ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
 
-            if ctx.state.registry.services.blueprint.set_locked(&bp, &room, false).await? {
+            if ctx.registry.services.blueprint.set_locked(&bp, &room, false).await? {
                 Ok(success!(format!("[bp] room {}:{} set to UNLOCKED.\n", bp, room)))
             } else {
                 Ok(failure!("[bp] blueprint/room not found.\n"))

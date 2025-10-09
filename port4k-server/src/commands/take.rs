@@ -28,7 +28,7 @@ pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutp
         room
     };
 
-    let got = ctx.state.registry.db.pickup_coins(&account, room.room.id, want).await?;
+    let got = ctx.registry.db.pickup_coins(&account, room.room.id, want).await?;
     if got == 0 {
         Ok(failure!("There are no coins to pick up.\n"))
     } else {

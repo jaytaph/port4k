@@ -12,7 +12,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
     let title = &intent.args[3];
     let account_id = ctx.account_id()?;
 
-    if ctx.state.registry.services.blueprint.new_blueprint(bp, title, account_id).await? {
+    if ctx.registry.services.blueprint.new_blueprint(bp, title, account_id).await? {
         Ok(success!(format!("[bp] created `{}`: {}\n", bp, title)))
     } else {
         Ok(failure!("[bp] already exists.\n"))

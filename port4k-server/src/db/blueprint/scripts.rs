@@ -1,40 +1,40 @@
 use crate::db::DbResult;
+use crate::models::types::{AccountId, RoomId};
 use super::super::Db;
 
 impl Db {
     pub async fn bp_script_put_draft(
         &self,
-        bp_key: &str,
-        room_key: &str,
+        room_id: RoomId,
+        author_id: AccountId,
         event: &str,
         source: &str,
-        author: &str,
     ) -> DbResult<()> {
         let c = self.pool.get().await?;
         c.execute(
-            "INSERT INTO bp_scripts_draft (bp_key, room_key, event, source, author)
-             VALUES ($1,$2,$3,$4,$5)
-             ON CONFLICT (bp_key,room_key,event)
+            "INSERT INTO bp_scripts_draft (room_id, event, source, author)
+             VALUES ($1,$2,$3,$4)
+             ON CONFLICT (room_id,event)
              DO UPDATE
              SET source=EXCLUDED.source, author=EXCLUDED.author, updated_at=now()",
-            &[&bp_key, &room_key, &event, &source, &author],
+            &[&room_id, &event, &source, &author_id],
         )
         .await?;
         Ok(())
     }
 
-    pub async fn bp_script_publish(&self, bp_key: &str, room_key: &str, event: &str) -> DbResult<bool> {
+    pub async fn bp_script_publish(&self, room_id: RoomId, event: &str) -> DbResult<bool> {
         let c = self.pool.get().await?;
         let n = c
             .execute(
-                "INSERT INTO bp_scripts_live (bp_key, room_key, event, source, author, updated_at)
-             SELECT bp_key, room_key, event, source, author, now()
+                "INSERT INTO bp_scripts_live (room_id, event, source, author, updated_at)
+             SELECT room_id, event, source, author, now()
              FROM bp_scripts_draft
-             WHERE bp_key=$1 AND room_key=$2 AND event=$3
-             ON CONFLICT (bp_key,room_key,event)
+             WHERE room_id=$1 AND event=$2
+             ON CONFLICT (room_id,event)
              DO UPDATE
              SET source=EXCLUDED.source, author=EXCLUDED.author, updated_at=now()",
-                &[&bp_key, &room_key, &event],
+                &[&room_id, &event],
             )
             .await?;
         Ok(n > 0)
@@ -42,15 +42,14 @@ impl Db {
 
     pub async fn bp_script_get_live(
         &self,
-        bp_key: &str,
-        room_key: &str,
+        room_id: RoomId,
         event: &str,
     ) -> DbResult<Option<String>> {
         let c = self.pool.get().await?;
         let row = c
             .query_opt(
-                "SELECT source FROM bp_scripts_live WHERE bp_key=$1 AND room_key=$2 AND event=$3",
-                &[&bp_key, &room_key, &event],
+                "SELECT source FROM bp_scripts_live WHERE room_id=$1 AND event=$2",
+                &[&room_id, &event],
             )
             .await?;
         Ok(row.map(|r| r.get::<_, String>(0)))

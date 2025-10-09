@@ -9,6 +9,7 @@ use std::{fs, path::Path};
 use tokio_postgres::Transaction;
 use crate::db::error::DbError;
 use crate::error::{AppResult, DomainError, InfraError};
+use crate::models::types::BlueprintId;
 
 #[derive(Debug, Deserialize)]
 pub struct RoomYaml {
@@ -77,7 +78,7 @@ pub struct ScriptObjectHandlers {
     pub _use_compat: Option<String>, // compat alias
 }
 
-pub async fn import_blueprint_subdir(bp: &str, subdir: &str, content_base: &Path, db: &crate::db::Db) -> AppResult<()> {
+pub async fn import_blueprint_subdir(blueprint_id: BlueprintId, subdir: &str, content_base: &Path, db: &crate::db::Db) -> AppResult<()> {
     let dir = resolve_content_subdir(content_base, subdir)?;
     let files = list_yaml_files_guarded(&dir)?;
 
@@ -107,14 +108,14 @@ pub async fn import_blueprint_subdir(bp: &str, subdir: &str, content_base: &Path
         // Note we don't await here
         validate_lua_for_room(&room)?;
 
-        upsert_room_and_exits(bp, &room, &tx).await?;
+        upsert_room_and_exits(blueprint_id, &room, &tx).await?;
     }
 
     tx.commit().await.map_err(DbError::from)?;
     Ok(())
 }
 
-async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> AppResult<()> {
+async fn upsert_room_and_exits(bp_id: BlueprintId, r: &RoomYaml, tx: &Transaction<'_>) -> AppResult<()> {
     let title = &r.name;
     let short = r.short.as_deref().unwrap_or_default();
     let body = &r.full_desc;
@@ -131,9 +132,9 @@ async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> 
     // UPSERT room
     tx.execute(
         r#"
-        INSERT INTO bp_rooms (bp_key, key, title, short, body, hints, objects, scripts)
+        INSERT INTO bp_rooms (bp_id, key, title, short, body, hints, objects, scripts)
         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb)
-        ON CONFLICT (bp_key, key) DO UPDATE
+        ON CONFLICT (bp_id, key) DO UPDATE
         SET title  = EXCLUDED.title,
             short  = EXCLUDED.short,
             body   = EXCLUDED.body,
@@ -142,7 +143,7 @@ async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> 
             scripts= EXCLUDED.scripts
         "#,
         &[
-            &bp,
+            &bp_id,
             &r.id,
             &title,
             &short,
@@ -158,16 +159,16 @@ async fn upsert_room_and_exits(bp: &str, r: &RoomYaml, tx: &Transaction<'_>) -> 
     for ex in &r.exits {
         tx.execute(
             r#"
-            INSERT INTO bp_exits (bp_key, from_key, dir, to_key, locked, description, visible_when_locked)
+            INSERT INTO bp_exits (bp_id, from_key, dir, to_key, locked, description, visible_when_locked)
             VALUES ($1,$2,$3,$4, COALESCE($5,false), $6, COALESCE($7,true))
-            ON CONFLICT (bp_key, from_key, dir) DO UPDATE
+            ON CONFLICT (bp_id, from_key, dir) DO UPDATE
             SET to_key = EXCLUDED.to_key,
                 locked  = EXCLUDED.locked,
                 description  = EXCLUDED.description,
                 visible_when_locked = EXCLUDED.visible_when_locked
             "#,
             &[
-                &bp,
+                &bp_id,
                 &r.id,
                 &ex.dir.to_ascii_lowercase(),
                 &ex.to,

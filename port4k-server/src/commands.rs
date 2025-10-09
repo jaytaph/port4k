@@ -3,14 +3,14 @@ use crate::state::session::{Cursor, Session};
 use std::sync::Arc;
 use parking_lot::RwLock;
 use thiserror::Error;
+use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::SendError;
-use crate::ansi;
+use crate::{ansi, Registry};
 use crate::db::error::DbError;
 use crate::error::{AppResult, DomainError};
 use crate::models::account::Account;
 use crate::models::types::AccountId;
 use crate::lua::LuaJob;
-use crate::net::AppState;
 use crate::services::ServiceError;
 
 mod balance;
@@ -67,8 +67,14 @@ pub enum CommandError {
 
 /// Command context passed to command handlers
 pub struct CmdCtx {
-    pub state: Arc<AppState>,
+    /// Global service registry
+    pub registry: Arc<Registry>,
+    /// Channel to send jobs to the Lua thread
+    pub lua_tx: mpsc::Sender<LuaJob>,
+    /// Player session
     pub sess: Arc<RwLock<Session>>,
+    // /// Current zone context
+    // pub zone_ctx: Option<ZoneCtx>,
 }
 
 impl CmdCtx {
@@ -123,15 +129,9 @@ macro_rules! failure {
 
 pub async fn process_command(
     raw: &str,
-    state: Arc<AppState>,
-    sess: Arc<RwLock<Session>>,
+    ctx: Arc<CmdCtx>,
 ) -> CommandResult<CommandOutput> {
     let intent = parse_command(raw);
-
-    let ctx = Arc::new(CmdCtx {
-        state: state.clone(),
-        sess: sess.clone()
-    });
 
     match intent.verb {
         Verb::Close => Ok(success!("Goodbye!\n".to_string())),

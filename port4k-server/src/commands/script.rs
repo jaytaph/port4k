@@ -37,7 +37,7 @@
 //             let (bp, room) = parse_bp_room_key(&sub_args[0]).ok_or_else(|| anyhow::anyhow!("room must be <bp>:<room>"))?;
 //             let event = sub_args[1].as_str();
 //
-//             let ok = ctx.state.registry.db.bp_script_publish(&bp, &room, event).await?;
+//             let ok = ctx.registry.db.bp_script_publish(&bp, &room, event).await?;
 //             if ok {
 //                 Ok(success!(format!("[script] published {}:{} {}\n", bp, room, event)))
 //             } else {

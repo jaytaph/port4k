@@ -12,25 +12,22 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::lua::LuaJob;
 use crate::{Registry, Session, process_command};
 use tokio::sync::mpsc;
+use crate::banner::{BANNER, ENTRY};
 use crate::commands::CmdCtx;
 use crate::error::{AppResult, InfraError};
-use crate::net::AppState;
+use crate::net::AppCtx;
 use crate::state::session::Protocol;
 
 /// Run the HTTP server with WebSocket endpoint
 pub async fn serve(
     addr: std::net::SocketAddr,
     registry: Arc<Registry>,
-    banner: &'static str,
-    entry: &'static str,
     lua_tx: mpsc::Sender<LuaJob>,
 ) -> AppResult<()> {
     let app = Router::new()
         .route("/ws", get(ws_upgrade))
-        .with_state(AppState {
+        .with_state(AppCtx {
             registry,
-            banner,
-            entry,
             lua_tx,
         })
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any));
@@ -40,22 +37,22 @@ pub async fn serve(
     Ok(())
 }
 
-async fn ws_upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| ws_handler(socket, state))
+async fn ws_upgrade(ws: WebSocketUpgrade, State(state): State<AppCtx>) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| ws_handler(socket, state.registry.clone(), state.lua_tx.clone()))
 }
 
-async fn ws_handler(mut socket: WebSocket, state: AppState) {
+async fn ws_handler(mut socket: WebSocket, registry: Arc<Registry>, lua_tx: mpsc::Sender<LuaJob>) {
     let _ = socket
-        .send(Message::Text(format!("{}{}> ", state.banner, state.entry)))
+        .send(Message::Text(format!("{}{}> ", BANNER, ENTRY)))
         .await;
 
-    let state = Arc::new(state);
     let sess = Arc::new(RwLock::new(Session::new(Protocol::WebSocket)));
 
-    let ctx = CmdCtx {
-        state: state.clone(),
+    let ctx = Arc::new(CmdCtx {
+        registry: registry.clone(),
+        lua_tx: lua_tx.clone(),
         sess: sess.clone(),
-    };
+    });
 
     while let Some(Ok(msg)) = socket.recv().await {
         let text = match msg {
@@ -70,7 +67,7 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
         };
 
         let cmd = text.trim();
-        match process_command(cmd, state.clone(), sess.clone()).await {
+        match process_command(cmd, ctx.clone()).await {
             Ok(res) => {
                 let resp = if res.is_error {
                     format!("error: {}\n", res.message)
@@ -95,7 +92,7 @@ async fn ws_handler(mut socket: WebSocket, state: AppState) {
     }
 
     if let Ok(account) = ctx.account() {
-        state.registry.set_online(&account, false).await;
+        registry.set_online(&account, false).await;
     }
 }
 

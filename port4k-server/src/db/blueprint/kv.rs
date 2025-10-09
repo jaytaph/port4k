@@ -1,14 +1,15 @@
 use crate::db::DbResult;
+use crate::models::types::{AccountId, RoomId};
 use super::super::Db;
 
 impl Db {
-    pub async fn bp_room_kv_get(&self, bp: &str, room: &str, key: &str) -> DbResult<Option<serde_json::Value>> {
+    pub async fn bp_room_kv_get(&self, room_id: RoomId, key: &str) -> DbResult<Option<serde_json::Value>> {
         let c = self.pool.get().await?;
         let row = c
             .query_opt(
                 "SELECT value FROM bp_room_kv
-                    WHERE bp_key=$1 AND room_key=$2 AND key=$3",
-                &[&bp, &room, &key],
+                    WHERE room_id=$1 AND key=$2",
+                &[&room_id, &key],
             )
             .await?;
         Ok(row.map(|r| r.get::<_, serde_json::Value>(0)))
@@ -16,18 +17,17 @@ impl Db {
 
     pub async fn bp_room_kv_set(
         &self,
-        bp: &str,
-        room: &str,
+        room_id: RoomId,
         key: &str,
         value: &serde_json::Value,
     ) -> DbResult<()> {
         let c = self.pool.get().await?;
         c.execute(
-            "INSERT INTO bp_room_kv (bp_key, room_key, key, value)
-                VALUES ($1,$2,$3,$4)
-                ON CONFLICT (bp_key,room_key,key)
+            "INSERT INTO bp_room_kv (room_id, key, value)
+                VALUES ($1,$2,$3)
+                ON CONFLICT (room_id, key)
                 DO UPDATE SET value=EXCLUDED.value",
-            &[&bp, &room, &key, value],
+            &[&room_id, &key, value],
         )
         .await?;
         Ok(())
@@ -35,17 +35,16 @@ impl Db {
 
     pub async fn bp_player_kv_get(
         &self,
-        bp: &str,
-        account: &str,
-        room: &str,
+        account_id: AccountId,
+        room_id: RoomId,
         key: &str,
     ) -> DbResult<Option<serde_json::Value>> {
         let c = self.pool.get().await?;
         let row = c
             .query_opt(
                 "SELECT value FROM bp_player_kv
-                    WHERE bp_key=$1 AND account_name=$2 AND room_key=$3 AND key=$4",
-                &[&bp, &account, &room, &key],
+                    WHERE room_id=$1 AND account_id=$2 AND key=$4",
+                &[&room_id, &account_id, &key],
             )
             .await?;
         Ok(row.map(|r| r.get::<_, serde_json::Value>(0)))
@@ -53,19 +52,18 @@ impl Db {
 
     pub async fn bp_player_kv_set(
         &self,
-        bp: &str,
-        account: &str,
-        room: &str,
+        account_id: AccountId,
+        room_id: RoomId,
         key: &str,
         value: &serde_json::Value,
     ) -> DbResult<()> {
         let c = self.pool.get().await?;
         c.execute(
-            "INSERT INTO bp_player_kv (bp_key, account_name, room_key, key, value)
-                VALUES ($1,$2,$3,$4,$5)
-                ON CONFLICT (bp_key,account_name,room_key,key)
+            "INSERT INTO bp_player_kv (room_id, account_id, key, value)
+                VALUES ($1,$2,$3,$4)
+                ON CONFLICT (room_id,account_id,key)
                 DO UPDATE SET value=EXCLUDED.value",
-            &[&bp, &account, &room, &key, value],
+            &[&room_id, &account_id, &key, value],
         )
         .await?;
         Ok(())

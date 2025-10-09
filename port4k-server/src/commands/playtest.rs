@@ -63,10 +63,10 @@ pub async fn exit_playtest(ctx: Arc<CmdCtx>) -> CommandResult<CommandOutput> {
 
 pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str) -> CommandResult<CommandOutput> {
     let account_id = ctx.account_id()?;
-    let blueprint = ctx.state.registry.services.blueprint.get_by_key(bp_key).await?;
+    let blueprint = ctx.registry.services.blueprint.get_by_key(bp_key).await?;
 
-    let new_c = ctx.state.registry.services.cursor.enter_playtest(account_id, blueprint).await?;
-    // let room_view = ctx.state.registry.services.blueprint.get_roomview(&blueprint, &blueprint.start_room).await?;
+    let new_c = ctx.registry.services.cursor.enter_playtest(account_id, blueprint).await?;
+    // let room_view = ctx.registry.services.blueprint.get_roomview(&blueprint, &blueprint.start_room).await?;
 
     match check_playtest(ctx.clone()) {
         Next::NotLoggedIn => Ok(failure!("Login required.\n")),
