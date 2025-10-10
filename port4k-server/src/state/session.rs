@@ -34,10 +34,15 @@ pub struct Session {
     pub account: Option<Account>,
     /// Current connection state
     pub state: ConnState,
-    /// Current world cursor (where am i?)
+
+    // Which map am I?
+    pub zone_ctx: Option<ZoneContext>,
+
+    // Where am I (on the map)?
     pub cursor: Option<Cursor>,
-    /// Previous cursors (for backtracking)
+    // Previous cursors (for "back" command)
     pub prev_cursors: Vec<Cursor>,
+
     // Terminal size (if known)
     pub tty_cols: Option<usize>,
     pub tty_rows: Option<usize>,
@@ -51,6 +56,7 @@ impl Session {
             account: None,
             state: ConnState::PreLogin,
             cursor: None,
+            zone_ctx: None,
             prev_cursors: Vec::new(),
             tty_cols: None,
             tty_rows: None,

@@ -2,21 +2,15 @@ use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use crate::rendering::{render_room, Theme};
-use crate::{failure, success};
+use crate::success;
+use crate::error::DomainError;
 
 pub async fn look(ctx: Arc<CmdCtx>, _intent: Intent) -> CommandResult<CommandOutput> {
-    let (room_view, width) = {
-        let s = ctx.sess.read();
-        let c = match s.cursor.as_ref() {
-            Some(c) => c,
-            None => return Ok(failure!("You are nowhere.\n")),
-        };
+    let zone_ctx = ctx.zone_ctx().map_err(|_| DomainError::NotFound)?;
+    let account = ctx.account().map_err(|_| DomainError::NotLoggedIn)?;
+    let cursor = ctx.cursor().map_err(|_| DomainError::NotFound)?;
 
-        let width = s.tty_cols.unwrap_or(80).max(20);
+    let room_view = ctx.registry.services.room.create_view(&zone_ctx, &account, &cursor).await?;
 
-        let room_view = c.room.clone();
-        (room_view, width)
-    };
-
-    Ok(success!(render_room(&Theme::blue(), width, room_view)))
+    Ok(success!(render_room(&Theme::blue(), 80, room_view)))
 }

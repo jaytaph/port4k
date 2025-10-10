@@ -4,6 +4,7 @@ use crate::input::parser::Intent;
 use crate::state::session::ConnState;
 use crate::models::account::Account;
 use crate::{failure, success};
+use crate::error::DomainError;
 use crate::rendering::{render_room, Theme};
 
 const MOTD: &'static str = r#"
@@ -45,7 +46,7 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOut
     ctx.sess.write().account = Some(account);
 
     let account = ctx.account()?;
-    let (_char_id, loc) = ctx.registry.db.get_or_create_character(account.id, &username).await?;
+    let (_char_id, _loc) = ctx.registry.db.get_or_create_character(account.id, &username).await?;
     {
         let mut s = ctx.sess.write();
         s.account = Some(account.clone());  // @TODO: Is this wise? Why clone?
@@ -55,9 +56,13 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOut
 
     ctx.registry.set_online(&account, true).await;
 
-    let zone_ctx = ctx.sess.read().cursor.unwrap().zone_ctx.clone();
-    let view_repo = ctx.registry.services.navigator.zone_router.view_repo_for(&zone_ctx);
-    view_repo.room_view(zone_ctx, room_id, 80);
 
-    Ok(success!(format!("{}\n{}", MOTD, render_room(&Theme::blue(), 80, view))))
+    let zone_ctx = ctx.zone_ctx().map_err(|_| DomainError::NotFound)?;
+    let account = ctx.account().map_err(|_| DomainError::NotLoggedIn)?;
+    let cursor = ctx.cursor().map_err(|_| DomainError::NotFound)?;
+
+    let room_view = ctx.registry.services.room.create_view(&zone_ctx, &account, &cursor).await?;
+
+    let output = format!("{}\n{}", MOTD, render_room(&Theme::blue(), 80, room_view));
+    Ok(success!(output))
 }

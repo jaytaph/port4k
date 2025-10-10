@@ -11,6 +11,7 @@ use crate::error::{AppResult, DomainError};
 use crate::models::account::Account;
 use crate::models::types::AccountId;
 use crate::lua::LuaJob;
+use crate::models::zone::ZoneContext;
 use crate::services::ServiceError;
 
 mod balance;
@@ -98,13 +99,22 @@ impl CmdCtx {
             .and_then(|opt| opt.ok_or(DomainError::NotLoggedIn))
     }
 
-    pub fn has_cursor(&self) -> bool {
-        self.sess.try_read().map_or(false, |s| s.cursor.is_some())
+    pub fn has_zone_ctx(&self) -> bool {
+        self.sess.try_read().map_or(false, |s| s.zone_ctx.is_some())
+    }
+
+    pub fn zone_ctx(&self) -> AppResult<ZoneContext> {
+        self.with_sess(|s| s.zone_ctx.clone())
+            .and_then(|opt| opt.ok_or(DomainError::NotFound))
     }
 
     pub fn cursor(&self) -> AppResult<Cursor> {
         self.with_sess(|s| s.cursor.clone())
-            .and_then(|opt| opt.ok_or(DomainError::NoCurrentRoom))
+            .and_then(|opt| opt.ok_or(DomainError::NotFound))
+    }
+
+    pub fn has_cursor(&self) -> bool {
+        self.sess.try_read().map_or(false, |s| s.cursor.is_some())
     }
 }
 
