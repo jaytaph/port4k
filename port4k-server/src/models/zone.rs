@@ -8,7 +8,7 @@ use crate::db::{Db, DbResult};
 use crate::db::error::DbError;
 use crate::error::{AppResult, DomainError};
 use crate::models::blueprint::Blueprint;
-use crate::models::room::RoomView;
+use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts, ZoneRoomState};
 use crate::models::types::{AccountId, ObjectId, RoomId, ZoneId};
 
 /// Type of zone defines what is allowed and how it is persisted.
@@ -47,6 +47,7 @@ impl ZonePolicy {
 /// Zone context
 #[derive(Clone, Debug)]
 pub struct ZoneContext {
+    /// Which zone are we in
     pub zone: Arc<Zone>,
     /// Kind of zone
     pub kind: ZoneKind,
@@ -136,18 +137,6 @@ impl ZoneRouter {
             Persistence::Persistent => self.db.clone(),
         }
     }
-
-    pub fn view_repo_for(&self, zone_ctx: &ZoneContext) -> Arc<dyn ZoneViewRepo> {
-        match zone_ctx.policy.persistence {
-            Persistence::Ephemeral => self.mem.clone(),
-            Persistence::Persistent => self.db.clone(),
-        }
-    }
-}
-
-#[async_trait]
-pub trait ZoneViewRepo: Send + Sync {
-    async fn room_view(&self, zone_ctx: &ZoneContext, room_id: RoomId, width: u16) -> DbResult<RoomView>;
 }
 
 #[async_trait]
@@ -167,6 +156,12 @@ pub trait ZoneUnitOfWork: Send {
 #[async_trait]
 pub trait ZoneBackend: Send + Sync {
     async fn begin(&self, zone_ctx: &ZoneContext) -> DbResult<Box<dyn ZoneUnitOfWork>>;
+
+    async fn room_by_id(&self, bp: &Blueprint, room_id: RoomId) -> AppResult<BlueprintRoom>;
+    async fn room_exits(&self, room_id: RoomId) -> AppResult<Vec<RoomExitRow>>;
+    async fn room_objects(&self, room_id: RoomId) -> AppResult<Vec<RoomObject>>;
+    async fn room_scripts(&self, room_id: RoomId) -> AppResult<RoomScripts>;
+    async fn room_kv(&self, room_id: RoomId) -> AppResult<RoomKv>;
 }
 
 // -----------------------------------------------------------------------------------------------
@@ -191,29 +186,44 @@ impl ZoneBackend for DbBackend {
             pending: Pending::default(),
         }))
     }
+
+    async fn room_by_id(&self, bp: &Blueprint, room_id: RoomId) -> AppResult<BlueprintRoom> {
+        todo!()
+    }
+
+    async fn room_exits(&self, room_id: RoomId) -> AppResult<Vec<RoomExitRow>> {
+        todo!()
+    }
+
+    async fn room_objects(&self, room_id: RoomId) -> AppResult<Vec<RoomObject>> {
+        todo!()
+    }
+
+    async fn room_scripts(&self, room_id: RoomId) -> AppResult<RoomScripts> {
+        todo!()
+    }
+
+    async fn room_kv(&self, room_id: RoomId) -> AppResult<RoomKv> {
+        todo!()
+    }
 }
 
 #[async_trait]
 impl ZoneStateRepo for DbBackend {
-    // [DbBackend::current_room] read current room from DB
-    async fn current_room(&self, _zone: &ZoneContext, account_id: AccountId) -> AppResult<RoomId> {
-        let client = self.db.get_client().await?;
-        let row = client.query_one(
-            "SELECT current_room_id FROM accounts WHERE id = $1",
-            &[&account_id],
-        ).await.map_err(DbError::from)?;
-        Ok(row.get::<_, RoomId>(0))
-    }
-}
-
-#[async_trait]
-impl ZoneViewRepo for DbBackend {
-    async fn room_view(&self, zone: &ZoneContext, room_id: RoomId, width: u16) -> DbResult<RoomView> {
-        let _ = zone;
-        let _ = room_id;
-        let _ = width;
+    async fn zone_room_state(&self, zone_ctx: &ZoneContext, room_id: RoomId, account_id: AccountId) -> AppResult<ZoneRoomState> {
         todo!()
     }
+
+    // [DbBackend::current_room] read current room from DB
+    // async fn current_room(&self, _zone: &ZoneContext, account_id: AccountId) -> AppResult<RoomId> {
+    //     let client = self.db.get_client().await?;
+    //     let row = client.query_one(
+    //         "SELECT current_room_id FROM accounts WHERE id = $1",
+    //         &[&account_id],
+    //     ).await.map_err(DbError::from)?;
+    //     Ok(row.get::<_, RoomId>(0))
+    // }
+
 }
 
 // -----------------------------------------------------------------------------------------------
@@ -355,7 +365,8 @@ impl ZoneUnitOfWork for DbUow {
 
 #[async_trait]
 pub trait ZoneStateRepo: Send + Sync {
-    async fn current_room(&self, zone_ctx: &ZoneContext, account_id: AccountId) -> AppResult<RoomId>;
+    // async fn current_room(&self, zone_ctx: &ZoneContext, account_id: AccountId) -> AppResult<RoomId>;
+    async fn zone_room_state(&self, zone_ctx: &ZoneContext, room_id: RoomId, account_id: AccountId) -> AppResult<ZoneRoomState>;
 }
 
 // -----------------------------------------------------------------------------------------------
@@ -394,28 +405,41 @@ impl ZoneBackend for MemoryBackend {
     async fn begin(&self, zone_ctx: &ZoneContext) -> DbResult<Box<dyn ZoneUnitOfWork>> {
         Ok(Box::new(MemUow { z: self.zone(zone_ctx.zone.id), pending: Default::default() }))
     }
+
+    async fn room_by_id(&self, bp: &Blueprint, room_id: RoomId) -> AppResult<BlueprintRoom> {
+        todo!()
+    }
+
+    async fn room_exits(&self, room_id: RoomId) -> AppResult<Vec<RoomExitRow>> {
+        todo!()
+    }
+
+    async fn room_objects(&self, room_id: RoomId) -> AppResult<Vec<RoomObject>> {
+        todo!()
+    }
+
+    async fn room_scripts(&self, room_id: RoomId) -> AppResult<RoomScripts> {
+        todo!()
+    }
+
+    async fn room_kv(&self, room_id: RoomId) -> AppResult<RoomKv> {
+        todo!()
+    }
 }
 
 #[async_trait]
 impl ZoneStateRepo for MemoryBackend {
-    // [MemoryBackend::current_room]
-    async fn current_room(&self, zone_ctx: &ZoneContext, account_id: AccountId) -> AppResult<RoomId> {
-        let z = self.zone(zone_ctx.zone.id);
-        z.current_room.get(&account_id)
-            .map(|e| *e)
-            .ok_or_else(|| DomainError::NotFound)
-    }
-}
-
-#[async_trait]
-impl ZoneViewRepo for MemoryBackend {
-    async fn room_view(&self, zone_ctx: &ZoneContext, room_id: RoomId, width: u16) -> DbResult<RoomView> {
-        let _ = zone_ctx;
-        let _ = room_id;
-        let _width = width;
-
+    async fn zone_room_state(&self, zone_ctx: &ZoneContext, room_id: RoomId, account_id: AccountId) -> AppResult<ZoneRoomState> {
         todo!()
     }
+
+    // [MemoryBackend::current_room]
+    // async fn current_room(&self, zone_ctx: &ZoneContext, account_id: AccountId) -> AppResult<RoomId> {
+    //     let z = self.zone(zone_ctx.zone.id);
+    //     z.current_room.get(&account_id)
+    //         .map(|e| *e)
+    //         .ok_or_else(|| DomainError::NotFound)
+    // }
 }
 
 // -----------------------------------------------------------------------------------------------

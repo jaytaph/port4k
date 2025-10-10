@@ -58,7 +58,7 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
             match job {
                 LuaJob::OnEnter { cursor, account, reply } => {
                     let _ = (|| -> AppResult<Option<String>> {
-                        let src = cursor.room.scripts.on_enter_lua
+                        let src = cursor.room_view.scripts.on_enter_lua
                             .as_deref().unwrap_or("").to_owned();
                         if src.is_empty() {
                             return Ok(None);
@@ -78,12 +78,12 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                         )?;
 
                         let chunk = lua.load(&src)
-                            .set_name(&format!("{}:{}:on_enter", cursor.zone_ctx.blueprint.key, cursor.room.room.key))
+                            .set_name(&format!("{}:{}:on_enter", cursor.zone_ctx.blueprint.key, cursor.room_view.room.key))
                             .set_environment(env.clone());
                         chunk.exec()?;
 
                         if let Ok(f) = env.get::<_, Function>("on_enter") {
-                            let ctx = make_enter_ctx(&lua, &cursor.zone_ctx.blueprint, &cursor.room, &account)?;
+                            let ctx = make_enter_ctx(&lua, &cursor.zone_ctx.blueprint, &cursor.room_view, &account)?;
                             f.call::<_, ()>(ctx)?;
                         }
 
@@ -96,7 +96,7 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
 
                 LuaJob::OnCommand { cursor, account, intent, reply } => {
                     let _ = (|| -> AppResult<Option<String>> {
-                        let src = cursor.room.scripts.on_command_lua
+                        let src = cursor.room_view.scripts.on_command_lua
                             .as_deref().unwrap_or("").to_owned();
                         if src.is_empty() {
                             return Ok(None);
@@ -117,7 +117,7 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                         )?;
 
                         // ----- Load & run on_command(bp:room) -----
-                        lua.load(&src).set_name(&format!("{}:{}:on_command", cursor.zone_ctx.blueprint.key, cursor.room.room.key)).exec()?;
+                        lua.load(&src).set_name(&format!("{}:{}:on_command", cursor.zone_ctx.blueprint.key, cursor.room_view.room.key)).exec()?;
 
                         if let Ok(func) = lua.globals().get::<_, Function>("on_command") {
                             let t: Table = lua.create_table()?;
@@ -204,7 +204,7 @@ fn install_host_api(
 
     // get_state(key) -> any (JSON)
     {
-        let room_id = cursor.room.room.id;
+        let room_id = cursor.room_view.room.id;
         let handle = handle.clone();
         let registry = registry.clone();
         let f = lua.create_function(move |lua_ctx, (key,): (String,)| {
@@ -219,7 +219,7 @@ fn install_host_api(
 
     // set_state(key, value)
     {
-        let room_id = cursor.room.room.id;
+        let room_id = cursor.room_view.room.id;
         let handle = handle.clone();
         let registry = registry.clone();
         let f = lua.create_function(move |lua_ctx, (key, value): (String, Value)| {
@@ -234,7 +234,7 @@ fn install_host_api(
 
     // get_player(key) -> any (JSON)
     {
-        let room_id = cursor.room.room.id;
+        let room_id = cursor.room_view.room.id;
         let account_id = account.id;
         let registry = registry.clone();
         let handle = handle.clone();
@@ -253,7 +253,7 @@ fn install_host_api(
 
     // set_player(key, value)
     {
-        let room_id = cursor.room.room.id;
+        let room_id = cursor.room_view.room.id;
         let account_id = account.id;
         let registry = registry.clone();
         let handle = handle.clone();

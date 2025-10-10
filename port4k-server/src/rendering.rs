@@ -162,7 +162,8 @@ pub fn get_vars(sess: Arc<RwLock<Session>>) -> HashMap<String, String> {
     }
     if let Some(cursor) = sess.read().cursor.as_ref() {
         vars.insert("cursor.zone".to_string(), cursor.zone_ctx.zone.title.to_string());
-        vars.insert("cursor.room".to_string(), cursor.room.room.title.to_string());
+        vars.insert("cursor.room.title".to_string(), cursor.room_view.room.title.to_string());
+        // vars.insert("cursor.view".to_string(), cursor.room.title.to_string());
     }
 
     vars

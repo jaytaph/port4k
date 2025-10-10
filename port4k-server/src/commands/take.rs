@@ -19,16 +19,11 @@ pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutp
         return Ok(failure!("Login required.\n"));
     };
 
-    let room = {
-        let s = ctx.sess.read();
-        let room = match &s.cursor {
-            Some(c) => c.room.clone(),
-            None => return Ok(failure!("You are not in a world.\n")),
-        };
-        room
+    let Ok(room_view) = ctx.room_view() else {
+        return Ok(failure!("You are not in a world.\n"));
     };
 
-    let got = ctx.registry.db.pickup_coins(&account, room.room.id, want).await?;
+    let got = ctx.registry.db.pickup_coins(&account, room_view.room.id, want).await?;
     if got == 0 {
         Ok(failure!("There are no coins to pick up.\n"))
     } else {

@@ -41,6 +41,12 @@ pub struct Registry {
 
 impl Registry {
     pub fn new(db: Arc<Db>, config: Arc<Config>) -> Self {
+
+        let zone_router = Arc::new(ZoneRouter::new(
+            Arc::new(DbBackend::new(db.clone())),
+            Arc::new(MemoryBackend::new()),
+        ));
+
         let repos = Arc::new(Repos {
             account: Arc::new(AccountRepository::new(db.clone())),
             room: Arc::new(RoomRepository::new(db.clone())),
@@ -50,12 +56,15 @@ impl Registry {
         let zone_db = Arc::new(DbBackend::new(db.clone()));
         let zone_mem = Arc::new(MemoryBackend::new());
 
+        let blueprint_service = Arc::new(BlueprintService::new(repos.room.clone()));
+        let room_service = Arc::new(RoomService::new(repos.kv.clone(), blueprint_service.clone()));
+
         let services = Arc::new(Services {
             auth: Arc::new(AuthService::new(repos.account.clone())),
             account: Arc::new(AccountService::new(repos.account.clone())),
-            blueprint: Arc::new(BlueprintService::new(repos.room.clone())),
-            room: Arc::new(RoomService::new(repos.kv.clone())),
-            cursor: Arc::new(CursorService::new(repos.room.clone())),
+            blueprint: blueprint_service.clone(),
+            room: room_service.clone(),
+            cursor: Arc::new(CursorService::new(zone_router.clone())),
             navigator: Arc::new(NavigatorService::new(Arc::new(ZoneRouter::new(zone_db, zone_mem)))),
         });
 

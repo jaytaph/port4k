@@ -20,7 +20,7 @@ pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Comman
             }
 
             let cursor = ctx.cursor()?;
-            let msg = format!("[debug] user={username} zone={} zone_kind: {:?} room: {}\n", cursor.zone_ctx.zone.title, cursor.zone_ctx.kind, cursor.room.room.title);
+            let msg = format!("[debug] user={username} zone={} zone_kind: {:?} room: {}\n", cursor.zone_ctx.zone.title, cursor.zone_ctx.kind, cursor.room_view.room.title);
             Ok(success!(msg))
         },
         _ => Ok(failure!("Usage: @debug where\n"))

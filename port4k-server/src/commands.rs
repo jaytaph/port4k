@@ -11,6 +11,7 @@ use crate::error::{AppResult, DomainError};
 use crate::models::account::Account;
 use crate::models::types::AccountId;
 use crate::lua::LuaJob;
+use crate::models::room::RoomView;
 use crate::models::zone::ZoneContext;
 use crate::services::ServiceError;
 
@@ -115,6 +116,10 @@ impl CmdCtx {
 
     pub fn has_cursor(&self) -> bool {
         self.sess.try_read().map_or(false, |s| s.cursor.is_some())
+    }
+
+    pub fn room_view(&self) -> AppResult<RoomView> {
+        Ok(self.cursor()?.room_view)
     }
 }
 

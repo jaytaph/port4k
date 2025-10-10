@@ -20,7 +20,7 @@ pub enum Protocol {
 #[derive(Debug, Clone)]
 pub struct Cursor {
     pub zone_ctx: ZoneContext,
-    pub room: RoomView,
+    pub room_view: RoomView,
 }
 
 #[derive(Debug)]

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::db::{Db, DbResult};
 use crate::db::error::DbError;
 use crate::models::blueprint::Blueprint;
-use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts, RoomView, ZoneRoomState};
+use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts, ZoneRoomState};
 use crate::db::repo::room::RoomRepo;
 use crate::models::types::{AccountId, ObjectId, RoomId, ScriptSource, ZoneId};
 
@@ -222,38 +222,37 @@ impl RoomRepo for RoomRepository {
         }))
     }
 
-    async fn get_view(
-        &self,
-        room_id: RoomId,
-        zone_id: Option<ZoneId>,
-        scripts: ScriptSource,
-    ) -> DbResult<RoomView> {
-        let room = self.get_blueprint_room(room_id).await?;
-        let (exits, objects, scripts, room_kv, zone_state) = tokio::try_join!(
-            self.get_exits(room_id),
-            self.get_objects_with_nouns(room_id),
-            self.get_scripts(room_id, scripts),
-            self.get_room_kv(room_id),
-
-            async {
-                if let Some(z) = zone_id {
-                    self.get_zone_state(z, room_id).await
-                } else {
-                    Ok(None)
-                }
-            }
-        )?;
-
-        Ok(RoomView {
-            room,
-            exits,
-            objects,
-            scripts,
-            room_kv,
-            zone_state,
-        })
-    }
-
+    // async fn get_view(
+    //     &self,
+    //     room_id: RoomId,
+    //     zone_id: Option<ZoneId>,
+    //     scripts: ScriptSource,
+    // ) -> DbResult<RoomView> {
+    //     let room = self.get_blueprint_room(room_id).await?;
+    //     let (exits, objects, scripts, room_kv, zone_state) = tokio::try_join!(
+    //         self.get_exits(room_id),
+    //         self.get_objects_with_nouns(room_id),
+    //         self.get_scripts(room_id, scripts),
+    //         self.get_room_kv(room_id),
+    //
+    //         async {
+    //             if let Some(z) = zone_id {
+    //                 self.get_zone_state(z, room_id).await
+    //             } else {
+    //                 Ok(None)
+    //             }
+    //         }
+    //     )?;
+    //
+    //     Ok(RoomView {
+    //         room,
+    //         exits,
+    //         objects,
+    //         scripts,
+    //         room_kv,
+    //         zone_state,
+    //     })
+    // }
 
     async fn set_entry(&self, bp_key: &str, room_key: &str) -> DbResult<bool> {
         let c = self.db.get_client().await?;

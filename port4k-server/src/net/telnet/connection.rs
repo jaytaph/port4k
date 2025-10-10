@@ -104,7 +104,7 @@ fn generate_prompt(sess: Arc<RwLock<Session>>, prompt: &str) -> String {
     }
     if let Some(cursor) = sess.read().cursor.as_ref() {
         vars.insert("zone".to_string(), cursor.zone_ctx.zone.title.to_string());
-        vars.insert("room".to_string(), cursor.room.room.title.to_string());
+        vars.insert("room".to_string(), cursor.room_view.room.title.to_string());
     }
 
     let mut out = prompt.to_string();

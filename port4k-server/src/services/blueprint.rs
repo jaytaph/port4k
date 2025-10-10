@@ -21,11 +21,6 @@ impl BlueprintService {
         Ok(blueprint)
     }
 
-    // pub async fn get_roomview(&self, bp_key: &str) -> AppResult<RoomView> {
-    //     let room_view = self.repo.get_view(bp_key).await?;
-    //     Ok(room_view)
-    // }
-
     /// Adds an exit from one room to another in a blueprint.
     pub async fn add_exit(&self, bp: &str, from: &str, dir: &str, to: &str) -> AppResult<bool> {
         let res = self.repo.add_exit(bp, from, dir, to).await?;
