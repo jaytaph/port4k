@@ -1,0 +1,41 @@
+{t:bold}The Story So Far{t:reset}
+
+Year 2586: The Covenant Era
+
+After centuries of chaos following the Collapse of the Old Colonies, humanity’s scattered survivors gathered beneath a
+single banner: {t:bold}The Covenant of Five{t:reset} - a fragile alliance of the remaining great factions who swore to
+keep the peace among the stars.
+
+For a century, the Covenant has held the line between order and oblivion.
+Yet the fractures that once shattered empires are forming again…
+
+{t:bold}The Five Factions{t:reset}
+
+{t:fg_yellow}{t:bold}The Helion Directorate{t:reset}: masters of industry and synthetic life, they control the great shipyards and the secrets of advanced android labor.
+{t:fg_yellow}{t:bold}The Lumin Assemblyt:reset}: scientists and explorers obsessed with unlocking the quantum frontiers. Their spacefold drives made interstellar travel possible… but only with {t:fg_yellow}{t:bold}Aether Crystals{t:reset}, the rarest fuel known to exist.
+{t:fg_yellow}{t:bold}The Corsair Clanst:reset}: a loose confederation of smugglers, privateers, and exiles who live beyond the edges of Covenant law. They control the black markets where {t:fg_yellow}{t:bold}Aether Crystals{t:reset} quietly trades hands.
+{t:fg_yellow}{t:bold}The Ecliptic Ordert:reset}: a theocratic organization believing humanity’s destiny lies in the stars themselves — and that divine will chooses who ascends and who burns.
+{t:fg_yellow}{t:bold}The Vanguard Uniont:reset}: the last standing military command of old Earth, now acting as peacekeepers… or enforcers, depending on who tells the story.
+
+{t:bold}The Tensions{t:reset}
+
+For years, the Covenant’s charter has held - fragile, contested, but intact.
+Now, whispers move through the slipstreams: one of the Five plots a power grab, seeking to shatter the balance and seize
+control of the {t:fg_yellow}{t:bold}Aether Crystal{t:reset} supply lines. Stations go dark. Convoys vanish. The cost of fuel climbs by the hour.
+
+Captains speak of a hidden system, untouched since the Collapse - a place where ancient vaults still hum with unmined crystals.
+Every faction wants it.
+Every ship that finds it vanishes.
+
+And through the static between the stars, a single encoded message repeats:
+
+{t:fg_blue}{t:bold}“The Covenant is breaking. Choose your side.”{t:reset}
+
+
+
+{t:bold}Your Arrival{t:reset}
+
+You awaken on the fringe of known space: a derelict station orbiting a dead moon.
+No memory of how you arrived.
+Only a comms beacon, flickering: {t:bold}“Welcome to Port 4K.”{t:reset}
+

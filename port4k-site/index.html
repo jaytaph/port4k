@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>port4k — A tiny MUD with big vibes</title>
+    <meta name="description" content="port4k — a sleek, minimal landing page for your MUD." />
+    <style>
+        :root {
+            --bg: #0b0f17;            /* deep space */
+            --bg-elev: #0f1420;       /* elevated panels */
+            --text: #dbe7ff;          /* near-white with a blue tint */
+            --muted: #9fb4d9;         /* soft steel-blue */
+            --accent: #4aa8ff;        /* light blue */
+            --accent-2: #2c69ff;      /* royal blue */
+            --accent-3: #00c6ff;      /* cyan pop */
+            --card: #0c1220e6;        /* translucent card */
+            --ok: #4ee6a6;
+            --warn: #ffd166;
+            --err: #ff6b6b;
+            --ring: #ffffff22;
+        }
+
+        /* Reset / base */
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            margin: 0;
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+            color: var(--text);
+            background: radial-gradient(1200px 800px at 10% 10%, #0e1530 0%, transparent 60%),
+            radial-gradient(800px 600px at 90% 20%, #07122a 0%, transparent 55%),
+            radial-gradient(1200px 900px at 60% 80%, #07182e 0%, transparent 50%),
+            var(--bg);
+            letter-spacing: 0.2px;
+        }
+
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* Fancy top glow */
+        .glow-bar {
+            position: fixed; inset: 0 0 auto 0; height: 10px; pointer-events: none;
+            background: linear-gradient(90deg, transparent, var(--accent), var(--accent-2), var(--accent-3), transparent);
+            filter: blur(12px); opacity: .35;
+        }
+
+        /* Header */
+        header {
+            position: sticky; top: 0; z-index: 5; backdrop-filter: saturate(160%) blur(8px);
+            background: linear-gradient(to bottom, #090f1bd0, #090f1b99 60%, transparent);
+            border-bottom: 1px solid #ffffff10;
+        }
+        .container { width: min(1100px, 92vw); margin: 0 auto; }
+        .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 12px; padding: 16px 0; }
+        .logo { width: 28px; height: 28px; }
+        .title { font-weight: 700; letter-spacing: 0.3px; }
+        nav a { margin-left: 18px; font-weight: 600; opacity: .85; }
+        nav a:hover { opacity: 1; }
+
+        /* Hero */
+        .hero {
+            position: relative; padding: clamp(56px, 10vw, 120px) 0 64px 0; text-align: center;
+        }
+        .hero h1 { font-size: clamp(32px, 6vw, 64px); line-height: 1.05; margin: 8px 0 14px; }
+        .hero p { color: var(--muted); font-size: clamp(16px, 2.6vw, 20px); margin: 0 auto; max-width: 820px; }
+
+        /* Accent underline */
+        .accent-underline {
+            position: relative; display: inline-block;
+        }
+        .accent-underline::after {
+            content: ""; position: absolute; left: 8px; right: 8px; bottom: -6px; height: 8px;
+            background: linear-gradient(90deg, var(--accent-2), var(--accent), var(--accent-3));
+            filter: blur(8px); opacity: .65; border-radius: 999px;
+        }
+
+        /* CTA buttons */
+        .cta { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 28px; flex-wrap: wrap; }
+        .btn {
+            --pad-y: 12px; --pad-x: 18px;
+            display: inline-flex; align-items: center; gap: 10px; border: 1px solid #ffffff20;
+            background: linear-gradient(180deg, #0f1b32, #0a1222);
+            padding: var(--pad-y) var(--pad-x); border-radius: 14px; color: var(--text); font-weight: 700;
+            box-shadow: 0 10px 30px #00000066, inset 0 1px 0 #ffffff10;
+            transition: transform .12s ease, box-shadow .2s ease, border-color .2s ease;
+        }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 12px 34px #00000088, inset 0 1px 0 #ffffff26; border-color: #ffffff36; text-decoration: none; }
+        .btn.primary { background: linear-gradient(180deg, #16305e, #0f2143); border-color: #5aa8ff55; }
+        .btn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px var(--accent); }
+
+        /* Quick panel */
+        .panel {
+            margin: 46px auto 0; width: min(900px, 92vw); border-radius: 18px; background: var(--card);
+            border: 1px solid #ffffff12; box-shadow: 0 20px 50px #00000066;
+        }
+        .panel-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #ffffff14; border-radius: 18px; overflow: hidden; }
+        .panel-item { background: var(--bg-elev); padding: 18px 18px; }
+        .panel-item h3 { margin: 8px 0 6px; font-size: 14px; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 14px; }
+
+        .copy {
+            display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px;
+            background: #0f1b32; border: 1px solid #ffffff20; cursor: pointer; user-select: none;
+        }
+        .copy:hover { border-color: #ffffff35; }
+
+        /* Features */
+        .features { padding: 64px 0 24px; }
+        .features-grid {
+            display: grid; gap: 18px; grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .feat { background: var(--bg-elev); border: 1px solid #ffffff12; border-radius: 14px; padding: 18px; }
+        .feat h4 { margin-top: 10px; margin-bottom: 6px; font-size: 16px; }
+        .feat p { margin: 0; color: var(--muted); font-size: 14px; }
+
+        /* Status pill */
+        .pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: .3px; display: inline-flex; align-items: center; gap: 8px; }
+        .pill .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: pulse 1.6s ease-in-out infinite; }
+        @keyframes pulse { 0%,100%{ transform: scale(.9); opacity:.9 } 50%{ transform: scale(1.25); opacity: 1 } }
+
+        /* Footer */
+        footer { padding: 40px 0 60px; color: #a3b5d6; }
+        .foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+        .links a { margin-right: 16px; opacity: .85; }
+
+        /* Responsive */
+        @media (max-width: 860px) {
+            .panel-grid { grid-template-columns: 1fr; gap: 0; }
+            .features-grid { grid-template-columns: 1fr; }
+            nav { display: none; }
+        }
+
+        /* Subtle floating orbs */
+        .orb { position: absolute; border-radius: 50%; filter: blur(30px); opacity: .12; pointer-events: none; mix-blend-mode: screen; }
+        .orb.one { width: 360px; height: 360px; background: radial-gradient(circle at 30% 30%, var(--accent-3), transparent 60%); top: -80px; left: -80px; animation: float1 12s ease-in-out infinite; }
+        .orb.two { width: 420px; height: 420px; background: radial-gradient(circle at 70% 40%, var(--accent-2), transparent 60%); bottom: -120px; right: -120px; animation: float2 18s ease-in-out infinite; }
+        @keyframes float1 { 50% { transform: translate(20px, 14px) scale(1.03);} }
+        @keyframes float2 { 50% { transform: translate(-18px, -10px) scale(1.04);} }
+
+        /* Tiny starfield (pure CSS) */
+        .stars { position: fixed; inset: 0; pointer-events: none; background-image:
+                radial-gradient(1px 1px at 10% 20%, #e9f3ff66 50%, transparent 51%),
+                radial-gradient(1px 1px at 35% 65%, #e9f3ff66 50%, transparent 51%),
+                radial-gradient(1px 1px at 70% 30%, #e9f3ff66 50%, transparent 51%),
+                radial-gradient(1px 1px at 85% 80%, #e9f3ff66 50%, transparent 51%),
+                radial-gradient(1px 1px at 55% 15%, #e9f3ff66 50%, transparent 51%);
+            opacity: .35;
+            animation: twinkle 6s linear infinite;
+        }
+        @keyframes twinkle { 0%,100% { opacity:.25 } 50% { opacity:.5 } }
+    </style>
+</head>
+<body>
+<div class="glow-bar" aria-hidden="true"></div>
+<div class="stars" aria-hidden="true"></div>
+
+<header>
+    <div class="container row">
+        <div class="brand">
+            <svg class="logo" viewBox="0 0 64 64" aria-hidden="true" role="img">
+                <defs>
+                    <linearGradient id="g" x1="0" x2="1">
+                        <stop offset="0%" stop-color="#2c69ff"/>
+                        <stop offset="60%" stop-color="#4aa8ff"/>
+                        <stop offset="100%" stop-color="#00c6ff"/>
+                    </linearGradient>
+                </defs>
+                <circle cx="32" cy="32" r="28" fill="none" stroke="url(#g)" stroke-width="4"/>
+                <path d="M20 38c8 6 16 6 24 0" fill="none" stroke="#4aa8ff" stroke-width="4" stroke-linecap="round"/>
+                <circle cx="44" cy="26" r="3" fill="#00c6ff" />
+            </svg>
+            <div class="title">port4k</div>
+        </div>
+        <nav>
+            <a href="#features">Features</a>
+            <a href="#connect">Connect</a>
+            <a href="#about">About</a>
+        </nav>
+    </div>
+</header>
+
+<main>
+    <section class="hero container">
+        <div class="orb one"></div>
+        <div class="orb two"></div>
+        <h1>
+            Welcome to <span class="accent-underline">port4k</span>
+        </h1>
+        <p>
+            A compact, modern MUD with persistent progress, quick sessions, and community-built rooms. Minimal friction, maximum adventure. Runs on anything with a terminal — and yes, there's a web client.
+        </p>
+
+        <div class="cta" id="connect">
+            <a class="btn primary" id="btn-telnet" href="#">
+                <span class="dot"></span> Play via Telnet
+            </a>
+            <a class="btn" id="btn-web" href="/client">
+                Open Web Client
+            </a>
+            <button class="btn copy" id="btn-copy" type="button" title="Copy command">
+                <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 8V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2zm2 0h4v4h3V5h-7z"/></svg>
+                <span class="mono" id="cmd">telnet your.host.tld 4000</span>
+            </button>
+        </div>
+
+        <div class="panel" aria-label="Quick details">
+            <div class="panel-grid">
+                <div class="panel-item">
+                    <h3>Status</h3>
+                    <div class="pill" id="status-pill"><span class="pulse"></span> Online</div>
+                </div>
+                <div class="panel-item">
+                    <h3>Quick connect</h3>
+                    <div class="mono" id="quick-host">your.host.tld:4000</div>
+                </div>
+                <div class="panel-item">
+                    <h3>Accounts</h3>
+                    <div>Free. Persistent. Argon2 passwords. <span style="opacity:.7">Bring a friend.</span></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="features" class="features container">
+        <div class="features-grid">
+            <article class="feat">
+                <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2l9 4v6c0 5-3.8 9.7-9 10C6.8 21.7 3 17 3 12V6l9-4zm0 2.2L5 6.9v5.1c0 3.9 2.9 7.3 7 7.8c4.1-.5 7-3.9 7-7.8V6.9l-7-2.7zM7.5 12a1.5 1.5 0 1 1 3 0a1.5 1.5 0 0 1-3 0m3.5 3.5a1.5 1.5 0 1 1 3 0a1.5 1.5 0 0 1-3 0m2-7a1.5 1.5 0 1 1 3 0a1.5 1.5 0 0 1-3 0"/></svg>
+                <h4>Room SDK</h4>
+                <p>Design your own rooms in Lua or Rust. Hot-reload locally, share globally.</p>
+            </article>
+            <article class="feat">
+                <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 0 1 9 9v7a2 2 0 0 1-2 2h-5v-6h3l-4-4l-4 4h3v6H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 9-9Z"/></svg>
+                <h4>Fast travel</h4>
+                <p>Short sessions, long arcs. Jump in, loot, and log off — your progress stays.</p>
+            </article>
+            <article class="feat">
+                <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1L3 5v6c0 4.97 3.58 9.17 8.36 9.93c.42.07.86.07 1.28 0C17.42 20.17 21 15.97 21 11V5l-9-4Zm0 2.18L19 6v5c0 3.97-2.87 7.34-6.64 7.93a2.9 2.9 0 0 1-.72 0C7.87 18.34 5 15.97 5 12V6l7-2.82ZM8 11h8v2H8v-2Z"/></svg>
+                <h4>Fair grind</h4>
+                <p>No pay-to-win. Earn coins, craft gear, and unlock routes as you explore.</p>
+            </article>
+        </div>
+    </section>
+
+    <section id="about" class="container" style="padding: 18px 0 0; max-width: 820px;">
+        <p style="color: var(--muted); line-height: 1.7">
+            <strong>port4k</strong> is a hobby-first MUD project focused on creative rooms, player cooperation, and smooth onboarding.
+            We're building a space-themed dungeon with lightweight social features and a modern toolchain. Want to help? Drop by and say hi.
+        </p>
+    </section>
+</main>
+
+<footer>
+    <div class="container foot">
+        <div>© <span id="year"></span> port4k</div>
+        <div class="links">
+            <a href="#" id="lnk-discord">Discord</a>
+            <a href="#" id="lnk-github">GitHub</a>
+            <a href="#" id="lnk-docs">Docs</a>
+        </div>
+    </div>
+</footer>
+
+<script>
+    const CONFIG = {
+      host: 'game.port4k.com',
+      port: 4000,
+      webClientURL: '/client',
+      discordURL: '#',
+      githubURL: 'https://github.com/port4k',
+      docsURL: '/docs',
+    };
+
+    const yearEl = document.getElementById('year');
+    yearEl.textContent = new Date().getFullYear();
+
+    const btnTelnet = document.getElementById('btn-telnet');
+    const btnWeb = document.getElementById('btn-web');
+    const btnCopy = document.getElementById('btn-copy');
+    const cmdSpan = document.getElementById('cmd');
+    const quickHost = document.getElementById('quick-host');
+
+    const telnetCmd = `telnet ${CONFIG.host} ${CONFIG.port}`;
+    cmdSpan.textContent = telnetCmd;
+    quickHost.textContent = `${CONFIG.host}:${CONFIG.port}`;
+
+    // Attempt to use telnet:// if supported, else fall back
+    btnTelnet.addEventListener('click', (e) => {
+      e.preventDefault();
+      const url = `telnet://${CONFIG.host}:${CONFIG.port}`;
+      window.location.href = url; // some browsers may not support this scheme
+    });
+
+    // Web client link
+    btnWeb.href = CONFIG.webClientURL;
+
+    // Copy command to clipboard
+    btnCopy.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(telnetCmd);
+        btnCopy.classList.add('copied');
+        btnCopy.style.borderColor = '#5aa8ff';
+        const prev = cmdSpan.textContent;
+        cmdSpan.textContent = '✔ copied to clipboard';
+        setTimeout(() => { cmdSpan.textContent = prev; btnCopy.style.borderColor = ''; }, 1400);
+      } catch (err) {
+        alert('Copy failed. Select and copy manually.');
+      }
+    });
+
+    // Optional: lightweight, fake status ping (replace with a real endpoint)
+    // You can expose /status returning { online: boolean, users: number }
+    async function checkStatus() {
+      const pill = document.getElementById('status-pill');
+      try {
+        // const res = await fetch('/status', { cache: 'no-store' });
+        // const s = await res.json();
+        // const online = Boolean(s.online);
+        const online = true; // ← placeholder
+        pill.innerHTML = online
+          ? '<span class="pulse"></span> Online'
+          : '<span style="width:8px;height:8px;border-radius:50%;background:var(--err);"></span> Offline';
+      } catch (_) {
+        pill.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:var(--warn);"></span> Unknown';
+      }
+    }
+    checkStatus();
+</script>
+</body>
+</html>

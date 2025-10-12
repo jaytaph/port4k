@@ -1,0 +1,30 @@
+[package]
+name = "port4k"
+version = "0.1.0"
+edition = "2024"
+#license = "MIT"
+#authors = ["Joshua Thijssen <jthijssen@noxlogic.nl>"]
+description = "A MUD concept written in Rust"
+
+[workspace]
+members = [
+    "port4k-core",
+    "port4k-server",
+    "port4k-admin",
+]
+resolver = "2"
+
+[workspace.package]
+edition="2024"
+license="MIT"
+authors = ["Joshua Thijssen <jthijssen@noxlogic.nl>"]
+
+[workspace.dependencies]
+anyhow = "1.0.100"
+thiserror = "2.0.16"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["fmt", "env-filter"] }
+tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync"] }
+
+[dependencies]
+once_cell = "1.21.3"

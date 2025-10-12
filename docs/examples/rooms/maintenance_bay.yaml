@@ -1,0 +1,137 @@
+id: maintenance_bay
+name: Maintenance Bay
+short: "An oil-stained service room full of parts and half-dead machines."
+description: |
+  Rows of open framework racks line the walls, each crammed with spare parts and tagged assemblies.
+  Overhead gantries hang quiet, their hooks swaying ever so slightly in the recycled air. A dented
+  {obj:workbench} sits beneath a flickering strip, littered with fasteners and cut wire. On the far wall,
+  a {obj:generator} hums feebly beside a rack-mounted {obj:charger}. A narrow way {obj:west_exit} returns to the hallway.
+hints:
+  - "If you need power, a generator or charger might help."
+  - "A charged microcell could wake up dead consoles elsewhere."
+  - "Benches often hide compartments—check the workbench carefully."
+  - "Some machines only start once the coolant valves are open or panels are seated."
+objects:
+  - id: workbench
+    nouns: ["bench","workbench","table"]
+    short: "dented workbench"
+    description: "A metal bench scarred by plasma burns and drill marks."
+    examine: "Scratches form a rectangle—there might be a sliding panel underneath."
+    state:
+      panel_open: false
+      cache_taken: false
+    use: |
+      return function(ctx, verb, args)
+        if (verb == "open" or verb == "search") and not ctx:get_object_state("workbench","panel_open") then
+          ctx:set_object_state("workbench","panel_open", true)
+          ctx:say("You pry at the seam— a thin panel slides aside revealing a shallow compartment.")
+          return true
+        end
+        if verb == "loot" or verb == "take" then
+          if not ctx:get_object_state("workbench","panel_open") then
+            ctx:say("You find nothing obvious. Perhaps there's a hidden panel to open first.")
+            return true
+          end
+          if ctx:get_object_state("workbench","cache_taken") then
+            ctx:say("The compartment is empty—someone beat you to it.")
+            return true
+          end
+          ctx:set_object_state("workbench","cache_taken", true)
+          ctx:give_item("microcell")     -- a CHARGED microcell for earlier console
+          ctx:give_credits(15)
+          ctx:say("You recover a **microcell** and some loose credits from the compartment.")
+          return true
+        end
+        return false
+      end
+
+  - id: generator
+    nouns: ["generator","genset","aux"]
+    short: "auxiliary generator"
+    description: "A compact unit with a manual starter and coolant lines."
+    state:
+      primed: false
+      running: false
+    examine: "A handwritten note reads: 'Prime first. Pull twice. Watch the coolant pressure.'"
+    use: |
+      return function(ctx, verb, args)
+        if verb == "prime" then
+          ctx:set_object_state("generator","primed", true)
+          ctx:say("You cycle the primer; the fuel line burbles.")
+          return true
+        end
+        if verb == "start" or verb == "pull" then
+          if not ctx:get_object_state("generator","primed") then
+            ctx:say("It coughs and dies. Maybe prime it first.")
+            return true
+          end
+          if ctx:get_object_state("generator","running") then
+            ctx:say("The generator is already running, a steady hum filling the bay.")
+            return true
+          end
+          ctx:set_object_state("generator","running", true)
+          ctx:emit_room("The generator catches with a rattling roar, settling into a steady hum.")
+          -- Optional: power up the charger automatically
+          ctx:set_object_state("charger","powered", true)
+          return true
+        end
+        if verb == "stop" or verb == "kill" then
+          ctx:set_object_state("generator","running", false)
+          ctx:set_object_state("charger","powered", false)
+          ctx:emit_room("The generator spins down into silence.")
+          return true
+        end
+        return false
+      end
+
+  - id: charger
+    nouns: ["charger","rack","charging rack"]
+    short: "rack-mounted charger"
+    description: "Multiple cradles for microcells and tool batteries."
+    state:
+      powered: false
+      occupied: false
+    examine: "LEDs are dark unless external power is present."
+    use: |
+      return function(ctx, verb, args)
+        local powered = ctx:get_object_state("charger","powered") or ctx:get_object_state("generator","running")
+        if verb == "use" or verb == "charge" then
+          if not powered then
+            ctx:say("The charger is dead—bring the generator online first.")
+            return true
+          end
+          if ctx:has_item("microcell_depleted") then
+            ctx:consume_item("microcell_depleted")
+            ctx:give_item("microcell")
+            ctx:say("You slot the depleted cell. After a brief whine, it recharges with a green blink.")
+            return true
+          end
+          ctx:say("You have nothing here that fits the charging cradle.")
+          return true
+        end
+        return false
+      end
+
+  - id: west_exit
+    nouns: ["west","hallway"]
+    short: "way west"
+    description: "A narrow door back to the hallway."
+    examine: "Scuffed boot marks suggest frequent traffic."
+
+exits:
+  - dir: west
+    to: "hallway_1"
+    description: "Return to the reinforced hallway."
+    locked: false
+    visible_when_locked: true
+
+scripts:
+  on_enter: |
+    return function(ctx)
+      if ctx:get_object_state("generator","running") then
+        ctx:set_object_state("charger","powered", true)
+        ctx:say("The generator hums steadily; the charger LEDs glow a reassuring green.")
+      else
+        ctx:say("The bay smells of hot metal and oil. A silent generator sits idle in the corner.")
+      end
+    end

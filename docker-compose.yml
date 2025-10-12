@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: port4k-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: port4k
+      POSTGRES_USER: port4k
+      POSTGRES_PASSWORD: port4k
+      TZ: Europe/Amsterdam
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  caddy:
+    image: caddy:2.8
+    container_name: port4k_caddy
+    restart: unless-stopped
+    ports:
+      - "4040:4040"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./port4k-site:/srv/site:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

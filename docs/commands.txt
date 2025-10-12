@@ -1,0 +1,108 @@
+Core (everyone)
+
+Movement: n s e w u d (aliases: north etc.), go <dir>
+
+Look: look (room), look <thing|dir>, exits (compact list)
+
+Examine: examine <item|npc>, read <sign|book>
+
+Interaction: open/close <door|container>, lock/unlock <door> [with <key>], push/pull/press/use <object>
+
+Inventory: inventory|inv, get <item> [from <container>], drop <item>, put <item> in <container>, wear/wield/remove <item>, eat/drink <item>
+
+Communication: say <msg>, emote <action>, whisper <player> <msg>, shout <msg>
+
+Player info: score, xp, skills, quests, who, time
+
+Meta: help [topic], commands, repeat (repeat last), alias <short> = <long>, history
+
+Optional (combat module)
+
+Targets: consider <mob>, scan
+
+Actions: attack <mob>, flee, cast <spell> [at <target>], use <skill> [on <target>]
+
+Combat items: reload, fire, throw <item> at <target>
+
+Status: hp|mana|stamina, party, invite <player>, kick <player>
+
+Puzzle/Quest hooks (Lua-friendly verbs)
+
+use <thing> on <thing>, combine <a> with <b>, place <item> on <pedestal>, set <code|dial> to <value>, say <keyword>
+(Reserve these so room scripts can intercept cleanly.)
+
+Social / Economy
+
+Trade: offer <player> <item|coins>, accept, decline, trade <npc>
+
+Money: coins, pay <npc> <amount>, deposit/withdraw <amount>
+
+Group: follow <player>, unfollow, lead
+
+Navigation Quality-of-Life
+
+Pathing: map (ascii mini-map), where, path <dest> (if you add pathfinding)
+
+One-way awareness: peek <dir> (shows dest title if exit unlocked/visible)
+
+Building / Moderation (your system)
+
+Blueprints:
+
+@bp new <bp> "Title"
+
+@bp room add <bp>:<room> "Title" "Body"
+
+@bp exit add <bp>:<from> <dir> <bp>:<to> [locked]
+
+@bp exit lock <bp>:<from> <dir> / @bp exit unlock …
+
+@bp room lockdown <bp>:<room> / @bp room open <bp>:<room>
+
+@bp entry <bp>:<room>
+
+@bp submit <bp>
+
+Playtest:
+
+@playtest enter <bp> [<room>]
+
+@playtest leave
+
+@playtest reload (reload Lua)
+
+Content tools:
+
+@set <bp>:<room> <field> <value> (title/body/tags)
+
+@exit set <bp>:<from> <dir> <field> <value> (desc/locked/visible)
+
+@lint <bp> (basic validation)
+
+@bp ls [<bp>], @bp show <bp>:<room>, @bp del <bp>:<room|exit>
+
+Admin (ops)
+
+@where <player>, @teleport <player> <bp>:<room>
+
+@grant <player> <perm>, @revoke <player> <perm>
+
+@spawn <npc|item> [into <bp>:<room>]
+
+@shutdown, @announce <msg>
+
+Parsing & UX conventions (keeps it snappy)
+
+Abbreviations: first letter for movement, inv, exa, em, hp.
+
+Quoted args: keep your split_args_quoted behavior (supports multi-word titles/bodies).
+
+Aliases: built-in aliases table + per-player alias.
+
+Unknown verbs: in playtest → forward to room Lua; in live → standard “unknown command”.
+
+Minimal “must-haves” to start
+
+n s e w u d, look, examine, exits, get/drop/put, inventory, open/close, use, say, help, plus your @bp set and exit lock/room lockdown.
+
+If you want, I can generate the command router skeleton (Rust enums + dispatcher + Lua hook points) with these verbs pre-wired and stubs for you to fill in.

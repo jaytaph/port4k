@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>port4k — client</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        :root{
+            --bg:#0b0f17;
+            --bg-elev:#0f1420;
+            --text:#dbe7ff;
+            --muted:#9fb4d9;
+            --accent:#4aa8ff;
+            --accent-2:#2c69ff;
+            --accent-3:#00c6ff;
+            --card:#0c1220e6;
+            --ok:#4ee6a6;
+            --warn:#ffd166;
+            --err:#ff6b6b;
+            --ring:#ffffff22;
+        }
+
+        *{box-sizing:border-box}
+        html,body{height:100%}
+        body{
+            margin:0;
+            background:
+                    radial-gradient(1200px 800px at 10% 10%, #0e1530 0%, transparent 60%),
+                    radial-gradient(800px 600px at 90% 20%, #07122a 0%, transparent 55%),
+                    radial-gradient(1200px 900px at 60% 80%, #07182e 0%, transparent 50%),
+                    var(--bg);
+            color:var(--text);
+            font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+            letter-spacing:.2px;
+        }
+
+        .glow-bar{
+            position:fixed;inset:0 0 auto 0;height:10px;pointer-events:none;
+            background:linear-gradient(90deg,transparent,var(--accent),var(--accent-2),var(--accent-3),transparent);
+            filter:blur(12px);opacity:.35;z-index:10;
+        }
+        .stars{position:fixed;inset:0;pointer-events:none;background-image:
+                radial-gradient(1px 1px at 10% 20%, #e9f3ff66 50%, transparent 51%),
+                radial-gradient(1px 1px at 35% 65%, #e9f3ff66 50%, transparent 51%),
+                radial-gradient(1px 1px at 70% 30%, #e9f3ff66 50%, transparent 51%),
+                radial-gradient(1px 1px at 85% 80%, #e9f3ff66 50%, transparent 51%),
+                radial-gradient(1px 1px at 55% 15%, #e9f3ff66 50%, transparent 51%);
+            opacity:.35;animation:twinkle 6s linear infinite;z-index:0;
+        }
+        @keyframes twinkle{0%,100%{opacity:.25}50%{opacity:.5}}
+
+        header{
+            position:sticky;top:0;z-index:5;backdrop-filter:saturate(160%) blur(8px);
+            background:linear-gradient(to bottom,#090f1bd0,#090f1b99 60%,transparent);
+            border-bottom:1px solid #ffffff10;
+        }
+        .container{width:min(1100px,92vw);margin:0 auto}
+        .row{display:flex;align-items:center;justify-content:space-between;gap:16px}
+        .brand{display:flex;align-items:center;gap:12px;padding:14px 0}
+        .logo{width:24px;height:24px}
+        .title{font-weight:700;letter-spacing:.3px}
+
+        main{position:relative;height:calc(100% - 58px);display:flex;flex-direction:column}
+
+        /* Status bar */
+        .status{
+            display:flex;align-items:center;gap:12px;padding:8px 12px;
+            background:var(--bg-elev);border-top:1px solid #ffffff12;border-bottom:1px solid #ffffff12;
+            font-size:12px;color:var(--muted)
+        }
+        .pill{padding:4px 8px;border-radius:999px;border:1px solid #ffffff1a;display:inline-flex;align-items:center;gap:6px;font-weight:700}
+        .pill .dot{width:8px;height:8px;border-radius:50%}
+        .online .dot{background:var(--ok);box-shadow:0 0 10px var(--ok)}
+        .offline .dot{background:var(--err);box-shadow:0 0 10px var(--err)}
+        .connecting .dot{background:var(--warn);box-shadow:0 0 10px var(--warn)}
+        .muted{color:var(--muted)}
+
+        /* Log area */
+        #log{
+            flex:1;overflow:auto;padding:18px;
+            white-space:pre-wrap;word-break:break-word;
+            background:transparent;border-left:1px solid transparent;border-right:1px solid transparent;
+            scroll-behavior:smooth;
+        }
+        .line{margin:0 0 .25em}
+        .time{opacity:.5}
+
+        /* Input bar */
+        #bar{
+            position:sticky;bottom:0;left:0;right:0;padding:10px;background:#0b1120cc;
+            backdrop-filter:saturate(140%) blur(6px);border-top:1px solid #ffffff18
+        }
+        .bar-row{display:flex;gap:8px;align-items:center}
+        #in{
+            flex:1;padding:12px 12px;border-radius:12px;
+            background:#0f1320;color:#e6eef8;border:1px solid #1d2236;
+            outline:none
+        }
+        #in:focus{border-color:#2c69ff66;box-shadow:0 0 0 3px #2c69ff22}
+        .btn{
+            display:inline-flex;align-items:center;gap:8px;font-weight:700;
+            padding:10px 12px;border-radius:12px;border:1px solid #ffffff20;
+            background:linear-gradient(180deg,#16305e,#0f2143);color:var(--text);
+            cursor:pointer;user-select:none
+        }
+        .btn:hover{border-color:#ffffff36}
+        .toggle{background:#0f1b32}
+        .mono{font-family:inherit}
+        .right{margin-left:auto}
+        @media (max-width:720px){ .hide-sm{display:none} }
+    </style>
+</head>
+<body>
+<div class="glow-bar" aria-hidden="true"></div>
+<div class="stars" aria-hidden="true"></div>
+
+<header>
+    <div class="container row">
+        <div class="brand">
+            <svg class="logo" viewBox="0 0 64 64" aria-hidden="true" role="img">
+                <defs>
+                    <linearGradient id="g" x1="0" x2="1">
+                        <stop offset="0%" stop-color="#2c69ff"/>
+                        <stop offset="60%" stop-color="#4aa8ff"/>
+                        <stop offset="100%" stop-color="#00c6ff"/>
+                    </linearGradient>
+                </defs>
+                <circle cx="32" cy="32" r="28" fill="none" stroke="url(#g)" stroke-width="4"/>
+                <path d="M20 38c8 6 16 6 24 0" fill="none" stroke="#4aa8ff" stroke-width="4" stroke-linecap="round"/>
+                <circle cx="44" cy="26" r="3" fill="#00c6ff"/>
+            </svg>
+            <div class="title">port4k</div>
+        </div>
+        <div class="muted hide-sm">web client</div>
+    </div>
+</header>
+
+<main>
+    <div class="status">
+        <span id="conn" class="pill connecting"><span class="dot"></span><span id="conn-txt">Connecting…</span></span>
+        <span id="lat" class="pill"><span class="dot" style="background:#4aa8ff"></span><span id="lat-txt">— ms</span></span>
+        <span class="right muted mono" id="hint">↑/↓ history · /clear</span>
+    </div>
+
+    <div id="log" aria-live="polite" aria-atomic="false"></div>
+
+    <div id="bar">
+        <div class="container bar-row">
+            <button id="scrollToggle" class="btn toggle" title="Toggle autoscroll">Autoscroll: ON</button>
+            <button id="clearBtn" class="btn toggle">Clear</button>
+            <input id="in" class="mono" placeholder="Type commands… (help)" autocomplete="off" spellcheck="false" />
+        </div>
+    </div>
+</main>
+
+<script>
+    // --- Config (respect your Caddy reverse_proxy /ws -> 127.0.0.1:4001) ---
+    const WS_PATH = '/ws';
+    const wsURL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + WS_PATH;
+
+    // --- Elements ---
+    const logEl = document.getElementById('log');
+    const inputEl = document.getElementById('in');
+    const connEl = document.getElementById('conn');
+    const connTxt = document.getElementById('conn-txt');
+    const latEl = document.getElementById('lat-txt');
+    const scrollToggle = document.getElementById('scrollToggle');
+    const clearBtn = document.getElementById('clearBtn');
+
+    // --- State ---
+    let ws;
+    let history = [];
+    let hIdx = 0;
+    let autoscroll = true;
+    let pingInterval = null;
+    let reconnectDelay = 500; // ms, backoff
+    const MAX_DELAY = 5000;
+
+    function setStatus(state){
+        connEl.classList.remove('online','offline','connecting');
+        connEl.classList.add(state);
+        if(state==='online') connTxt.textContent = 'Online';
+        if(state==='offline') connTxt.textContent = 'Offline';
+        if(state==='connecting') connTxt.textContent = 'Connecting…';
+    }
+
+    function nowTime(){
+        const d = new Date();
+        return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    }
+
+    function appendLine(text, cls=''){
+        const div = document.createElement('div');
+        div.className = 'line ' + cls;
+        div.textContent = text;
+        logEl.appendChild(div);
+        if(autoscroll) logEl.scrollTop = logEl.scrollHeight;
+        document.title = 'port4k — client';
+    }
+
+    function systemMsg(text){
+        appendLine(`[${nowTime()}] ${text}`, 'sys');
+    }
+
+    function connect(){
+        setStatus('connecting');
+        ws = new WebSocket(wsURL);
+
+        ws.addEventListener('open', () => {
+            setStatus('online');
+            systemMsg('connected');
+            reconnectDelay = 500;
+
+            // start latency ping
+            if (pingInterval) clearInterval(pingInterval);
+            pingInterval = setInterval(() => {
+                try {
+                    const t = Date.now();
+                    ws.send(JSON.stringify({type:'ping', t}));
+                } catch (_) { /* ignore */ }
+            }, 5000);
+        });
+
+        ws.addEventListener('message', (ev) => {
+            // If the server echoes ping result, compute latency
+            try {
+                const msg = JSON.parse(ev.data);
+                if (msg.type === 'pong' && typeof msg.t === 'number') {
+                    const rtt = Date.now() - msg.t;
+                    latEl.textContent = `${rtt} ms`;
+                    return;
+                }
+            } catch (_ignored) {}
+
+            // Otherwise treat as plain text
+            appendLine(ev.data);
+        });
+
+        ws.addEventListener('close', () => {
+            setStatus('offline');
+            systemMsg('disconnected');
+            if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
+            // reconnect with backoff
+            setTimeout(connect, reconnectDelay);
+            reconnectDelay = Math.min(MAX_DELAY, reconnectDelay * 1.7 | 0);
+        });
+
+        ws.addEventListener('error', () => {
+            // let close handler manage reconnection
+        });
+    }
+
+    connect();
+
+    // Input handling
+    inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const line = inputEl.value.trimEnd();
+            if (!line) return;
+            // client-side commands
+            if (line === '/clear') {
+                logEl.innerHTML = '';
+                inputEl.value = '';
+                return;
+            }
+            // Send
+            try { ws.send(line); } catch (_) { systemMsg('send failed'); }
+            history.push(line);
+            hIdx = history.length;
+            inputEl.value = '';
+        } else if (e.key === 'ArrowUp') {
+            if (hIdx > 0) { hIdx--; inputEl.value = history[hIdx] ?? ''; setTimeout(()=>inputEl.setSelectionRange(inputEl.value.length,inputEl.value.length),0); }
+            e.preventDefault();
+        } else if (e.key === 'ArrowDown') {
+            if (hIdx < history.length) { hIdx++; inputEl.value = history[hIdx] ?? ''; setTimeout(()=>inputEl.setSelectionRange(inputEl.value.length,inputEl.value.length),0); }
+            e.preventDefault();
+        } else if (e.ctrlKey && e.key.toLowerCase() === 'l') {
+            logEl.innerHTML = '';
+            e.preventDefault();
+        }
+    });
+
+    // UI toggles
+    scrollToggle.addEventListener('click', ()=>{
+        autoscroll = !autoscroll;
+        scrollToggle.textContent = `Autoscroll: ${autoscroll ? 'ON' : 'OFF'}`;
+    });
+
+    clearBtn.addEventListener('click', ()=>{
+        logEl.innerHTML = '';
+    });
+
+    // If user scrolls up, disable autoscroll until they hit bottom or toggle
+    let scrollTimeout;
+    logEl.addEventListener('scroll', ()=>{
+        if (scrollTimeout) cancelAnimationFrame(scrollTimeout);
+        scrollTimeout = requestAnimationFrame(()=>{
+            const atBottom = Math.abs(logEl.scrollHeight - logEl.clientHeight - logEl.scrollTop) < 8;
+            if (!atBottom && autoscroll) {
+                autoscroll = false;
+                scrollToggle.textContent = 'Autoscroll: OFF';
+            }
+        });
+    });
+
+    // Initial hello
+    systemMsg('web client ready — type "help"');
+</script>
+</body>
+</html>

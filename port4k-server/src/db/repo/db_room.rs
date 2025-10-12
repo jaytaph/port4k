@@ -1,0 +1,303 @@
+use uuid::Uuid;
+use std::collections::HashMap;
+use std::sync::Arc;
+use postgres_types::Json;
+use crate::db::{Db, DbResult};
+use crate::db::error::DbError;
+use crate::models::blueprint::Blueprint;
+use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts};
+use crate::db::repo::room::RoomRepo;
+use crate::models::types::{AccountId, ObjectId, RoomId, ScriptSource};
+
+pub struct RoomRepository {
+    pub db: Arc<Db>,
+}
+
+impl RoomRepository {
+    pub fn new(db: Arc<Db>) -> Self {
+        Self { db: db.clone() }
+    }
+
+    async fn get_draft_scripts(&self, room_id: RoomId) -> DbResult<RoomScripts> {
+        let client = self.db.get_client().await?;
+
+        let rows = client.query(
+            r#"
+            SELECT event, source
+            FROM bp_scripts_draft
+            WHERE room_id = $1 AND event IN ('on_enter', 'on_command')
+            "#,
+            &[&room_id.0],
+        ).await?;
+
+        let mut s = RoomScripts::default();
+        for r in rows {
+            let event: String = r.get(0);
+            let source: String = r.get(1);
+            match event.as_str() {
+                "on_enter"   => s.on_enter_lua = Some(source),
+                "on_command" => s.on_command_lua = Some(source),
+                _ => {}
+            }
+        }
+        Ok(s)
+    }
+}
+
+#[async_trait::async_trait]
+impl RoomRepo for RoomRepository {
+    async fn blueprint_by_key(&self, bp_key: &str) -> DbResult<Blueprint> {
+        let client = self.db.get_client().await?;
+
+        let row = client.query_one(
+            r#"
+            SELECT id, key, title, owner_id, entry_room_id, status, created_at
+            FROM blueprints
+            WHERE key = $1
+            "#,
+            &[&bp_key],
+        ).await?;
+
+        Blueprint::try_from_row(&row)
+    }
+
+    async fn room(&self, room_id: RoomId) -> DbResult<BlueprintRoom> {
+        let client = self.db.get_client().await?;
+
+        let row = client.query_one(
+            r#"
+            SELECT r.id, r.bp_id, r.key, r.title, r.body, r.lockdown, r.short, r.hints, r.scripts
+            FROM bp_rooms r
+            WHERE r.id = $1
+            "#,
+            &[&room_id.0],
+        ).await?;
+
+        BlueprintRoom::try_from_row(&row)
+    }
+
+    async fn room_exits(&self, room_id: RoomId) -> DbResult<Vec<RoomExitRow>> {
+        let client = self.db.get_client().await?;
+
+        let rows = client.query(
+            r#"
+            SELECT from_room_id, dir, to_room_id, locked, description, visible_when_locked
+            FROM bp_exits
+            WHERE from_room_id = $1
+            ORDER BY dir
+            "#,
+            &[&room_id.0],
+        ).await?;
+
+        let exits = rows
+            .iter()
+            .map(RoomExitRow::try_from_row)
+            .collect::<DbResult<Vec<_>>>()?;
+        Ok(exits)
+    }
+
+    async fn room_objects(&self, room_id: RoomId) -> DbResult<Vec<RoomObject>> {
+        let client = self.db.get_client().await?;
+
+        let obj_rows = client.query(
+            r#"
+            SELECT id, room_id, name, short, description, examine, state, use_lua, position
+            FROM bp_objects
+            WHERE room_id = $1
+            ORDER BY COALESCE(position, 0), name
+            "#,
+            &[&room_id.0],
+        ).await?;
+
+        // Gather nouns in one go
+        let noun_rows = client.query(
+            r#"
+            SELECT room_id, obj_id, noun
+            FROM bp_object_nouns
+            WHERE room_id = $1
+            "#,
+            &[&room_id.0],
+        ).await?;
+
+        let mut nouns_by_obj: HashMap<Uuid, Vec<String>> = HashMap::new();
+        for r in noun_rows {
+            let obj_id: Uuid = r.get(1);
+            let noun: String = r.get(2);
+            nouns_by_obj.entry(obj_id).or_default().push(noun);
+        }
+
+        let objects = obj_rows.into_iter().map(|r| {
+            let id: Uuid = r.get(0);
+
+            let state_json: Option<Json<Vec<String>>> = r.get(6);
+            let state: Vec<String> = state_json.map(|j| j.0).unwrap_or_default();
+
+            RoomObject {
+                id: ObjectId::from_uuid(id),
+                name: r.get(2),
+                short: r.get(3),
+                description: r.get(4),
+                examine: r.get(5),
+                state,
+                use_lua: r.get(7),
+                position: r.get(8),
+                nouns: nouns_by_obj.remove(&id).unwrap_or_default(),
+                initial_qty: None,
+                qty: None,
+                locked: false,
+                revealed: false,
+                takeable: false,
+                stackable: false,
+                is_coin: false,
+            }
+        }).collect();
+
+        Ok(objects)
+    }
+
+    async fn room_scripts(&self, room_id: RoomId, src: ScriptSource) -> DbResult<RoomScripts> {
+        let client = self.db.get_client().await?;
+
+        let (table, enter_col, cmd_col) = match src {
+            ScriptSource::Live  => ("bp_room_scripts", "on_enter_lua", "on_command_lua"),
+            ScriptSource::Draft => {
+                // Draft is per-event; fetch both rows and merge.
+                // We’ll do a small UNION query to return both in one pass.
+                return self.get_draft_scripts(room_id).await;
+            }
+        };
+
+        let row_opt = client.query_opt(
+            &format!("SELECT {enter}, {cmd} FROM {table} WHERE room_id = $1",
+                     enter = enter_col, cmd = cmd_col, table = table),
+            &[&room_id.0],
+        ).await?;
+
+        if let Some(r) = row_opt {
+            Ok(RoomScripts {
+                on_enter_lua: r.get::<_, Option<String>>(0),
+                on_command_lua: r.get::<_, Option<String>>(1),
+            })
+        } else {
+            Ok(RoomScripts::default())
+        }
+    }
+
+    async fn room_kv(&self, room_id: RoomId) -> DbResult<RoomKv> {
+        let client = self.db.get_client().await?;
+
+        let rows = client.query(
+            r#"
+            SELECT key, value
+            FROM bp_room_kv
+            WHERE room_id = $1
+            "#,
+            &[&room_id.0],
+        ).await?;
+
+        let kv = rows
+            .into_iter()
+            .map(|r| {
+                let k: String = r.get(0);
+                let v: serde_json::Value = r.get(1);
+                let vec: Vec<String> = serde_json::from_value(v)?;
+                Ok::<(String, Vec<String>), DbError>((k, vec))
+            })
+            .collect::<DbResult<HashMap<_, _>>>()?;
+
+        Ok(kv)
+    }
+
+    async fn set_entry(&self, bp_key: &str, room_key: &str) -> DbResult<bool> {
+        let c = self.db.get_client().await?;
+
+        let n = c.execute(
+        "UPDATE blueprints SET entry_room_id = $2 WHERE key = $1",
+            &[&bp_key, &room_key],
+        ).await?;
+
+        Ok(n == 1)
+    }
+
+    async fn add_exit(&self, bp_key: &str, from_key: &str, dir: &str, to_key: &str) -> DbResult<bool> {
+        let c = self.db.get_client().await?;
+
+        let n = c.execute(
+            r#"
+            INSERT INTO bp_exits (from_room_id, dir, to_room_id, locked, description, visible_when_locked)
+            SELECT fr.id, $3, tr.id, false, '', false
+            FROM bp_rooms fr
+            JOIN bp_rooms tr ON tr.bp_id = fr.bp_id AND tr.key = $4
+            JOIN blueprints bp ON bp.id = fr.bp_id
+            WHERE bp.key = $1 AND fr.key = $2
+            ON CONFLICT (from_room_id, dir) DO UPDATE SET to_room_id = EXCLUDED.to_room_id
+            "#,
+            &[&bp_key, &from_key, &dir, &to_key],
+        ).await?;
+
+        Ok(n == 1)
+    }
+
+    async fn set_locked(&self, bp_key: &str, room_key: &str, locked: bool) -> DbResult<bool> {
+        let c = self.db.get_client().await?;
+
+        let n = c.execute(
+            r#"
+            UPDATE bp_rooms
+            SET lockdown = $3
+            FROM blueprints bp
+            WHERE bp.id = bp_rooms.bp_id AND bp.key = $1 AND bp_rooms.key = $2
+            "#,
+            &[&bp_key, &room_key, &locked],
+        ).await?;
+
+        Ok(n == 1)
+    }
+
+    async fn insert_blueprint(&self, bp_key: &str, title: &str, account_id: AccountId) -> DbResult<bool> {
+        let c = self.db.get_client().await?;
+
+        let n = c.execute(
+            r#"
+            INSERT INTO blueprints (key, title, owner_id, status)
+            VALUES ($1, $2, $3, 'draft')
+            ON CONFLICT (key) DO NOTHING
+            "#,
+            &[&bp_key, &title, &account_id],
+        ).await?;
+
+        Ok(n == 1)
+    }
+
+    async fn insert_room(&self, bp_key: &str, room_key: &str, title: &str, body: &str) -> DbResult<bool> {
+        let c = self.db.get_client().await?;
+
+        let n = c.execute(
+            r#"
+            INSERT INTO bp_rooms (bp_id, key, title, body, lockdown, short, hints, scripts)
+            SELECT id, $2, $3, $4, false, '', '', '{}'
+            FROM blueprints
+            WHERE key = $1
+            ON CONFLICT (bp_id, key) DO NOTHING
+            "#,
+            &[&bp_key, &room_key, &title, &body],
+        ).await?;
+
+        Ok(n == 1)
+    }
+
+    async fn submit(&self, bp_key: &str) -> DbResult<bool> {
+        let c = self.db.get_client().await?;
+
+        let n = c.execute(
+            r#"
+            UPDATE blueprints
+            SET status = 'pending'
+            WHERE key = $1 AND status = 'draft'
+            "#,
+            &[&bp_key],
+        ).await?;
+
+        Ok(n == 1)
+    }
+}
