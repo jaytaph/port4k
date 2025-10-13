@@ -86,6 +86,22 @@ impl Direction {
             Direction::Custom(_) => "custom",
         }
     }
+
+    pub fn to_short(&self) -> &'static str {
+        match self {
+            Direction::North => "n",
+            Direction::South => "s",
+            Direction::East  => "e",
+            Direction::West  => "w",
+            Direction::Up    => "u",
+            Direction::Down  => "d",
+            Direction::Northeast => "ne",
+            Direction::Northwest => "nw",
+            Direction::Southeast => "se",
+            Direction::Southwest => "sw",
+            Direction::Custom(_) => "c",
+        }
+    }
 }
 
 impl core::str::FromStr for Direction {

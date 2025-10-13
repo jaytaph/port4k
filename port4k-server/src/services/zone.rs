@@ -17,6 +17,11 @@ pub struct ZoneService {
     repo: Arc<dyn ZoneRepo>,
 }
 
+enum RoomKey {
+    Id(RoomId),
+    Key(String),
+}
+
 impl ZoneService {
     pub fn new(repo: Arc<dyn ZoneRepo>) -> Self {
         Self { repo }
@@ -27,9 +32,17 @@ impl ZoneService {
     }
 
     /// Fetches the current zone context (saved in db?), or generates a new one if none exists.
-    pub async fn generate_cursor(&self, ctx: Arc<CmdCtx>, account: &Account, zone_key: Option<&str>, bp_key: Option<&str>) -> AppResult<Cursor> {
-        // For now, we always use the first blueprint
+    pub async fn generate_cursor(&self, ctx: Arc<CmdCtx>, account: &Account, zone_key: Option<&str>, bp_room_key: RoomKey) -> AppResult<Cursor> {
         let blueprint = Arc::new(ctx.registry.services.blueprint.get_by_key(bp_key.unwrap_or("hub")).await?);
+
+        match bp_room_key {
+            RoomKey::Id(id) => {
+                let room = ctx.registry.services.room.get_by_id(id).await?;
+            },
+            RoomKey::Key(key) => {
+                let room = ctx.registry.services.room.get_by_key(key).await?;
+            }
+        }
         let Some(zone) = ctx.registry.services.zone.get_by_key(zone_key.unwrap_or("hub")).await? else {
             return Err(DomainError::NotFound.into());
         };

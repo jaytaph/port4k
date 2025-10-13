@@ -17,15 +17,22 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput
     let dir = Direction::from(dir);
 
     let c = ctx.cursor()?;
-    let account_id = ctx.account_id()?;
-    let (_from, _to) = ctx.registry.services.navigator.go(&c, account_id, dir).await?;
+    let account = ctx.account()?;
+    let (from_id, to_id) = ctx.registry.services.navigator.go(&c, account.id, dir).await?;
+
+    let c = ctx.registry.services.zone.generate_cursor(ctx.clone(), &account, RoomKey::Id(from_id), RoomKey::Id(to_id)).await?;
+    {
+        let mut s = ctx.sess.write();
+        s.account = Some(account.clone());  // @TODO: Is this wise? Why clone?
+        s.state = ConnState::LoggedIn;
+        s.cursor = Some(c);
+    }
+
 
     // // reuse your render path
     // let view_repo = ctx.registry.services.zone_router.view_repo_for(&ctx.zone_ctx);
     // let room_view = view_repo.room_view(&ctx.zone_ctx, to, ctx.screen_width).await?;
     // let text = render_room(&room_view);
 
-    let text = "we moved to another room".to_string();
-
-    Ok(success!(text))
+    Ok(success!(render_room(&Theme::blue(), 80, c.room_view)))
 }
