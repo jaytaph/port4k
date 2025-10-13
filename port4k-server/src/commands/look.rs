@@ -1,12 +1,15 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
-use crate::renderer::{render_room, Theme};
-use crate::success;
-use crate::error::DomainError;
 
-pub async fn look(ctx: Arc<CmdCtx>, _intent: Intent) -> CommandResult<CommandOutput> {
-    let cursor = ctx.cursor().map_err(|_| DomainError::NotFound)?;
+pub async fn look(_ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
+    let mut out = CommandOutput::new();
+    out.append("you look around. Nothing to see here... yet.");
 
-    Ok(success!(render_room(&Theme::blue(), 80, cursor.room_view)))
+    for o in intent.objects {
+        out.append(&format!("\nYou look at {}. It's fascinating!", o.head));
+    }
+
+    out.success();
+    Ok(out)
 }

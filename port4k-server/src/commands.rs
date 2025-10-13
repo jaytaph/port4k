@@ -2,6 +2,7 @@ use crate::input::parser::{Verb, parse_command};
 use crate::state::session::{Cursor, Session};
 use std::sync::Arc;
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::SendError;
@@ -122,24 +123,24 @@ impl CmdCtx {
     }
 }
 
-pub struct CommandOutput {
-    pub message: String,
-    pub is_error: bool,
-}
-
-#[macro_export]
-macro_rules! success {
-    ($msg:expr) => {
-        CommandOutput { is_error: false, message: $msg.to_string() }
-    };
-}
-
-#[macro_export]
-macro_rules! failure {
-    ($msg:expr) => {
-        CommandOutput { is_error: true, message: $msg.to_string() }
-    };
-}
+// pub struct CommandOutput {
+//     pub message: String,
+//     pub is_error: bool,
+// }
+//
+// #[macro_export]
+// macro_rules! success {
+//     ($msg:expr) => {
+//         CommandOutput { is_error: false, message: $msg.to_string() }
+//     };
+// }
+//
+// #[macro_export]
+// macro_rules! failure {
+//     ($msg:expr) => {
+//         CommandOutput { is_error: true, message: $msg.to_string() }
+//     };
+// }
 
 pub async fn process_command(
     raw: &str,
@@ -213,4 +214,38 @@ pub fn help_text() -> String {
     fg_green = ansi::FG_GREEN,
     reset = ansi::RESET,
     )
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CmdStatus {
+    Success,
+    Failure,
+    Neutral,
+}
+
+pub struct CommandOutput {
+    pub status: CmdStatus,
+    pub lines: Vec<String>,
+    // more fields we might want later
+}
+
+impl CommandOutput {
+    pub fn new() -> Self {
+        Self {
+            status: CmdStatus::Neutral,
+            lines: Vec::new(),
+        }
+    }
+
+    pub fn append(&mut self, line: &str) {
+        self.lines.push(line.to_string());
+    }
+
+    pub fn success(&mut self) {
+        self.status = CmdStatus::Success;
+    }
+
+    pub fn failure(&mut self) {
+        self.status = CmdStatus::Failure;
+    }
 }

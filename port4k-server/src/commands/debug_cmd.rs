@@ -1,11 +1,14 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
-use crate::{failure, success};
 use crate::input::parser::Intent;
 
 pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
+    let mut out = CommandOutput::new();
+
     if intent.args.len() < 2 {
-        return Ok(failure!("Usage: debug where\n"));
+        out.append("Usage: debug where\n");
+        out.failure();
+        return Ok(out);
     }
 
     let sub_cmd = intent.args[1].as_str();
@@ -16,13 +19,20 @@ pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Comman
             let username = account.username;
 
             if ! ctx.has_cursor() {
-                return Ok(failure!("You have no cursor. Use 'go <zone>' to set one.\n"));
+                out.append("You have no cursor. Use 'go <zone>' to set one.\n");
+                out.failure();
             }
 
             let cursor = ctx.cursor()?;
-            let msg = format!("[debug] user={username} zone={} zone_kind: {:?} room: {}\n", cursor.zone_ctx.zone.title, cursor.zone_ctx.kind, cursor.room_view.room.title);
-            Ok(success!(msg))
+            out.append(format!("[debug] user={username} zone={} zone_kind: {:?} room: {}\n", cursor.zone_ctx.zone.title, cursor.zone_ctx.kind, cursor.room_view.room.title).as_str());
+            out.success();
         },
-        _ => Ok(failure!("Usage: @debug where\n"))
+        _ => {
+            out.append("Unknown debug command.\n");
+            out.append("Available commands: where\n");
+            out.failure();
+        }
     }
+
+    Ok(out)
 }

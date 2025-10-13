@@ -1,18 +1,24 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
-use crate::{success, ConnState};
-use crate::error::DomainError;
+use crate::ConnState;
 use crate::models::types::Direction;
 use crate::renderer::{render_room, Theme};
 
 pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
+    let mut out = CommandOutput::new();
+
     if !ctx.has_cursor() {
-        return Err(CommandError::Domain(DomainError::NoCurrentRoom));
+        out.append("You are not in a world\n");
+        out.failure();
+        return Ok(out);
     }
 
     let Some(dir) = intent.direction else {
-        return Err(CommandError::InvalidArgs("No direction specified".to_string()));
+        out.append("No direction specified.\n");
+        out.append("Usage: go <direction>\n");
+        out.failure();
+        return Ok(out);
     };
     let dir = Direction::from(dir);
 
@@ -30,5 +36,8 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput
 
     // Render the new room
     let c = ctx.cursor()?;
-    Ok(success!(render_room(&Theme::blue(), 80, c.room_view)))
+
+    out.append(render_room(&Theme::blue(), 80, c.room_view).as_str());
+    out.success();
+    Ok(out)
 }
