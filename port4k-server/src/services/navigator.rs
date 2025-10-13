@@ -1,7 +1,7 @@
 use std::sync::Arc;
-use crate::error::AppResult;
+use crate::error::{AppResult, DomainError};
 use crate::models::types::{AccountId, Direction, RoomId};
-use crate::models::zone::{ZoneContext, ZoneRouter};
+use crate::models::zone::ZoneRouter;
 use crate::state::session::Cursor;
 
 #[allow(unused)]

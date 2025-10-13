@@ -8,7 +8,7 @@ use crate::db::repo::zone::ZoneRepo;
 use crate::error::{AppResult, DomainError};
 use crate::models::account::Account;
 use crate::models::room::RoomView;
-use crate::models::types::AccountId;
+use crate::models::types::{AccountId, RoomId};
 use crate::models::zone::{Persistence, Zone, ZoneContext, ZoneKind, ZonePolicy};
 use crate::services::RoomService;
 use crate::state::session::Cursor;

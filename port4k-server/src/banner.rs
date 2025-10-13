@@ -13,8 +13,9 @@ pub const BANNER: &str = concat!(
 pub const ENTRY: &str = concat!(
     "\n",
     "\x1b[1;35m", "★ WELCOME TO PORT4K ★", "\x1b[0m", "\n",
+    "\n",
     "\x1b[36m",
-    "A world of rooms, puzzles, and adventure — built by players and shaped by your\n",
+    "A world of rooms, puzzles, and adventure - built by players and shaped by your\n",
     "choices. Explore hand-crafted spaces, read subtle clues, flip levers, outwit\n",
     "locks, and discover hidden links between worlds. Build your own rooms with\n",
     "Lua, publish them, and watch others attempt (and break!) your designs. Your\n",
@@ -28,6 +29,7 @@ pub const ENTRY: &str = concat!(
     "\x1b[33m•\x1b[0m Classic MUD feel with modern polish\n",
     "================================================\n",
     "\x1b[1mGetting started\x1b[0m\n",
+    "  ", "\x1b[32mabout\x1b[0m", "   read the story of port4k\n",
     "  ", "\x1b[32mregister <name>\x1b[0m", "   create a new character\n",
     "  ", "\x1b[32mlogin <name>\x1b[0m",    "      access your account (Telnet two-step supported)\n",
     "  ", "\x1b[32mhelp\x1b[0m",            "              list commands | ",

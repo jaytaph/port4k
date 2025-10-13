@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
-use crate::rendering::{render_room, Theme};
+use crate::renderer::{render_room, Theme};
 use crate::success;
 use crate::error::DomainError;
 
