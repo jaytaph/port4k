@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use crate::input::readline::{EditEvent, LineEditor};
 use crate::util::telnet::{TelnetIn, TelnetMachine};
 use crate::{ConnState, process_command, Session, Registry};
@@ -13,6 +12,7 @@ use crate::models::account::Account;
 use crate::error::AppResult;
 use crate::net::AppCtx;
 use crate::net::telnet::crlf_wrapper::CrlfWriter;
+use crate::renderer::{get_vars, render};
 
 pub async fn handle_connection(
     stream: TcpStream,
@@ -57,7 +57,7 @@ async fn start_session<W: AsyncWrite + Unpin>(
         }
     }
 
-    repaint_prompt(sess.clone(), w, editor).await?;
+    repaint_prompt(sess.clone(), w, editor, true).await?;
     Ok(())
 }
 
@@ -88,31 +88,8 @@ async fn read_loop<W: AsyncWrite + Unpin>(
 }
 
 fn generate_prompt(sess: Arc<RwLock<Session>>, prompt: &str) -> String {
-    let mut vars = HashMap::new();
-    vars.insert("world".to_string(), "World".to_string());
-    vars.insert("room".to_string(), "Room".to_string());
-    vars.insert("wall_time".to_string(), chrono::Local::now().format("%H:%M:%S").to_string());
-    vars.insert("online_time".to_string(), format!("{}", sess.read().session_started.elapsed().as_secs()));
-    vars.insert("online_users".to_string(), format!("{}", 123));
-
-    if let Some(account) = sess.read().account.as_ref() {
-        vars.insert("name".to_string(), account.username.to_string());
-        vars.insert("role".to_string(), account.role.to_string());
-        vars.insert("xp".to_string(), format!("{}", account.xp));
-        vars.insert("health".to_string(), format!("{}", account.health));
-        vars.insert("coins".to_string(), format!("{}", account.coins));
-    }
-    if let Some(cursor) = sess.read().cursor.as_ref() {
-        vars.insert("zone".to_string(), cursor.zone_ctx.zone.title.to_string());
-        vars.insert("room".to_string(), cursor.room_view.room.title.to_string());
-    }
-
-    let mut out = prompt.to_string();
-    for (k, v) in vars {
-        out = out.replace(&format!("{{{}}}", k), &v);
-    }
-
-    out
+    let vars = get_vars(sess.clone());
+    render(prompt, &vars)
 }
 
 async fn cleanup(sess: Arc<RwLock<Session>>, registry: Arc<Registry>) {
@@ -138,7 +115,7 @@ async fn handle_data_byte<W: AsyncWrite + Unpin>(
     match editor.handle_byte(b) {
         EditEvent::None => {}
         EditEvent::Redraw => {
-            repaint_prompt(sess.clone(), w, editor).await?;
+            repaint_prompt(sess.clone(), w, editor, false).await?;
         }
         EditEvent::Line(line) => {
             // Move to a fresh line before emitting any output
@@ -148,7 +125,7 @@ async fn handle_data_byte<W: AsyncWrite + Unpin>(
 
             // Try login flow first; if handled, we just repaint
             if try_handle_login(raw, reader, w, telnet, ctx.clone(), sess.clone()).await? == LoginOutcome::Handled {
-                repaint_prompt(sess.clone(), w, editor).await?;
+                repaint_prompt(sess.clone(), w, editor, true).await?;
                 return Ok(());
             }
 
@@ -156,7 +133,7 @@ async fn handle_data_byte<W: AsyncWrite + Unpin>(
             dispatch_command(raw, w, ctx.clone(), sess.clone()).await?;
 
             // Always repaint prompt after server output
-            repaint_prompt(sess.clone(), w, editor).await?;
+            repaint_prompt(sess.clone(), w, editor, true).await?;
         }
     }
     Ok(())
@@ -263,9 +240,11 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
     Ok(LoginOutcome::Handled)
 }
 
-async fn repaint_prompt<W: AsyncWrite + Unpin>(sess: Arc<RwLock<Session>>, w: &mut W, editor: &mut LineEditor) -> std::io::Result<()> {
-    let prompt = generate_prompt(sess.clone(), &"{user} [{world}:{room}] @ {wall_time} > ");
-    editor.set_prompt(&prompt);
+async fn repaint_prompt<W: AsyncWrite + Unpin>(sess: Arc<RwLock<Session>>, w: &mut W, editor: &mut LineEditor, generate_new_prompt: bool) -> std::io::Result<()> {
+    if generate_new_prompt {
+        let prompt = generate_prompt(sess.clone(), &"{v:account.name:Not logged in} [{v:room:Nowhere}] @ {v:wall_time} > ");
+        editor.set_prompt(&prompt);
+    }
 
     w.write_all(editor.repaint_line().as_bytes()).await?;
     w.flush().await

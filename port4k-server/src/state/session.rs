@@ -1,5 +1,6 @@
 use crate::models::account::Account;
 use crate::models::room::RoomView;
+use crate::models::types::RoomId;
 use crate::models::zone::ZoneContext;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,6 +21,7 @@ pub enum Protocol {
 #[derive(Debug, Clone)]
 pub struct Cursor {
     pub zone_ctx: ZoneContext,
+    pub room_id: RoomId,
     pub room_view: RoomView,
 }
 

@@ -18,9 +18,9 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput
 
     let c = ctx.cursor()?;
     let account = ctx.account()?;
-    let (from_id, to_id) = ctx.registry.services.navigator.go(&c, account.id, dir).await?;
+    let (_from_id, to_id) = ctx.registry.services.navigator.go(&c, account.id, dir).await?;
 
-    let c = ctx.registry.services.zone.generate_cursor(ctx.clone(), &account, RoomKey::Id(from_id), RoomKey::Id(to_id)).await?;
+    let c = ctx.registry.services.zone.generate_cursor(ctx.clone(), &account, to_id).await?;
     {
         let mut s = ctx.sess.write();
         s.account = Some(account.clone());  // @TODO: Is this wise? Why clone?
@@ -28,11 +28,7 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput
         s.cursor = Some(c);
     }
 
-
-    // // reuse your render path
-    // let view_repo = ctx.registry.services.zone_router.view_repo_for(&ctx.zone_ctx);
-    // let room_view = view_repo.room_view(&ctx.zone_ctx, to, ctx.screen_width).await?;
-    // let text = render_room(&room_view);
-
+    // Render the new room
+    let c = ctx.cursor()?;
     Ok(success!(render_room(&Theme::blue(), 80, c.room_view)))
 }

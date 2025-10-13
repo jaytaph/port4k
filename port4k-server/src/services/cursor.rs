@@ -31,6 +31,7 @@ impl CursorService {
 
         Ok(Cursor {
             zone_ctx,
+            room_id: bp.entry_room_id,
             room_view,
         })
     }

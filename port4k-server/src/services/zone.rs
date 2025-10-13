@@ -17,11 +17,6 @@ pub struct ZoneService {
     repo: Arc<dyn ZoneRepo>,
 }
 
-enum RoomKey {
-    Id(RoomId),
-    Key(String),
-}
-
 impl ZoneService {
     pub fn new(repo: Arc<dyn ZoneRepo>) -> Self {
         Self { repo }
@@ -32,37 +27,20 @@ impl ZoneService {
     }
 
     /// Fetches the current zone context (saved in db?), or generates a new one if none exists.
-    pub async fn generate_cursor(&self, ctx: Arc<CmdCtx>, account: &Account, zone_key: Option<&str>, bp_room_key: RoomKey) -> AppResult<Cursor> {
-        let blueprint = Arc::new(ctx.registry.services.blueprint.get_by_key(bp_key.unwrap_or("hub")).await?);
+    pub async fn generate_cursor(&self, ctx: Arc<CmdCtx>, account: &Account, room_id: RoomId) -> AppResult<Cursor> {
 
-        match bp_room_key {
-            RoomKey::Id(id) => {
-                let room = ctx.registry.services.room.get_by_id(id).await?;
-            },
-            RoomKey::Key(key) => {
-                let room = ctx.registry.services.room.get_by_key(key).await?;
-            }
-        }
-        let Some(zone) = ctx.registry.services.zone.get_by_key(zone_key.unwrap_or("hub")).await? else {
-            return Err(DomainError::NotFound.into());
-        };
+        // Get the room from the zone's blueprint to ensure it exists
+        let zone_ctx = ctx.zone_ctx()?;
+        let room = ctx.registry.services.blueprint.room_by_id(zone_ctx.blueprint.id, room_id).await?;
 
-        let zone_ctx = ZoneContext{
-            zone: Arc::new(zone),
-            kind: ZoneKind::Live,
-            policy: ZonePolicy {
-                persistence: Persistence::Persistent,
-            },
-            blueprint: blueprint.clone(),
-        };
-
+        // Generate the new room view for given account, zone(_ctx) and room
         let room_view = ctx.registry.services.room.build_room_view(
             ctx.registry.zone_router.clone(),
             &zone_ctx,
             account.id,
-            blueprint.entry_room_id,
+            room_id,
         ).await?;
 
-        Ok(Cursor { zone_ctx, room_view })
+        Ok(Cursor { zone_ctx, room_id, room_view })
     }
 }

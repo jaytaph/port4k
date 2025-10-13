@@ -24,7 +24,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
                 return Ok(failure!(USAGE));
             }
 
-            let (bp, room) = parse_bp_room_key(&sub_args[0])
+            let key = parse_bp_room_key(&sub_args[0])
                 .ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
 
             let title = &sub_args[1];
@@ -34,8 +34,8 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
                 return Ok(failure!("[bp] title and body cannot be empty.\n"));
             }
 
-            if ctx.registry.services.blueprint.new_room(&bp, &room, title, body).await? {
-                Ok(success!(format!("[bp] room {}:{} added.\n", bp, room)))
+            if ctx.registry.services.blueprint.new_room(&key, title, body).await? {
+                Ok(success!(format!("[bp] room {}:{} added.\n", key.bp_key, key.room_key)))
             } else {
                 Ok(failure!("[bp] room already exists.\n"))
             }
@@ -47,11 +47,11 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
                 return Ok(failure!(USAGE));
             }
 
-            let (bp, room) = parse_bp_room_key(&sub_args[0])
+            let key = parse_bp_room_key(&sub_args[0])
                 .ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
 
-            if ctx.registry.services.blueprint.set_locked(&bp, &room, true).await? {
-                Ok(success!(format!("[bp] room {}:{} set to LOCKED.\n", bp, room)))
+            if ctx.registry.services.blueprint.set_locked(&key, true).await? {
+                Ok(success!(format!("[bp] room {}:{} set to LOCKED.\n", key.bp_key, key.room_key)))
             } else {
                 Ok(failure!("[bp] blueprint/room not found.\n"))
             }
@@ -63,11 +63,11 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
                 return Ok(failure!(USAGE));
             }
 
-            let (bp, room) = parse_bp_room_key(&sub_args[0])
+            let key = parse_bp_room_key(&sub_args[0])
                 .ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
 
-            if ctx.registry.services.blueprint.set_locked(&bp, &room, false).await? {
-                Ok(success!(format!("[bp] room {}:{} set to UNLOCKED.\n", bp, room)))
+            if ctx.registry.services.blueprint.set_locked(&key, false).await? {
+                Ok(success!(format!("[bp] room {}:{} set to UNLOCKED.\n", key.bp_key, key.room_key)))
             } else {
                 Ok(failure!("[bp] blueprint/room not found.\n"))
             }

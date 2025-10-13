@@ -4,6 +4,7 @@ use crate::input::parser::Intent;
 use crate::state::session::ConnState;
 use crate::models::account::Account;
 use crate::{failure, success};
+use crate::db::repo::room::BlueprintAndRoomKey;
 use crate::error::DomainError;
 use crate::renderer::{render_room, render_text, Theme};
 
@@ -41,13 +42,24 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOut
         return Ok(failure!("Invalid username.\n"));
     }
 
-    let account = ctx.registry.services.auth.authenticate(&username, pass).await?;
+    let Ok(account) = ctx.registry.services.auth.authenticate(&username, pass).await else {
+        return Ok(failure!("Login failed. Check your username and password.\n"));
+    };
     ctx.sess.write().account = Some(account);
 
-    let account = ctx.account()?;
-    let (_char_id, _loc) = ctx.registry.db.get_or_create_character(account.id, &username).await?;
+    let Ok(account) = ctx.account() else {
+        return Ok(failure!("Error retrieving account after login. Contact admin.\n"));
+    };
+    let Ok((_char_id, _loc)) = ctx.registry.db.get_or_create_character(account.id, &username).await else {
+        return Ok(failure!("Error retrieving character after login. Contact admin.\n"));
+    };
 
-    let c = ctx.registry.services.zone.generate_cursor(ctx.clone(), &account, Some("hub"), Some("hub")).await?;
+    // Get room by key
+    let Ok(room) = ctx.registry.services.blueprint.room_by_key(BlueprintAndRoomKey::new("hub", "entry")).await else {
+        return Ok(failure!("Error: Starting room not found. Contact admin.\n"));
+    };
+
+    let c = ctx.registry.services.zone.generate_cursor(ctx.clone(), &account, room.id).await?;
     {
         let mut s = ctx.sess.write();
         s.account = Some(account.clone());  // @TODO: Is this wise? Why clone?
@@ -58,7 +70,6 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOut
     ctx.registry.set_online(&account, true).await;
 
     let cursor = ctx.cursor().map_err(|_| DomainError::NotFound)?;
-
     let theme = Theme::blue();
     let width = 80;
 

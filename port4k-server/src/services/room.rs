@@ -53,7 +53,7 @@ impl RoomService {
     pub async fn build_room_view(&self, router: Arc<ZoneRouter>, zone_ctx: &ZoneContext, account_id: AccountId, room_id: RoomId) -> AppResult<RoomView> {
         let zone_state: Arc<dyn ZoneState> = router.state_for(zone_ctx);
 
-        let room_fut   = async { self.room_repo.room(room_id).await.map_err(DomainError::from) };
+        let room_fut   = async { self.room_repo.room_by_id(zone_ctx.blueprint.id, room_id).await.map_err(DomainError::from) };
         let exits_fut  = async { self.room_repo.room_exits(room_id).await.map_err(DomainError::from) };
         let objects_fut= async { self.room_repo.room_objects(room_id).await.map_err(DomainError::from) };
         let scripts_fut= async { self.room_repo.room_scripts(room_id, ScriptSource::Live).await.map_err(DomainError::from) };

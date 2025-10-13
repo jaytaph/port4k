@@ -333,24 +333,7 @@ pub fn get_vars(sess: Arc<RwLock<Session>>) -> HashMap<String, String> {
     vars
 }
 
-pub fn resolve_vars(
-    template: &str,
-    vars: HashMap<String, String>,
-) -> String {
-    let re = Regex::new(r"\{([a-zA-Z0-9_]+)}").unwrap();
-    re.replace_all(template, |caps: &regex::Captures| {
-        vars.get(&caps[1]).cloned().unwrap_or_else(|| caps[0].to_string())
-    })
-    .into_owned()
-}
-
-
 pub fn render_text(sess: Arc<RwLock<Session>>, _theme: &Theme, _width: usize, text: &str) -> String {
     let vars = get_vars(sess.clone());
     render(text, &vars)
-
-    // let text = resolve_vars(text, vars);
-    //
-    // let body_wrapped = wrap_ansi(&text, width.max(20));
-    // format!("{}{}\n", theme.room_body, body_wrapped)
 }

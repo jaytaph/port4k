@@ -12,12 +12,12 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
         return Ok(failure!(USAGE));
     }
 
-    let (bp_key, room_key) = parse_bp_room_key(intent.args[1].as_str())
+    let key = parse_bp_room_key(intent.args[1].as_str())
         .ok_or(CommandError::Custom("invalid room key. use <bp>:<room>".into()))?;
 
-    if !ctx.registry.services.blueprint.set_entry(&bp_key, &room_key).await? {
+    if !ctx.registry.services.blueprint.set_entry(&key).await? {
         return Ok(failure!("[bp] blueprint not found.\n"))
     }
 
-    Ok(success!(format!("[bp] entry set: {}:{}\n", bp_key, room_key)))
+    Ok(success!(format!("[bp] entry set\n")))
 }

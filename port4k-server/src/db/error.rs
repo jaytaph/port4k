@@ -38,4 +38,7 @@ pub enum DbError {
 
     #[error("row decode error: {0}")]
     Decode(&'static str),
+
+    #[error("input error: {0}")]
+    Validation(String),
 }
