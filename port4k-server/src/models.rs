@@ -14,7 +14,7 @@ pub fn json_string_vec_opt(v: Option<Value>, field: &'static str) -> DbResult<Ve
         None => Ok(Vec::new()),
         Some(val) => {
             let out: Vec<String> = serde_json::from_value(val)
-                .map_err(|_| DbError::Decode(field))?;
+                .map_err(|_| DbError::Decode(field.into()))?;
             Ok(out)
         }
     }

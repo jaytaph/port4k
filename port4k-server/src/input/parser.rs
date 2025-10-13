@@ -158,7 +158,7 @@ pub fn parse_command(input: &str) -> Intent {
     }
 
     // Directions-only shortcuts: "n", "north", etc.
-    if let Some(dir) = direction_from(&tokens[0].lower) {
+    if let Some(dir) = Direction::parse(tokens[0].lower.as_str()) {
         return Intent {
             verb: Verb::Go,
             args: vec![],
@@ -179,7 +179,10 @@ pub fn parse_command(input: &str) -> Intent {
 
     // Movement form "go north"
     if verb == Verb::Go {
-        let dir = tokens.get(consumed).and_then(|t| direction_from(&t.lower));
+        let dir = tokens
+            .get(consumed)
+            .and_then(|t| Direction::parse(t.lower.as_str()));
+
         return Intent {
             verb,
             args: tokens.iter().map(|t| t.lower.clone()).collect(),
@@ -425,18 +428,6 @@ fn canonical_prep(s: &str) -> Option<Preposition> {
         "from" => Some(Preposition::From),
         "through" => Some(Preposition::Through),
         "off" => Some(Preposition::Off),
-        _ => None,
-    }
-}
-
-fn direction_from(s: &str) -> Option<Direction> {
-    match s {
-        "n" | "north" => Some(Direction::North),
-        "s" | "south" => Some(Direction::South),
-        "e" | "east" => Some(Direction::East),
-        "w" | "west" => Some(Direction::West),
-        "u" | "up" => Some(Direction::Up),
-        "d" | "down" => Some(Direction::Down),
         _ => None,
     }
 }

@@ -100,7 +100,7 @@ impl Zone {
         let kind = match kind_s {
             "live"  => ZoneKind::Live,
             "draft" => ZoneKind::Draft,
-            _ => return Err(DbError::Decode("invalid zone.kind")),
+            _ => return Err(DbError::Decode("invalid zone.kind".into())),
         };
 
         Ok(Zone {

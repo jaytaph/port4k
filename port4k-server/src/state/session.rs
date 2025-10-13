@@ -1,3 +1,5 @@
+use serde::ser::SerializeStruct;
+use serde::Serialize;
 use crate::models::account::Account;
 use crate::models::room::RoomView;
 use crate::models::types::RoomId;
@@ -23,6 +25,20 @@ pub struct Cursor {
     pub zone_ctx: ZoneContext,
     pub room_id: RoomId,
     pub room_view: RoomView,
+}
+
+impl Serialize for Cursor {
+    // We don't want to serialize the entire ZoneContext and RoomView (too much data)
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("Cursor", 3)?;
+        state.serialize_field("zone_ctx.zone.key", &self.zone_ctx.zone.key)?;
+        state.serialize_field("zone_ctx.blueprint.key", &self.zone_ctx.blueprint.key)?;
+        state.serialize_field("room_id", &self.room_id)?;
+        state.end()
+    }
 }
 
 #[derive(Debug)]

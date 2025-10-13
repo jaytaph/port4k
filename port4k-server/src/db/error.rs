@@ -37,7 +37,7 @@ pub enum DbError {
     Json(#[from] serde_json::Error),
 
     #[error("row decode error: {0}")]
-    Decode(&'static str),
+    Decode(String),
 
     #[error("input error: {0}")]
     Validation(String),

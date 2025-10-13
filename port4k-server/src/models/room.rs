@@ -5,6 +5,7 @@ use serde_json::Value;
 use tokio_postgres::Row;
 use uuid::Uuid;
 use crate::db::DbResult;
+use crate::db::error::DbError;
 use crate::models::json_string_vec_opt;
 use crate::models::types::{AccountId, BlueprintId, Direction, ObjectId, RoomId, ZoneId};
 
@@ -59,7 +60,8 @@ pub struct RoomExitRow {
 impl RoomExitRow {
     pub fn try_from_row(row: &Row) -> DbResult<Self> {
         let dir_s: String = row.try_get("dir")?;
-        let dir = Direction::from(dir_s.as_str());
+        let dir = Direction::parse(&dir_s)
+            .ok_or_else(|| DbError::Decode(format!("invalid direction in bp_exits: {}", dir_s)))?;
 
         Ok(Self {
             from_room_id: row.try_get("from_room_id")?,
@@ -300,7 +302,7 @@ mod tests {
     fn exit(from: RoomId, to: RoomId, locked: bool, visible_when_locked: bool) -> RoomExitRow {
         RoomExitRow {
             from_room_id: from,
-            dir: Direction::from("east"),
+            dir: Direction::parse("east").expect("valid dir"),
             to_room_id: to,
             locked,
             description: Some("A steel door".into()),

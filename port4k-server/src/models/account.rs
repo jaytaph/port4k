@@ -28,9 +28,9 @@ impl Account {
         let health_i: i32 = row.try_get("health")?;
         let coins_i: i32  = row.try_get("coins")?;
 
-        let xp     = u32::try_from(xp_i).map_err(|_| DbError::Decode("xp < 0"))?;
-        let health = u32::try_from(health_i).map_err(|_| DbError::Decode("health < 0"))?;
-        let coins  = u32::try_from(coins_i).map_err(|_| DbError::Decode("coins < 0"))?;
+        let xp     = u32::try_from(xp_i).map_err(|_| DbError::Decode("xp < 0".into()))?;
+        let health = u32::try_from(health_i).map_err(|_| DbError::Decode("health < 0".into()))?;
+        let coins  = u32::try_from(coins_i).map_err(|_| DbError::Decode("coins < 0".into()))?;
 
         // Prefer decoding JSON directly if schema is jsonb array of text
         let inventory: Option<Vec<String>> = row.try_get("inventory").ok();

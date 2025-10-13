@@ -8,6 +8,7 @@ use tokio::sync::mpsc::error::SendError;
 use crate::{ansi, Registry};
 use crate::db::error::DbError;
 use crate::error::{AppResult, DomainError};
+use crate::input::shell::{handle_shell_cmd, parse_shell_cmd};
 use crate::models::account::Account;
 use crate::models::types::AccountId;
 use crate::lua::LuaJob;
@@ -144,6 +145,13 @@ pub async fn process_command(
     raw: &str,
     ctx: Arc<CmdCtx>,
 ) -> CommandResult<CommandOutput> {
+
+    // See if we match a shell command, and handle it if so
+    if let Some(shell) = parse_shell_cmd(&raw) {
+        let out = handle_shell_cmd(shell, ctx.clone()).await?;
+        return Ok(success!(out));
+    }
+
     let intent = parse_command(raw);
 
     match intent.verb {

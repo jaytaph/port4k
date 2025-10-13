@@ -64,7 +64,7 @@ pub enum ScriptSource {
 /// Directions as used in `bp_exits.dir`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Direction {
-    North, South, East, West, Up, Down,
+    North, South, East, West, Up, Down, In, Out,
     Northeast, Northwest, Southeast, Southwest,
     Custom(String), // for user-defined directions
 }
@@ -79,6 +79,8 @@ impl Direction {
             Direction::West  => "west",
             Direction::Up    => "up",
             Direction::Down  => "down",
+            Direction::In    => "in",
+            Direction::Out   => "out",
             Direction::Northeast => "northeast",
             Direction::Northwest => "northwest",
             Direction::Southeast => "southeast",
@@ -95,6 +97,8 @@ impl Direction {
             Direction::West  => "w",
             Direction::Up    => "u",
             Direction::Down  => "d",
+            Direction::In => "i",
+            Direction::Out => "o",
             Direction::Northeast => "ne",
             Direction::Northwest => "nw",
             Direction::Southeast => "se",
@@ -115,6 +119,8 @@ impl core::str::FromStr for Direction {
             "west"  => Ok(Direction::West),
             "up"    => Ok(Direction::Up),
             "down"  => Ok(Direction::Down),
+            "in"    => Ok(Direction::In),
+            "out"   => Ok(Direction::Out),
             "northeast" => Ok(Direction::Northeast),
             "northwest" => Ok(Direction::Northwest),
             "southeast" => Ok(Direction::Southeast),
@@ -123,25 +129,6 @@ impl core::str::FromStr for Direction {
         }
     }
 }
-
-impl From<&str> for Direction {
-    fn from(s: &str) -> Self {
-        match s.to_ascii_lowercase().as_str() {
-            "n" | "north" => Direction::North,
-            "s" | "south" => Direction::South,
-            "e" | "east"  => Direction::East,
-            "w" | "west"  => Direction::West,
-            "u" | "up"    => Direction::Up,
-            "d" | "down"  => Direction::Down,
-            "ne" | "northeast" => Direction::Northeast,
-            "nw" | "northwest" => Direction::Northwest,
-            "se" | "southeast" => Direction::Southeast,
-            "sw" | "southwest" => Direction::Southwest,
-            other => Direction::Custom(other.to_string()),
-        }
-    }
-}
-
 
 impl core::fmt::Display for Direction {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -154,4 +141,27 @@ impl core::fmt::Display for Direction {
 
 impl From<Direction> for String {
     fn from(d: Direction) -> Self { d.to_string() }
+}
+
+impl Direction {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            // cardinal + aliases
+            "n" | "north"        => Some(Direction::North),
+            "e" | "east"         => Some(Direction::East),
+            "s" | "south"        => Some(Direction::South),
+            "w" | "west"         => Some(Direction::West),
+
+            "ne" | "northeast"   => Some(Direction::Northeast),
+            "nw" | "northwest"   => Some(Direction::Northwest),
+            "se" | "southeast"   => Some(Direction::Southeast),
+            "sw" | "southwest"   => Some(Direction::Southwest),
+
+            "u" | "up"           => Some(Direction::Up),
+            "d" | "down"         => Some(Direction::Down),
+            "in"                 => Some(Direction::In),
+            "out"                => Some(Direction::Out),
+            _ => None,
+        }
+    }
 }

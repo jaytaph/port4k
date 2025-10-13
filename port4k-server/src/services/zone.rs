@@ -28,7 +28,6 @@ impl ZoneService {
 
     /// Fetches the current zone context (saved in db?), or generates a new one if none exists.
     pub async fn generate_cursor(&self, ctx: Arc<CmdCtx>, account: &Account, room_id: RoomId) -> AppResult<Cursor> {
-
         // Get the room from the zone's blueprint to ensure it exists
         let zone_ctx = ctx.zone_ctx()?;
         let room = ctx.registry.services.blueprint.room_by_id(zone_ctx.blueprint.id, room_id).await?;
