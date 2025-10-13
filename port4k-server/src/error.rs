@@ -7,8 +7,8 @@ pub type AppResult<T> = Result<T, DomainError>;
 #[derive(Debug, Error)]
 pub enum DomainError {
     /// Room is locked
-    #[error("locked exit")]
-    LockedExit,
+    #[error("locked exit: {0}")]
+    LockedExit(String),
 
     /// Insufficient quantity to perform action
     #[error("insufficient quantity: have {have}, need {need}")]

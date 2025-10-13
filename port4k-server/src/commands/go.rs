@@ -1,9 +1,10 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
-use crate::{success};
+use crate::{success, ConnState};
 use crate::error::DomainError;
 use crate::models::types::Direction;
+use crate::renderer::{render_room, Theme};
 
 pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     if !ctx.has_cursor() {

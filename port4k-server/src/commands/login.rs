@@ -5,16 +5,15 @@ use crate::state::session::ConnState;
 use crate::models::account::Account;
 use crate::{failure, success};
 use crate::error::DomainError;
-use crate::rendering::{render_room, Theme};
+use crate::renderer::{render_room, render_text, Theme};
 
 const MOTD: &'static str = r#"
 ====================  PORT4K  ====================
-Welcome back, {username}!  (last login: {last_login})
-Server time: {now_local}
-Location: {zone_title} — {room_title}
+Welcome back, {c:yellow}{v:account.name}{c}!  (last login: {v:last_login})
+Server time: {c:white}{v:wall_time}{c}
+Location: {c:white}{v:cursor.zone} — {v:cursor.room.title}{c}
 
-Account:  HP {health}/100   XP {xp}   Coins {coins}
-Mail: {unread_messages} unread    Quests: {active_quests}
+Account:  HP {c:white}{v:account.health}/100{c}   XP {c:white}{v:account.xp}{c}   Coins {c:white}{v:account.coins}{c}
 
 News:
  - New vault area unlocked in The Hub.
@@ -22,13 +21,13 @@ News:
  - Use 'who' to see who’s online.
 
 Tips:
- - Most rooms have hidden nouns. Try: 'examine terminal', 'open crate'.
- - Use cardinal directions or verbs like 'in'/'out' to move.
- - Stuck? Try 'look', 'hint', or 'scan'.
+ - Most rooms have hidden nouns. Try: {c:blue}'examine terminal'{c}, {c:blue}'open crate'{c}.
+ - Use cardinal directions or verbs like {c:blue}'in'{c}/{c:blue}'out'{c} to move.
+ - Stuck? Try {c:blue}'look'{c}, {c:blue}'hint'{c}, or {c:blue}'scan'{c}.
 
-Exits from here: {exits_line}
+Exits from here: {c:blue}{v:room.exits_line}{c}
 
-Enjoy your stay, {character_name}.
+Enjoy your stay, {v:account.role} {v:account.name}.
 =================================================
 "#;
 
@@ -56,11 +55,17 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOut
         s.cursor = Some(c);
     }
 
-    // Setup cursor
     ctx.registry.set_online(&account, true).await;
 
     let cursor = ctx.cursor().map_err(|_| DomainError::NotFound)?;
 
-    let output = format!("{}\n{}", MOTD, render_room(&Theme::blue(), 80, cursor.room_view));
+    let theme = Theme::blue();
+    let width = 80;
+
+    let output = format!(
+        "{}\n{}",
+        render_text(ctx.sess.clone(), &theme, width, MOTD),
+        render_room(&theme, width, cursor.room_view)
+    );
     Ok(success!(output))
 }
