@@ -28,6 +28,8 @@ mod who;
 mod blueprint;
 mod debug_cmd;
 mod playtest;
+mod examine;
+mod search;
 
 pub type CommandResult<T> = Result<T, CommandError>;
 
@@ -123,24 +125,6 @@ impl CmdCtx {
     }
 }
 
-// pub struct CommandOutput {
-//     pub message: String,
-//     pub is_error: bool,
-// }
-//
-// #[macro_export]
-// macro_rules! success {
-//     ($msg:expr) => {
-//         CommandOutput { is_error: false, message: $msg.to_string() }
-//     };
-// }
-//
-// #[macro_export]
-// macro_rules! failure {
-//     ($msg:expr) => {
-//         CommandOutput { is_error: true, message: $msg.to_string() }
-//     };
-// }
 
 pub async fn process_command(
     raw: &str,
@@ -168,6 +152,8 @@ pub async fn process_command(
             Ok(out)
         },
         Verb::Look => look::look(ctx.clone(), intent).await,
+        Verb::Examine => examine::examine(ctx.clone(), intent).await,
+        Verb::Search => search::search(ctx.clone(), intent).await,
         Verb::Take => take::take(ctx.clone(), intent).await,
         Verb::Drop => {
             out.append("Drop command not implemented yet.\n");

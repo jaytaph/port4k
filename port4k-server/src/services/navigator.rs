@@ -47,7 +47,7 @@ impl NavigatorService {
     async fn resolve_exit_checked(
         &self,
         cursor: &Cursor,
-        account_id: AccountId,
+        _account_id: AccountId,
         from: RoomId,
         dir: Direction,
     ) -> AppResult<(ResolvedExit, RoomId)> {
@@ -67,28 +67,27 @@ impl NavigatorService {
         };
 
         // 2) Pull the player’s per-zone state for checks (xp/coins/inventory)
-        let state_repo = self.zone_router.state_for(&cursor.zone_ctx);
-        let zstate = state_repo
-            .zone_room_state(&cursor.zone_ctx, from, account_id)
-            .await?;
+        // let state_repo = self.zone_router.state_for(&cursor.zone_ctx);
+        // let zstate = state_repo
+        //     .zone_room_state(&cursor.zone_ctx, from, account_id)
+        //     .await?;
 
         // // 3) Parse constraints/flags from the exit. Adjust field access to your model.
         // // Here we assume ExitRow has an optional `state: serde_json::Value`.
-        let (locked, locked_msg, min_xp, toll) =
-            (exit_row.locked, "The way is locked.".to_string(), None, None);
+        let (locked, locked_msg) = (exit_row.locked, "The way is locked.".to_string());
             // parse_exit_state(&exit_row.state);
 
         if locked {
             return Err(DomainError::LockedExit(locked_msg));
         }
 
-        if let Some(mx) = min_xp {
-            if zstate.xp < mx {
-                return Err(DomainError::LockedExit(format!(
-                    "You need at least {mx} XP to go that way."
-                )));
-            }
-        }
+        // if let Some(mx) = min_xp {
+        //     if zstate.xp < mx {
+        //         return Err(DomainError::LockedExit(format!(
+        //             "You need at least {mx} XP to go that way."
+        //         )));
+        //     }
+        // }
 
         // if let Some(item) = req_item {
         //     let need = req_qty.unwrap_or(1);
@@ -103,13 +102,13 @@ impl NavigatorService {
         //     }
         // }
 
-        if let Some(cost) = toll {
-            if zstate.coins < cost {
-                return Err(DomainError::LockedExit(format!(
-                    "You need {cost} coins to pass."
-                )));
-            }
-        }
+        // if let Some(cost) = toll {
+        //     if zstate.coins < cost {
+        //         return Err(DomainError::LockedExit(format!(
+        //             "You need {cost} coins to pass."
+        //         )));
+        //     }
+        // }
 
         // 4) Optional: Lua pre-hook (can_go)
         // TODO: call into your Lua worker with (zone_ctx, account_id, exit_row).

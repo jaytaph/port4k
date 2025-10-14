@@ -19,6 +19,8 @@ use crate::models::types::Direction;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verb {
     Look,
+    Examine,
+    Search,
     Take,
     Drop,
     Open,
@@ -49,6 +51,8 @@ impl Verb {
     pub fn as_str(&self) -> &str {
         match self {
             Verb::Look => "look",
+            Verb::Examine => "examine",
+            Verb::Search => "search",
             Verb::Take => "take",
             Verb::Drop => "drop",
             Verb::Open => "open",

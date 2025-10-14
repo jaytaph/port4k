@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use dashmap::DashMap;
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -573,21 +573,24 @@ impl ZoneUnitOfWork for MemUow {
 
 
 fn compose_zone_room_state(
-    zone_ctx: &ZoneContext,
+    _zone_ctx: &ZoneContext,
     room_id: RoomId,
-    account_id: AccountId,
+    _account_id: AccountId,
     raw: RawState
 ) -> ZoneRoomState {
     let room_qty: HashMap<ObjectId, i32> = raw.room_qty.into_iter().collect();
+    let discovered_objs: HashSet<ObjectId> = raw.items.into_iter().filter(|(_obj, qty)| *qty > 0).map(|(obj, _qty)| obj).collect();
 
     ZoneRoomState {
-        zone_id: zone_ctx.zone.id,
-        account_id,
+        // zone_id: zone_ctx.zone.id,
+        // account_id,
         room_id,
-        coins: raw.coins,
-        health: raw.health,
-        xp: raw.xp,
-        current_room: raw.current_room,
-        room_qty,
-        trail: vec![], // TODO
+        // coins: raw.coins,
+        // health: raw.health,
+        // xp: raw.xp,
+        // current_room: raw.current_room,
+        // room_qty,
+        // trail: vec![], // TODO
+        all_objects: room_qty,
+        discovered_objects: discovered_objs,
     }}

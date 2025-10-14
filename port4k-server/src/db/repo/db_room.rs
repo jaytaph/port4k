@@ -180,6 +180,7 @@ impl RoomRepo for RoomRepository {
                 takeable: false,
                 stackable: false,
                 is_coin: false,
+                discovery: crate::models::room::Discovery::Visible,
             }
         }).collect();
 
