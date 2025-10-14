@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use serde::Serialize;
-use crate::commands::CmdCtx;
-use crate::error::AppResult;
+use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShellCmd {
@@ -45,8 +44,9 @@ pub fn parse_shell_cmd(input: &str) -> Option<ShellCmd> {
 pub async fn handle_shell_cmd(
     cmd: ShellCmd,
     ctx: Arc<CmdCtx>,
-) -> AppResult<String> {
-    let out = match cmd {
+) -> CommandResult<CommandOutput> {
+    let mut out = CommandOutput::new();
+    let result = match cmd {
         ShellCmd::Dbg(target) => {
             match target {
                 DbgTarget::RoomView => {
@@ -60,6 +60,9 @@ pub async fn handle_shell_cmd(
             }
         }
     };
+
+    out.append(result.as_str());
+    out.success();
 
     Ok(out)
 }

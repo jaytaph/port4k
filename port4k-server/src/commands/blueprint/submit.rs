@@ -2,19 +2,24 @@
 
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
-use crate::{failure, success};
 use crate::input::parser::Intent;
 
 pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
+    let mut out = CommandOutput::new();
     if intent.args.is_empty() {
-        return Ok(failure!(super::USAGE));
+        out.append(super::USAGE);
+        out.failure();
+        return Ok(out);
     }
 
     let bp = &intent.args[0];
 
     if ctx.registry.services.blueprint.submit(bp).await? {
-        Ok(success!("[bp] submitted for review.\n"))
+        out.append("[bp] submitted for review.\n");
+        out.success();
     } else {
-        Ok(failure!("[bp] not found.\n"))
+        out.append("[bp] submission failed: ");
+        out.failure();
     }
+    Ok(out)
 }

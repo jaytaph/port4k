@@ -4,12 +4,15 @@ use std::path::Path;
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
-use crate::{failure, success};
 use crate::db::error::DbError;
 
 pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
+    let mut out = CommandOutput::new();
+
     if intent.args.len() < 4 {
-        return Ok(failure!(super::USAGE));
+        out.append(super::USAGE);
+        out.failure();
+        return Ok(out);
     }
 
     let bp_key = &intent.args[2];
@@ -22,10 +25,18 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
 
     let base_path = Path::new(ctx.registry.config.import_dir.as_str());
     match crate::import::import_blueprint_subdir(blueprint.id, subdir, &base_path, &ctx.registry.db).await {
-        Ok(()) => Ok(success!(format!(
-            "[bp] imported YAML rooms from {}/{} into `{}`.\n",
-            base_path.display(), subdir, bp_key
-        ))),
-        Err(e) => Ok(failure!(format!("[bp] import failed: {:#}\n", e))),
+        Ok(()) => {
+            out.append(format!(
+                "[bp] imported YAML rooms from {}/{} into `{}`.\n",
+                base_path.display(), subdir, bp_key
+                ).as_str());
+            out.success();
+        },
+        Err(e) => {
+            out.append(format!("[bp] import failed: {:#}\n", e).as_str());
+            out.failure();
+        },
     }
+
+    Ok(out)
 }

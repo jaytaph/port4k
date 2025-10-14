@@ -155,10 +155,10 @@ async fn dispatch_command<W: AsyncWrite + Unpin>(raw: &str, w: &mut W, ctx: Arc<
 
     match process_command(raw, cmd_ctx.clone()).await {
         Ok(res) => {
-            let out = if res.is_error {
-                format!("error: {}", res.message)
+            let out = if res.failed() {
+                format!("error: {}", res.message())
             } else {
-                res.message
+                res.message()
             };
 
             write_with_newline(w, out.as_bytes()).await?;

@@ -3,22 +3,27 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
-use crate::{failure, success};
 use crate::util::args::{normalize_dir, parse_bp_room_key};
 
 pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
+    let mut out = CommandOutput::new();
+
     const USAGE: &str = "Usage:\n  @bp exit add <bp>:<from> <dir> <bp>:<to> [locked]\n";
 
     // args layout: [ "@bp", "exit", <sub_cmd>, ... ]
     let [_, _, sub_cmd, rest @ ..] = &*intent.args else {
-        return Ok(failure!(USAGE));
+        out.append(USAGE);
+        out.failure();
+        return Ok(out);
     };
 
     match sub_cmd.as_str() {
         "add" => {
             // expect: <from_key> <dir> <to_key> [locked]
             let [from_key, dir_raw, to_key, tail @ ..] = rest else {
-                return Ok(failure!(USAGE));
+                out.append(USAGE);
+                out.failure();
+                return Ok(out);
             };
 
             // parse & validate inputs (use `?` with precise errors)
@@ -32,7 +37,9 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
                 .ok_or(CommandError::Custom("to must be <bp>:<room>".into()))?;
 
             if from_key.bp_key != to_key.bp_key {
-                return Ok(failure!("[bp] exits must stay within the same blueprint.\n"));
+                out.append("[bp] exits must stay within the same blueprint.\n");
+                out.failure();
+                return Ok(out);
             }
 
             // optional trailing "locked"
@@ -56,9 +63,15 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
                 }
             }
 
-            Ok(success!(msg))
+            out.append(&msg);
+            out.success();
+            Ok(out)
         }
 
-        _ => Ok(failure!(USAGE)),
+        _ => {
+            out.append(USAGE);
+            out.failure();
+            Ok(out)
+        },
     }
 }
