@@ -144,7 +144,7 @@ pub struct RoomScripts {
 }
 
 /// `zone_room_state` row merged into runtime view.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ZoneRoomState {
     // Zone ID we are in (is this needed)
     // pub zone_id: ZoneId,
@@ -187,8 +187,9 @@ pub type RoomKv = HashMap<String, Vec<String>>;
 #[allow(unused)]
 pub type PlayerKv = HashMap<String, Vec<String>>; // flattened per player; usually fetched later for a specific account
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub enum Discovery {
+    #[default]
     Visible,                                    // always listed
     Hidden,                                     // never listed until discovered
     Obscured { dc: u8 },                        // requires a perception check >= dc
@@ -197,7 +198,7 @@ pub enum Discovery {
 }
 
 /// Runtime-friendly object with resolved nouns.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RoomObject {
     /// Blueprint Object ID
     pub id: ObjectId,
@@ -235,10 +236,16 @@ impl RoomObject {
         list.iter().any(|s| s.eq_ignore_ascii_case(flag))
     }
 
-    #[allow(unused)]
-    fn is_visible(&self) -> bool {
-        !self.locked || self.revealed
+    pub fn is_visible(&self) -> bool {
+        // visible objects are either non-stackable items, or revealed stackables
+        !self.stackable || self.revealed
     }
+
+    pub fn is_visible_to(&self, rv: &RoomView, zr: &ZoneRoomState) -> bool {
+        let discovered = is_visible_to(self, rv, zr);
+        discovered && self.is_visible()
+    }
+
 }
 
 /// Runtime view the engine uses.
@@ -319,6 +326,17 @@ mod tests {
     use uuid::Uuid;
 
     // --- helpers -------------------------------------------------------------
+
+    fn dummy_room_view() -> RoomView {
+        RoomView {
+            room: br(),
+            exits: vec![],
+            objects: vec![],
+            scripts: RoomScripts::default(),
+            zone_state: None,
+            room_kv: HashMap::new(),
+        }
+    }
 
     fn br() -> BlueprintRoom {
         BlueprintRoom {
@@ -570,6 +588,83 @@ mod tests {
             c.qty,
             Some(10),
             "qty should be seeded from initial_qty when overlay is absent"
+        );
+    }
+
+    #[test]
+    fn non_stackable_hidden_then_visible_after_discovery() {
+        // arrange
+        let wrench_id = ObjectId::new(); // or ObjectId::from(...), etc.
+        let wrench = RoomObject {
+            id: wrench_id,
+            name: "wrench".into(),
+            stackable: false,
+            revealed: false,              // ignored for non-stackables
+            locked: true,                 // lock doesn't affect visibility
+            discovery: Discovery::Hidden, // hidden until discovered
+            ..Default::default()
+        };
+
+        let rv = dummy_room_view();
+        let mut zr = ZoneRoomState {
+            discovered_objects: HashSet::new(),
+            ..Default::default()
+        };
+
+        // before discovery: not visible (discovery blocks)
+        assert!(
+            !wrench.is_visible_to(&rv, &zr),
+            "non-stackable wrench should NOT be visible before discovery"
+        );
+        // intrinsic policy says it's renderable on its own
+        assert!(
+            wrench.is_visible(),
+            "intrinsic visibility for non-stackables is true regardless of `revealed`/`locked`"
+        );
+
+        // act: player discovers the wrench (e.g., by examining something)
+        zr.discovered_objects.insert(wrench_id);
+
+        // after discovery: visible (discovery ∧ intrinsic)
+        assert!(
+            wrench.is_visible_to(&rv, &zr),
+            "non-stackable wrench becomes visible once discovered"
+        );
+    }
+
+    #[test]
+    fn stackable_requires_revealed_even_if_discovered() {
+        // arrange
+        let coins_id = ObjectId::new();
+        let coins = RoomObject {
+            id: coins_id,
+            name: "gold coin".into(),
+            stackable: true,
+            revealed: false,              // covered/buried
+            locked: false,
+            discovery: Discovery::Visible, // even if globally visible...
+            ..Default::default()
+        };
+        let rv = dummy_room_view();
+        let mut zr = ZoneRoomState {
+            discovered_objects: HashSet::new(),
+            ..Default::default()
+        };
+        zr.discovered_objects.insert(coins_id); // discovered
+
+        // stackables still need `revealed=true` to render
+        assert!(
+            !coins.is_visible_to(&rv, &zr),
+            "stackable items remain hidden until `revealed=true`, even if discovered"
+        );
+
+        // act: uncover the pile
+        let mut coins_uncovered = coins.clone();
+        coins_uncovered.revealed = true;
+
+        assert!(
+            coins_uncovered.is_visible_to(&rv, &zr),
+            "stackable items become visible once revealed"
         );
     }
 }
