@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
-use crate::state::session::Cursor;
 use crate::input::parser::Intent;
 use crate::models::zone::ZoneContext;
+use crate::state::session::Cursor;
+use std::sync::Arc;
 
 const USAGE: &str = r#"Usage:
   playtest                # exit playtest
@@ -11,13 +11,12 @@ const USAGE: &str = r#"Usage:
 
 pub enum Next {
     /// Contains the cursor to return to live mode
-    ExitToLive(Cursor),
+    ExitToLive(Box<Cursor>),
     /// Not currently in playtest mode
     NotInPlaytest,
     /// Not logged in
     NotLoggedIn,
 }
-
 
 pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();
@@ -50,7 +49,7 @@ pub fn check_playtest(ctx: Arc<CmdCtx>) -> Next {
     }
 
     let c = s.prev_cursors.first().unwrap().clone();
-    Next::ExitToLive(c)
+    Next::ExitToLive(Box::new(c))
 }
 
 pub async fn exit_playtest(ctx: Arc<CmdCtx>, out: &mut CommandOutput) -> anyhow::Result<()> {
@@ -58,15 +57,15 @@ pub async fn exit_playtest(ctx: Arc<CmdCtx>, out: &mut CommandOutput) -> anyhow:
         Next::NotLoggedIn => {
             out.append("Login required.\n");
             out.failure();
-        },
+        }
         Next::NotInPlaytest => {
             out.append("You are not in playtest.\n");
             out.failure();
-        },
+        }
         Next::ExitToLive(c) => {
             let mut s = ctx.sess.write();
             s.prev_cursors.pop();
-            s.cursor = Some(c);
+            s.cursor = Some(*c);
 
             out.append("[playtest] exited to live mode.\n");
             out.success();
@@ -84,19 +83,24 @@ pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str, out: &mut CommandOut
     let new_c = Cursor {
         zone_ctx: zone_ctx.clone(),
         room_id: blueprint.entry_room_id,
-        room_view: ctx.registry.services.room.build_room_view(
-            ctx.registry.zone_router.clone(),
-            &zone_ctx,
-            account_id,
-            blueprint.entry_room_id,
-        ).await?,
+        room_view: ctx
+            .registry
+            .services
+            .room
+            .build_room_view(
+                ctx.registry.zone_router.clone(),
+                &zone_ctx,
+                account_id,
+                blueprint.entry_room_id,
+            )
+            .await?,
     };
 
     match check_playtest(ctx.clone()) {
         Next::NotLoggedIn => {
             out.append("Login required.\n");
             out.failure();
-        },
+        }
         Next::ExitToLive(_) => {
             let mut s = ctx.sess.write();
             if let Some(c) = s.cursor.clone() {
@@ -106,7 +110,7 @@ pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str, out: &mut CommandOut
 
             out.append(format!("[playtest] entered recursive blueprint '{bp_key}'.\n").as_str());
             out.success();
-        },
+        }
         Next::NotInPlaytest => {
             let mut s = ctx.sess.write();
             if let Some(c) = s.cursor.clone() {

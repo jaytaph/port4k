@@ -1,15 +1,15 @@
-use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use crate::renderer::RenderVars;
 use crate::renderer::room_view::render_room_view;
+use std::sync::Arc;
 
 pub async fn look(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();
 
     let rv = ctx.room_view()?;
     if let Some(noun) = intent.direct {
-        if let Some(obj) = rv.object_by_noun(&noun.head) {
+        return if let Some(obj) = rv.object_by_noun(&noun.head) {
             // 1. Check Lua script
             // if let Some(lua_src) = obj.scripts.on_examine_lua.as_ref() {
             //     let reply = run_lua_script(ctx.clone(), lua_src, obj).await?;
@@ -19,7 +19,7 @@ pub async fn look(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutp
             // 2. Fallback to static description
             out.append(&obj.description);
             out.success();
-            return Ok(out);
+            Ok(out)
 
             // out.append(format!("You see nothing special about the {}.", noun));
             // out.success();
@@ -27,8 +27,8 @@ pub async fn look(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutp
         } else {
             out.append(format!("You don't see any '{}' here.", noun.head).as_str());
             out.failure();
-            return Ok(out);
-        }
+            Ok(out)
+        };
     }
 
     // No direct noun -> show room description

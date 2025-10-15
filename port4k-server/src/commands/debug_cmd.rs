@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
+use std::sync::Arc;
 
 pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();
@@ -18,15 +18,21 @@ pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Comman
             let account = ctx.account()?;
             let username = account.username;
 
-            if ! ctx.has_cursor() {
+            if !ctx.has_cursor() {
                 out.append("You have no cursor. Use 'go <zone>' to set one.\n");
                 out.failure();
             }
 
             let cursor = ctx.cursor()?;
-            out.append(format!("[debug] user={username} zone={} zone_kind: {:?} room: {}\n", cursor.zone_ctx.zone.title, cursor.zone_ctx.kind, cursor.room_view.room.title).as_str());
+            out.append(
+                format!(
+                    "[debug] user={username} zone={} zone_kind: {:?} room: {}\n",
+                    cursor.zone_ctx.zone.title, cursor.zone_ctx.kind, cursor.room_view.room.title
+                )
+                .as_str(),
+            );
             out.success();
-        },
+        }
         _ => {
             out.append("Unknown debug command.\n");
             out.append("Available commands: where\n");

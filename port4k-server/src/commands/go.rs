@@ -1,10 +1,9 @@
-use std::sync::Arc;
+use crate::ConnState;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
-use crate::ConnState;
-use crate::models::types::Direction;
 use crate::renderer::RenderVars;
 use crate::renderer::room_view::render_room_view;
+use std::sync::Arc;
 
 pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();
@@ -21,16 +20,20 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput
         out.failure();
         return Ok(out);
     };
-    let dir = Direction::from(dir);
 
     let c = ctx.cursor()?;
     let account = ctx.account()?;
     let (_from_id, to_id) = ctx.registry.services.navigator.go(&c, account.id, dir).await?;
 
-    let c = ctx.registry.services.zone.generate_cursor(ctx.clone(), &account, to_id).await?;
+    let c = ctx
+        .registry
+        .services
+        .zone
+        .generate_cursor(ctx.clone(), &account, to_id)
+        .await?;
     {
         let mut s = ctx.sess.write();
-        s.account = Some(account.clone());  // @TODO: Is this wise? Why clone?
+        s.account = Some(account.clone()); // @TODO: Is this wise? Why clone?
         s.state = ConnState::LoggedIn;
         s.cursor = Some(c);
     }

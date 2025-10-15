@@ -1,38 +1,39 @@
+use crate::db::error::DbError;
+use crate::error::{AppResult, DomainError};
 use crate::input::parser::{Verb, parse_command};
+use crate::input::shell::{handle_shell_cmd, parse_shell_cmd};
+use crate::lua::LuaJob;
+use crate::models::account::Account;
+use crate::models::room::RoomView;
+use crate::models::types::AccountId;
+use crate::models::zone::ZoneContext;
+use crate::services::ServiceError;
 use crate::state::session::{Cursor, Session};
-use std::sync::Arc;
+use crate::{Registry, ansi};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::SendError;
-use crate::{ansi, Registry};
-use crate::db::error::DbError;
-use crate::error::{AppResult, DomainError};
-use crate::input::shell::{handle_shell_cmd, parse_shell_cmd};
-use crate::models::account::Account;
-use crate::models::types::AccountId;
-use crate::lua::LuaJob;
-use crate::models::room::RoomView;
-use crate::models::zone::ZoneContext;
-use crate::services::ServiceError;
 
+mod blueprint;
+mod debug_cmd;
+mod examine;
 mod fallback;
 mod go;
 mod login;
 mod logout;
 mod look;
+mod playtest;
 mod register;
+mod search;
 mod take;
 mod who;
-mod blueprint;
-mod debug_cmd;
-mod playtest;
-mod examine;
-mod search;
 
 pub type CommandResult<T> = Result<T, CommandError>;
 
+//noinspection RsExternalLinter
 #[derive(Debug, Error)]
 pub enum CommandError {
     #[error("unknown command: {0}")]
@@ -51,7 +52,7 @@ pub enum CommandError {
     NoCursor,
 
     #[error(transparent)]
-    Send(#[from] SendError<LuaJob>),
+    Send(#[from] Box<SendError<LuaJob>>),
 
     #[error("custom error: {0}")]
     Custom(String),
@@ -89,7 +90,7 @@ impl CmdCtx {
     }
 
     pub fn is_logged_in(&self) -> bool {
-        self.sess.try_read().map_or(false, |s| s.account.is_some())
+        self.sess.try_read().is_some_and(|s| s.account.is_some())
     }
 
     pub fn account_id(&self) -> AppResult<AccountId> {
@@ -103,7 +104,7 @@ impl CmdCtx {
     }
 
     pub fn has_zone_ctx(&self) -> bool {
-        self.sess.try_read().map_or(false, |s| s.zone_ctx.is_some())
+        self.sess.try_read().is_some_and(|s| s.zone_ctx.is_some())
     }
 
     pub fn zone_ctx(&self) -> AppResult<ZoneContext> {
@@ -117,7 +118,7 @@ impl CmdCtx {
     }
 
     pub fn has_cursor(&self) -> bool {
-        self.sess.try_read().map_or(false, |s| s.cursor.is_some())
+        self.sess.try_read().is_some_and(|s| s.cursor.is_some())
     }
 
     pub fn room_view(&self) -> AppResult<RoomView> {
@@ -125,14 +126,9 @@ impl CmdCtx {
     }
 }
 
-
-pub async fn process_command(
-    raw: &str,
-    ctx: Arc<CmdCtx>,
-) -> CommandResult<CommandOutput> {
-
+pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult<CommandOutput> {
     // See if we match a shell command, and handle it if so
-    if let Some(shell) = parse_shell_cmd(&raw) {
+    if let Some(shell) = parse_shell_cmd(raw) {
         let out = handle_shell_cmd(shell, ctx.clone()).await?;
         return Ok(out);
     }
@@ -145,12 +141,12 @@ pub async fn process_command(
             out.append("Goodbye! Connection closed by user.\n");
             out.success();
             Ok(out)
-        },
+        }
         Verb::Help => {
             out.append(help_text().as_str());
             out.success();
             Ok(out)
-        },
+        }
         Verb::Look => look::look(ctx.clone(), intent).await,
         Verb::Examine => examine::examine(ctx.clone(), intent).await,
         Verb::Search => search::search(ctx.clone(), intent).await,
@@ -159,48 +155,48 @@ pub async fn process_command(
             out.append("Drop command not implemented yet.\n");
             out.failure();
             Ok(out)
-        },
+        }
         Verb::Open => {
             out.append("Open command not implemented yet.\n");
             out.failure();
             Ok(out)
-        },
+        }
         Verb::Unlock => {
             out.append("Unlock command not implemented yet.\n");
             out.failure();
             Ok(out)
-        },
+        }
         Verb::Lock => {
             out.append("Lock command not implemented yet.\n");
             out.failure();
             Ok(out)
-        },
+        }
         Verb::Use => {
             out.append("Use command not implemented yet.\n");
             out.failure();
             Ok(out)
-        },
+        }
         Verb::Put => {
             out.append("Put command not implemented yet.\n");
             out.failure();
             Ok(out)
-        },
+        }
         Verb::Talk => {
             out.append("Talk command not implemented yet.\n");
             out.failure();
             Ok(out)
-        },
+        }
         Verb::Go => go::go(ctx.clone(), intent).await,
         Verb::Inventory => {
             out.append("Inventory command not implemented yet.\n");
             out.failure();
             Ok(out)
-        },
+        }
         Verb::Quit => {
             out.append("Goodbye! Connection closed by user.\n");
             out.success();
             Ok(out)
-        },
+        }
         Verb::Who => who::who(ctx.clone()).await,
         Verb::Logout => logout::logout(ctx.clone(), intent).await,
         Verb::Login => login::login(ctx.clone(), intent).await,
@@ -219,7 +215,7 @@ pub async fn process_command(
 
 pub fn help_text() -> String {
     format!(
-    r#"
+        r#"
 {bold}{fg_cyan}Available commands{reset}
 ------------------
   {fg_yellow}help{reset}                         Show this help
@@ -238,11 +234,11 @@ pub fn help_text() -> String {
   {fg_green}@playtest [key|stop]{reset}         Enter/exit playtest mode
   {fg_green}@debug where{reset}                 Show debug info
 "#,
-    bold = ansi::BOLD,
-    fg_cyan = ansi::FG_CYAN,
-    fg_yellow = ansi::FG_YELLOW,
-    fg_green = ansi::FG_GREEN,
-    reset = ansi::RESET,
+        bold = ansi::BOLD,
+        fg_cyan = ansi::FG_CYAN,
+        fg_yellow = ansi::FG_YELLOW,
+        fg_green = ansi::FG_GREEN,
+        reset = ansi::RESET,
     )
 }
 
@@ -257,6 +253,12 @@ pub struct CommandOutput {
     pub status: CmdStatus,
     pub lines: Vec<String>,
     // more fields we might want later
+}
+
+impl Default for CommandOutput {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CommandOutput {

@@ -1,23 +1,23 @@
-mod parser;
 mod ansi;
+mod parser;
 
-pub mod vars;
 pub mod room_view;
+pub mod vars;
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use parking_lot::RwLock;
-pub use parser::{Token, VarFmt};
+use crate::Session;
 use crate::models::room::RoomView;
 use crate::renderer::parser::Alignment;
-use crate::Session;
+use parking_lot::RwLock;
+pub use parser::{Token, VarFmt};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct RenderVars {
     // Global values accessed with {v:var_name}
-    global: HashMap<String, String>,
+    pub global: HashMap<String, String>,
     // RoomView values accessed with {rv:var_name}
-    room_view: HashMap<String, String>,
+    pub room_view: HashMap<String, String>,
 }
 
 impl RenderVars {
@@ -56,10 +56,14 @@ impl Default for RenderOptions {
 
 /// Public API: render a template with vars and default options.
 pub fn render_template(template: &str, vars: &RenderVars, max_width: usize) -> String {
-    render_template_with_opts(template, vars, &RenderOptions{
-        missing_var: MissingVarPolicy::Color,
-        max_width
-    })
+    render_template_with_opts(
+        template,
+        vars,
+        &RenderOptions {
+            missing_var: MissingVarPolicy::Color,
+            max_width,
+        },
+    )
 }
 
 /// Public API: render with options.
@@ -67,33 +71,47 @@ pub fn render_template_with_opts(template: &str, vars: &RenderVars, opts: &Rende
     let tokens = parser::parse(template);
     let mut out = String::with_capacity(template.len() + 32);
 
-    fn do_variable_substitution(chosen: Option<String>, raw: &str, fmt: &Option<VarFmt>, opts: &RenderOptions, out: &mut String) {
+    fn do_variable_substitution(
+        chosen: Option<String>,
+        raw: &str,
+        fmt: &Option<VarFmt>,
+        opts: &RenderOptions,
+        out: &mut String,
+    ) {
         match chosen {
             Some(val) => {
                 let s = apply_format(fmt.as_ref(), &val);
                 out.push_str(&s);
             }
-            None => {
-                match opts.missing_var {
-                    MissingVarPolicy::Color => out.push_str(&format!("\x1b[36;41m{{{}}}\x1b[0m", raw)),
-                    MissingVarPolicy::LeaveToken => out.push_str(&raw),
-                    MissingVarPolicy::Empty => {}
-                    MissingVarPolicy::Undefined => out.push_str("undefined"),
-                }
-            }
+            None => match opts.missing_var {
+                MissingVarPolicy::Color => out.push_str(&format!("\x1b[36;41m{{{}}}\x1b[0m", raw)),
+                MissingVarPolicy::LeaveToken => out.push_str(raw),
+                MissingVarPolicy::Empty => {}
+                MissingVarPolicy::Undefined => out.push_str("undefined"),
+            },
         }
     }
 
     for t in tokens {
         match t {
             Token::Text(s) => out.push_str(&s),
-            Token::RoomVar { raw, name, default, fmt } => {
+            Token::RoomVar {
+                raw,
+                name,
+                default,
+                fmt,
+            } => {
                 let chosen = vars.room_view.get(&name).cloned().or(default);
-                do_variable_substitution(chosen, &raw, &fmt, &opts, &mut out);
+                do_variable_substitution(chosen, &raw, &fmt, opts, &mut out);
             }
-            Token::Var { raw, name, default, fmt } => {
+            Token::Var {
+                raw,
+                name,
+                default,
+                fmt,
+            } => {
                 let chosen = vars.global.get(&name).cloned().or(default);
-                do_variable_substitution(chosen, &raw, &fmt, &opts, &mut out);
+                do_variable_substitution(chosen, &raw, &fmt, opts, &mut out);
             }
             Token::ColorReset => out.push_str(ansi::RESET),
             Token::Color { fg, bg, attrs } => {
@@ -138,29 +156,39 @@ fn apply_format(fmt: Option<&VarFmt>, value: &str) -> String {
 }
 
 fn pad_string(s: &str, width: usize, alignment: Alignment) -> String {
-    if s.len() >= width { return s.to_string(); }
+    if s.len() >= width {
+        return s.to_string();
+    }
     let pad = width - s.len();
     match alignment {
         Alignment::Center => {
             let left_pad = pad / 2;
             let right_pad = pad - left_pad;
             let mut out = String::with_capacity(width);
-            for _ in 0..left_pad { out.push(' '); }
+            for _ in 0..left_pad {
+                out.push(' ');
+            }
             out.push_str(s);
-            for _ in 0..right_pad { out.push(' '); }
+            for _ in 0..right_pad {
+                out.push(' ');
+            }
             out
         }
         Alignment::Left => {
             // left-align in a field -> pad on the right
             let mut out = String::with_capacity(width);
             out.push_str(s);
-            for _ in 0..pad { out.push(' '); }
+            for _ in 0..pad {
+                out.push(' ');
+            }
             out
         }
         Alignment::Right => {
             // right-align -> pad on the left
             let mut out = String::with_capacity(width);
-            for _ in 0..pad { out.push(' '); }
+            for _ in 0..pad {
+                out.push(' ');
+            }
             out.push_str(s);
             out
         }
@@ -209,7 +237,7 @@ mod tests {
     fn escapes() {
         let vars = RenderVars::default();
         let s = render_template("{{v}} -> {v:name}", &vars, 80);
-        assert_eq!(s, "{v} -> {v:name}");
+        assert_eq!(s, "{v} -> \u{1b}[36;41m{{v:name}}\u{1b}[0m");
     }
 
     #[test]
@@ -222,8 +250,6 @@ mod tests {
         assert_eq!(s, "Hello    Ada!");
     }
 }
-
-
 
 // use once_cell::sync::Lazy;
 // use regex::Regex;
@@ -366,7 +392,6 @@ mod tests {
 //
 //     format!("{border}\n{title_line}\n{border}\n\n{body_wrapped}\n\n{exits_line}\n")
 // }
-
 
 // pub fn render_text(sess: Arc<RwLock<Session>>, _theme: &Theme, _width: usize, text: &str) -> String {
 //     let vars = get_vars(sess.clone());

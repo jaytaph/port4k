@@ -1,6 +1,6 @@
-use thiserror::Error;
 use crate::db::error::DbError;
 use crate::models::types::{ObjectId, RoomId};
+use thiserror::Error;
 
 pub type AppResult<T> = Result<T, DomainError>;
 
@@ -12,7 +12,12 @@ pub enum DomainError {
 
     /// Insufficient quantity to perform action
     #[error("insufficient quantity: have {have}, need {need}")]
-    InsufficientQuantity { room_id: RoomId, obj_id: ObjectId, have: i32, need: i32 },
+    InsufficientQuantity {
+        room_id: RoomId,
+        obj_id: ObjectId,
+        have: i32,
+        need: i32,
+    },
 
     /// No current room
     #[error("no current room")]
@@ -63,7 +68,7 @@ pub enum DomainError {
     InvalidData(String),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum ConfigErrorKind {
     #[error("failed to read file: {0}")]
     Read(std::io::Error),

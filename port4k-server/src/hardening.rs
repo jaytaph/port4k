@@ -13,7 +13,6 @@ pub const MAX_LUA_BYTES: usize = 64 * 1024; // 64 KB per Lua chunk
 /// Whether to allow symlinks when extracting zip files
 pub static ALLOW_SYMLINKS: bool = false;
 
-
 /// Allowed exit directions (case insensitive)
 pub const ALLOWED_DIRS: &[&str] = &[
     "north", "south", "east", "west", "up", "down", "in", "out", "n", "s", "e", "w", "u", "d",

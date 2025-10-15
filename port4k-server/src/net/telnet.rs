@@ -2,23 +2,18 @@ mod connection;
 mod crlf_wrapper;
 mod slow_writer;
 
-use std::sync::Arc;
-use parking_lot::RwLock;
-use crate::lua::LuaJob;
-use crate::{Registry, Session};
-use tokio::sync::mpsc;
 use crate::error::{AppResult, InfraError};
+use crate::lua::LuaJob;
 use crate::net::AppCtx;
 use crate::net::telnet::connection::handle_connection;
 use crate::state::session::Protocol;
-
+use crate::{Registry, Session};
+use parking_lot::RwLock;
+use std::sync::Arc;
+use tokio::sync::mpsc;
 
 /// Run the telnet server
-pub async fn serve(
-    addr: std::net::SocketAddr,
-    registry: Arc<Registry>,
-    lua_tx: mpsc::Sender<LuaJob>,
-) -> AppResult<()> {
+pub async fn serve(addr: std::net::SocketAddr, registry: Arc<Registry>, lua_tx: mpsc::Sender<LuaJob>) -> AppResult<()> {
     let listener = tokio::net::TcpListener::bind(&addr).await.map_err(InfraError::from)?;
 
     loop {
@@ -47,6 +42,3 @@ pub async fn serve(
         }
     }
 }
-
-
-

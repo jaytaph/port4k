@@ -1,5 +1,5 @@
 use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 use tokio::io::{self, AsyncWrite};
 
 /// Normalizes bare '\n' to "\r\n" on all writes.
@@ -15,7 +15,11 @@ pub struct CrlfWriter<W> {
 
 impl<W: AsyncWrite + Unpin> CrlfWriter<W> {
     pub fn new(inner: W) -> Self {
-        Self { inner, out_buf: Vec::new(), out_pos: 0 }
+        Self {
+            inner,
+            out_buf: Vec::new(),
+            out_pos: 0,
+        }
     }
     // pub fn into_inner(self) -> W { self.inner }
 
@@ -54,11 +58,7 @@ impl<W: AsyncWrite + Unpin> CrlfWriter<W> {
 }
 
 impl<W: AsyncWrite + Unpin> AsyncWrite for CrlfWriter<W> {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         // If we still have expanded bytes pending, flush them first.
         if !self.out_buf.is_empty() {
             match self.as_mut().poll_flush_outbuf(cx) {

@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use crate::db::repo::kv::KvRepo;
+use crate::db::{Db, DbResult};
+use crate::models::types::{AccountId, RoomId};
 use async_trait::async_trait;
 use serde_json::{Map, Value};
-use crate::db::{Db, DbResult};
-use crate::db::repo::kv::KvRepo;
-use crate::models::types::{AccountId, RoomId};
+use std::sync::Arc;
 
 pub struct KvRepository {
     pub db: Arc<Db>,
@@ -13,7 +13,6 @@ impl KvRepository {
     pub fn new(db: Arc<Db>) -> Self {
         Self { db: db.clone() }
     }
-
 }
 
 #[async_trait]
@@ -84,7 +83,13 @@ impl KvRepo for KvRepository {
     }
 
     // Upsert; returns true if inserted, false if updated.
-    async fn player_kv_set(&self, room_id: RoomId, account_id: AccountId, obj_key: &str, value: Value) -> DbResult<bool> {
+    async fn player_kv_set(
+        &self,
+        room_id: RoomId,
+        account_id: AccountId,
+        obj_key: &str,
+        value: Value,
+    ) -> DbResult<bool> {
         let client = self.db.get_client().await?;
         let row = client
             .query_one(

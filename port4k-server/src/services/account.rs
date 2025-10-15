@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use crate::db::repo::account::AccountRepo;
 use crate::error::AppResult;
+use std::sync::Arc;
 
 pub struct AccountService {
     repo: Arc<dyn AccountRepo>,

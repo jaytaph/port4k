@@ -1,16 +1,16 @@
-use std::sync::Arc;
-use anyhow::anyhow;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
-use crate::input::parser::Intent;
-use crate::state::session::ConnState;
-use crate::models::account::Account;
 use crate::db::repo::room::BlueprintAndRoomKey;
 use crate::error::DomainError;
+use crate::input::parser::Intent;
+use crate::models::account::Account;
 use crate::models::zone::{Persistence, ZoneContext, ZoneKind, ZonePolicy};
-use crate::renderer::{render_template, RenderVars};
 use crate::renderer::room_view::render_room_view;
+use crate::renderer::{RenderVars, render_template};
+use crate::state::session::ConnState;
+use anyhow::anyhow;
+use std::sync::Arc;
 
-const MOTD: &'static str = r#"
+const MOTD: &str = r#"
 ==============  PORT4K INCOMING MESSAGE =================
 Welcome back, {c:yellow}{v:account.name}{c}!  (last login: {v:last_login})
 Server time: {c:white}{v:wall_time}{c}
@@ -53,7 +53,7 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOut
         return Ok(out);
     }
 
-    let Ok(account) = ctx.registry.services.auth.authenticate(&username, pass).await else {
+    let Ok(account) = ctx.registry.services.auth.authenticate(username, pass).await else {
         out.append("Login failed. Check your username and password.\n");
         out.failure();
         return Ok(out);
@@ -71,12 +71,18 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOut
         Err(msg) => {
             out.append(msg.to_string().as_str());
             out.failure();
-            return Ok(out)
-        },
+            return Ok(out);
+        }
     };
 
     // Find the room within the blueprint
-    let Ok(room) = ctx.registry.services.blueprint.room_by_key(BlueprintAndRoomKey::new(bp_key, room_key)).await else {
+    let Ok(room) = ctx
+        .registry
+        .services
+        .blueprint
+        .room_by_key(BlueprintAndRoomKey::new(bp_key, room_key))
+        .await
+    else {
         out.append("Error: Starting room not found. Contact admin.\n");
         out.failure();
         return Ok(out);
@@ -84,7 +90,12 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOut
     ctx.sess.write().zone_ctx = Some(zone_ctx);
 
     // Generate the cursor
-    let c = ctx.registry.services.zone.generate_cursor(ctx.clone(), &account, room.id).await?;
+    let c = ctx
+        .registry
+        .services
+        .zone
+        .generate_cursor(ctx.clone(), &account, room.id)
+        .await?;
     ctx.sess.write().cursor = Some(c);
 
     ctx.registry.set_online(&account, true).await;
@@ -94,7 +105,13 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOut
 
     let show_motd = true; // @TODO: Make configurable per-account
     if !show_motd {
-        out.append(format!("Welcome back, {{c:yellow}}{}{{c}}! You are in {{c:blue:bold}}{}:{}{{c}}.\n", account.username, cursor.zone_ctx.zone.title, cursor.room_view.room.title).as_str());
+        out.append(
+            format!(
+                "Welcome back, {{c:yellow}}{}{{c}}! You are in {{c:blue:bold}}{}:{}{{c}}.\n",
+                account.username, cursor.zone_ctx.zone.title, cursor.room_view.room.title
+            )
+            .as_str(),
+        );
         out.success();
         return Ok(out);
     }

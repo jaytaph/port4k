@@ -1,17 +1,16 @@
-use std::collections::{HashMap, HashSet};
-use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use tokio_postgres::Row;
-use uuid::Uuid;
 use crate::db::DbResult;
 use crate::db::error::DbError;
 use crate::models::json_string_vec_opt;
 use crate::models::types::{BlueprintId, Direction, ObjectId, RoomId, ZoneId};
 use crate::util::visibility::is_visible_to;
+use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::{HashMap, HashSet};
+use tokio_postgres::Row;
+use uuid::Uuid;
 
-static OBJ_REF_RE: Lazy<regex::Regex> =
-    Lazy::new(|| regex::Regex::new(r"\{obj:([a-zA-Z0-9_\- ]+)}").unwrap());
+static OBJ_REF_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"\{obj:([a-zA-Z0-9_\- ]+)}").unwrap());
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlueprintRoom {
@@ -44,7 +43,6 @@ impl BlueprintRoom {
         })
     }
 }
-
 
 /// Row model for `bp_exits`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,7 +144,7 @@ pub struct RoomScripts {
 }
 
 /// `zone_room_state` row merged into runtime view.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ZoneRoomState {
     // Zone ID we are in (is this needed)
     // pub zone_id: ZoneId,
@@ -160,12 +158,10 @@ pub struct ZoneRoomState {
     // pub xp: i32,  // @TODO: is this needed here or just in player state?
 
     // pub current_room: Option<RoomId>,
-
     /// Items in the room and their quantities, including hidden/undiscovered ones
     pub all_objects: HashMap<ObjectId, i32>,
-    /// Objects that are visibible for the player (this assumes that ALL quantities are visible at the same time)
+    /// Objects that are visible for the player (this assumes that ALL quantities are visible at the same time)
     pub discovered_objects: HashSet<ObjectId>,
-
     // Trail of rooms the player has visited to get here (for backtracking)
     // pub trail: Vec<(RoomId, RoomId)>,
 }
@@ -191,17 +187,23 @@ pub type RoomKv = HashMap<String, Vec<String>>;
 #[allow(unused)]
 pub type PlayerKv = HashMap<String, Vec<String>>; // flattened per player; usually fetched later for a specific account
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub enum Discovery {
-    Visible,                 // always listed
-    Hidden,                  // never listed until discovered
-    Obscured { dc: u8 },     // requires a perception check >= dc
-    Conditional { key: String, value: String }, // visible if room_kv[key]==value
-    Scripted,                // let Lua decide
+    #[default]
+    Visible, // always listed
+    Hidden, // never listed until discovered
+    Obscured {
+        dc: u8,
+    }, // requires a perception check >= dc
+    Conditional {
+        key: String,
+        value: String,
+    }, // visible if room_kv[key]==value
+    Scripted, // let Lua decide
 }
 
 /// Runtime-friendly object with resolved nouns.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RoomObject {
     /// Blueprint Object ID
     pub id: ObjectId,
@@ -239,12 +241,16 @@ impl RoomObject {
         list.iter().any(|s| s.eq_ignore_ascii_case(flag))
     }
 
-    #[allow(unused)]
-    fn is_visible(&self) -> bool {
-        !self.locked || self.revealed
+    pub fn is_visible(&self) -> bool {
+        // visible objects are either non-stackable items, or revealed stackables
+        !self.stackable || self.revealed
+    }
+
+    pub fn is_visible_to(&self, rv: &RoomView, zr: &ZoneRoomState) -> bool {
+        let discovered = is_visible_to(self, rv, zr);
+        discovered && self.is_visible()
     }
 }
-
 
 /// Runtime view the engine uses.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -262,28 +268,33 @@ impl RoomView {
     pub fn visible_exits(&self) -> impl Iterator<Item = &RoomExitRow> {
         let lockdown = self.room.lockdown;
         self.exits.iter().filter(move |e| {
-            if lockdown { e.visible_when_locked } else { !e.locked || e.visible_when_locked }
+            if lockdown {
+                e.visible_when_locked
+            } else {
+                !e.locked || e.visible_when_locked
+            }
         })
     }
 
     /// from fn: `RoomView::object_by_noun`
     pub fn object_by_noun(&self, noun: &str) -> Option<&RoomObject> {
-        self.objects.iter().find(|o| {
-            o.name.eq_ignore_ascii_case(noun) ||
-                o.nouns.iter().any(|n| n.eq_ignore_ascii_case(noun))
-        })
+        self.objects
+            .iter()
+            .find(|o| o.name.eq_ignore_ascii_case(noun) || o.nouns.iter().any(|n| n.eq_ignore_ascii_case(noun)))
     }
 
     /// from fn: `RoomView::render_body_with_object_refs`
     /// Replaces `{obj:name}` with the object's `short` text.
     pub fn render_body_with_object_refs(&self) -> String {
-        OBJ_REF_RE.replace_all(&self.room.body, |caps: &regex::Captures| {
-            let key = &caps[1];
-            self.object_by_noun(key)
-                .map(|o| o.short.as_str())
-                .unwrap_or(key)
-                .to_string()
-        }).into_owned()
+        OBJ_REF_RE
+            .replace_all(&self.room.body, |caps: &regex::Captures| {
+                let key = &caps[1];
+                self.object_by_noun(key)
+                    .map(|o| o.short.as_str())
+                    .unwrap_or(key)
+                    .to_string()
+            })
+            .into_owned()
     }
 
     pub fn with_overlay(mut self, overlay: &[ZoneObjectState]) -> Self {
@@ -292,7 +303,9 @@ impl RoomView {
         for o in &mut self.objects {
             if let Some(z) = by_id.get(&o.id) {
                 // qty
-                if z.qty.is_some() { o.qty = z.qty; }
+                if z.qty.is_some() {
+                    o.qty = z.qty;
+                }
 
                 o.locked = o.locked || RoomObject::has_flag(&z.flags, "locked");
                 o.revealed = o.revealed || RoomObject::has_flag(&z.flags, "revealed");
@@ -306,11 +319,10 @@ impl RoomView {
         self
     }
 
-    pub fn visible_objects<'a>(&'a self, zr: &'a ZoneRoomState) -> impl Iterator<Item=&'a RoomObject> + 'a {
+    pub fn visible_objects<'a>(&'a self, zr: &'a ZoneRoomState) -> impl Iterator<Item = &'a RoomObject> + 'a {
         self.objects.iter().filter(|o| is_visible_to(o, self, zr))
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -318,6 +330,17 @@ mod tests {
     use uuid::Uuid;
 
     // --- helpers -------------------------------------------------------------
+
+    fn dummy_room_view() -> RoomView {
+        RoomView {
+            room: br(),
+            exits: vec![],
+            objects: vec![],
+            scripts: RoomScripts::default(),
+            zone_state: None,
+            room_kv: HashMap::new(),
+        }
+    }
 
     fn br() -> BlueprintRoom {
         BlueprintRoom {
@@ -344,6 +367,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn obj(
         name: &str,
         nouns: &[&str],
@@ -415,16 +439,26 @@ mod tests {
             &["door", "gate"],
             "a heavy blast door",
             "It looks sealed tight.",
-            false, false, false,
-            None, false, false, None,
+            false,
+            false,
+            false,
+            None,
+            false,
+            false,
+            None,
         );
         let o2 = obj(
             "coin",
             &["credits", "money"],
             "a shiny coin",
             "A small minted coin.",
-            true, true, true,
-            Some(10), false, true, Some(10),
+            true,
+            true,
+            true,
+            Some(10),
+            false,
+            true,
+            Some(10),
         );
 
         let view = base_view_with(vec![o1.clone(), o2.clone()], vec![]);
@@ -443,8 +477,13 @@ mod tests {
             &["credits"],
             "a shiny coin",
             "A small minted coin.",
-            true, true, true,
-            Some(10), false, true, Some(10),
+            true,
+            true,
+            true,
+            Some(10),
+            false,
+            true,
+            Some(10),
         );
         let view = base_view_with(vec![coin], vec![]);
         let body = view.render_body_with_object_refs();
@@ -453,10 +492,7 @@ mod tests {
             body.contains("a shiny coin"),
             "should replace {{obj:coin}} with object's short"
         );
-        assert!(
-            body.contains("unknown"),
-            "unknown refs should remain as the raw key"
-        );
+        assert!(body.contains("unknown"), "unknown refs should remain as the raw key");
     }
 
     #[test]
@@ -466,13 +502,13 @@ mod tests {
             &["credits"],
             "a shiny coin",
             "A small minted coin.",
-            true,  /* takeable */
-            true,  /* stackable */
-            true,  /* is_coin */
+            true,     /* takeable */
+            true,     /* stackable */
+            true,     /* is_coin */
             Some(10), /* initial_qty */
-            false, /* locked */
-            false, /* revealed */
-            None,  /* qty (will be set) */
+            false,    /* locked */
+            false,    /* revealed */
+            None,     /* qty (will be set) */
         );
 
         let wrench = obj(
@@ -520,9 +556,16 @@ mod tests {
         );
 
         // wrench should remain and be locked
-        let w = view.objects.iter().find(|o| o.name == "wrench").expect("wrench present");
+        let w = view
+            .objects
+            .iter()
+            .find(|o| o.name == "wrench")
+            .expect("wrench present");
         assert!(w.locked, "wrench should be locked via overlay flag");
-        assert!(w.is_visible(), "non-stackable locked object is still considered visible per is_visible()");
+        assert!(
+            w.is_visible(),
+            "non-stackable locked object is still considered visible per is_visible()"
+        );
     }
 
     #[test]
@@ -538,13 +581,94 @@ mod tests {
             Some(10), // initial qty defined in blueprint
             false,
             false,
-            None,     // no explicit qty yet
+            None, // no explicit qty yet
         );
 
         let view = base_view_with(vec![coin], vec![]);
         let merged = view.with_overlay(&[]); // no overlay for this object
 
         let c = merged.objects.iter().find(|o| o.name == "coin").expect("coin present");
-        assert_eq!(c.qty, Some(10), "qty should be seeded from initial_qty when overlay is absent");
+        assert_eq!(
+            c.qty,
+            Some(10),
+            "qty should be seeded from initial_qty when overlay is absent"
+        );
+    }
+
+    #[test]
+    fn non_stackable_hidden_then_visible_after_discovery() {
+        // arrange
+        let wrench_id = ObjectId::new(); // or ObjectId::from(...), etc.
+        let wrench = RoomObject {
+            id: wrench_id,
+            name: "wrench".into(),
+            stackable: false,
+            revealed: false,              // ignored for non-stackables
+            locked: true,                 // lock doesn't affect visibility
+            discovery: Discovery::Hidden, // hidden until discovered
+            ..Default::default()
+        };
+
+        let rv = dummy_room_view();
+        let mut zr = ZoneRoomState {
+            discovered_objects: HashSet::new(),
+            ..Default::default()
+        };
+
+        // before discovery: not visible (discovery blocks)
+        assert!(
+            !wrench.is_visible_to(&rv, &zr),
+            "non-stackable wrench should NOT be visible before discovery"
+        );
+        // intrinsic policy says it's renderable on its own
+        assert!(
+            wrench.is_visible(),
+            "intrinsic visibility for non-stackables is true regardless of `revealed`/`locked`"
+        );
+
+        // act: player discovers the wrench (e.g., by examining something)
+        zr.discovered_objects.insert(wrench_id);
+
+        // after discovery: visible (discovery ∧ intrinsic)
+        assert!(
+            wrench.is_visible_to(&rv, &zr),
+            "non-stackable wrench becomes visible once discovered"
+        );
+    }
+
+    #[test]
+    fn stackable_requires_revealed_even_if_discovered() {
+        // arrange
+        let coins_id = ObjectId::new();
+        let coins = RoomObject {
+            id: coins_id,
+            name: "gold coin".into(),
+            stackable: true,
+            revealed: false, // covered/buried
+            locked: false,
+            discovery: Discovery::Visible, // even if globally visible...
+            ..Default::default()
+        };
+        let rv = dummy_room_view();
+        let mut zr = ZoneRoomState {
+            discovered_objects: HashSet::new(),
+            ..Default::default()
+        };
+        zr.discovered_objects.insert(coins_id); // discovered
+
+        // stackables still need `revealed=true` to render
+        assert!(
+            !coins.is_visible_to(&rv, &zr),
+            "stackable items remain hidden until `revealed=true`, even if discovered"
+        );
+
+        // act: uncover the pile
+        let mut coins_uncovered = coins.clone();
+        coins_uncovered.revealed = true;
+
+        assert!(
+            coins_uncovered.is_visible_to(&rv, &zr),
+            "stackable items become visible once revealed"
+        );
     }
 }

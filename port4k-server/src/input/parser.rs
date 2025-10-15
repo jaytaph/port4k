@@ -13,8 +13,8 @@
 //!   let intent = parse_command("open the door with key");
 //!   match intent.verb { Verb::Open => { /* inspect intent.direct/instrument */ }, _ => {} }
 
-use std::collections::{HashMap, HashSet};
 use crate::models::types::Direction;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verb {
@@ -183,9 +183,7 @@ pub fn parse_command(input: &str) -> Intent {
 
     // Movement form "go north"
     if verb == Verb::Go {
-        let dir = tokens
-            .get(consumed)
-            .and_then(|t| Direction::parse(t.lower.as_str()));
+        let dir = tokens.get(consumed).and_then(|t| Direction::parse(t.lower.as_str()));
 
         return Intent {
             verb,
@@ -234,7 +232,7 @@ pub fn parse_command(input: &str) -> Intent {
     };
 
     // Choose a primary direct NP if present (first list item)
-    let direct = direct_objects.get(0).cloned();
+    let direct = direct_objects.first().cloned();
 
     Intent {
         verb,
@@ -468,14 +466,13 @@ fn split_on_preposition(
     }
 
     // If the first token literally equals the forced preposition, drop it.
-    if let Some(fp) = forced_prep {
-        if let Some(first) = tokens.first() {
-            if canonical_prep(&first.lower) == Some(fp) {
-                return (vec![], tokens[1..].to_vec(), Some(fp));
-            }
-        }
-        // Otherwise keep scanning as normal but prefer the forced preposition if encountered.
+    if let Some(fp) = forced_prep
+        && let Some(first) = tokens.first()
+        && canonical_prep(&first.lower) == Some(fp)
+    {
+        return (vec![], tokens[1..].to_vec(), Some(fp));
     }
+    // Otherwise keep scanning as normal but prefer the forced preposition if encountered.
 
     for (i, tok) in tokens.iter().enumerate() {
         if let Some(p) = canonical_prep(&tok.lower) {
@@ -511,7 +508,7 @@ fn parse_list_nps(tokens: &[Token]) -> Vec<NounPhrase> {
         let had_trailing_comma = t.lower.ends_with(',');
 
         // If token ends with ',', trim it off for NP building.
-        if had_trailing_comma && t.lower.len() >= 1 {
+        if had_trailing_comma && !t.lower.is_empty() {
             t.lower.pop();
             t.raw.pop();
         }
@@ -563,13 +560,12 @@ fn build_np(tokens: &[Token]) -> NounPhrase {
     // If it's a single quoted token, we can derive head as last word inside
     let quoted = tokens.len() == 1 && tokens[0].quoted;
 
-    let words: Vec<String>;
-    if quoted {
+    let words: Vec<String> = if quoted {
         // Split the quoted multiword into words for head/adjectives
-        words = tokens[0].raw.split_whitespace().map(|s| s.to_string()).collect();
+        tokens[0].raw.split_whitespace().map(|s| s.to_string()).collect()
     } else {
-        words = tokens.iter().map(|t| t.raw.clone()).collect();
-    }
+        tokens.iter().map(|t| t.raw.clone()).collect()
+    };
 
     let head = words.last().cloned().unwrap_or_else(|| raw.clone());
     let adjectives = if words.len() > 1 {

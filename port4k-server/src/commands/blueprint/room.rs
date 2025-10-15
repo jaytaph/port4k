@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use crate::util::args::parse_bp_room_key;
+use std::sync::Arc;
 
 const USAGE: &str = "Usage:
   @bp room add <bp>:<room> \"Title\" \"Body\"
@@ -29,11 +29,10 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
                 return Ok(out);
             }
 
-            let key = parse_bp_room_key(&sub_args[0])
-                .ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
+            let key = parse_bp_room_key(&sub_args[0]).ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
 
             let title = &sub_args[1];
-            let body  = &sub_args[2];
+            let body = &sub_args[2];
 
             if title.is_empty() || body.is_empty() {
                 out.append("[bp] title and body cannot be empty.\n");
@@ -54,14 +53,13 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
 
         // @bp room lock <bp>:<room>
         "lock" => {
-            if sub_args.len() < 1 {
+            if sub_args.is_empty() {
                 out.append(USAGE);
                 out.failure();
                 return Ok(out);
             }
 
-            let key = parse_bp_room_key(&sub_args[0])
-                .ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
+            let key = parse_bp_room_key(&sub_args[0]).ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
 
             if ctx.registry.services.blueprint.set_locked(&key, true).await? {
                 out.append("[bp] blueprint/room set to LOCKED.\n");
@@ -75,14 +73,13 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
 
         // @bp room unlock <bp>:<room>
         "unlock" => {
-            if sub_args.len() < 1 {
+            if sub_args.is_empty() {
                 out.append(USAGE);
                 out.failure();
                 return Ok(out);
             }
 
-            let key = parse_bp_room_key(&sub_args[0])
-                .ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
+            let key = parse_bp_room_key(&sub_args[0]).ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
 
             if ctx.registry.services.blueprint.set_locked(&key, false).await? {
                 out.append("[bp] blueprint/room set to UNLOCKED.\n");
@@ -97,7 +94,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
         _ => {
             out.append(super::USAGE);
             out.failure();
-            return Ok(out);
-        },
+            Ok(out)
+        }
     }
 }

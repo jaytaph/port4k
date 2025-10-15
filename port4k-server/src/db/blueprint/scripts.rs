@@ -1,6 +1,6 @@
+use super::super::Db;
 use crate::db::DbResult;
 use crate::models::types::{AccountId, RoomId};
-use super::super::Db;
 
 impl Db {
     pub async fn bp_script_put_draft(
@@ -40,11 +40,7 @@ impl Db {
         Ok(n > 0)
     }
 
-    pub async fn bp_script_get_live(
-        &self,
-        room_id: RoomId,
-        event: &str,
-    ) -> DbResult<Option<String>> {
+    pub async fn bp_script_get_live(&self, room_id: RoomId, event: &str) -> DbResult<Option<String>> {
         let c = self.pool.get().await?;
         let row = c
             .query_opt(

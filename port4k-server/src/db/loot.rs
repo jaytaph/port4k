@@ -1,13 +1,12 @@
-use rand_core::OsRng;
+use super::{Db, DbResult};
 use crate::models::account::Account;
 use crate::models::types::RoomId;
-use super::{Db, DbResult};
+use password_hash::rand_core::{OsRng, RngCore};
 
 impl Db {
     /// Spawn due coin piles (and other loot) up to max_instances per spawn.
     /// Returns number of piles spawned.
     pub async fn spawn_tick(&self) -> DbResult<u64> {
-        use rand_core::RngCore;
         let mut spawned = 0u64;
         let mut client = self.pool.get().await?;
         let tx = client.build_transaction().start().await?;
@@ -43,9 +42,8 @@ impl Db {
                 .get(0);
 
             if cur_count < max_instances as i64 {
-                let mut rng = OsRng;
                 let span = (qty_max - qty_min + 1).max(1) as u32;
-                let r = (rng.next_u32() % span) as i32;
+                let r = (OsRng.next_u32() % span) as i32;
                 let qty = qty_min + r;
 
                 tx.execute(

@@ -5,15 +5,15 @@ It merges static blueprint data with dynamic zone or overlay state.
 
 ## Merge algorithm
 
-| Field | Merge rule | Notes |
-|-------|-------------|-------|
-| title | blueprint only | never overridden |
-| body / short | blueprint + conditional fragments | may depend on room state |
-| objects | (blueprint ∪ spawned) − removed | obey `visible_when_locked` |
-| coins / counters | blueprint − picked_up | clamped ≥ 0 |
-| exits | blueprint exits − locked (unless `visible_when_locked`) | |
-| scripts | blueprint only | read-only |
-| states | overlay → zone → blueprint defaults | |
+| Field            | Merge rule                                              | Notes                      |
+|------------------|---------------------------------------------------------|----------------------------|
+| title            | blueprint only                                          | never overridden           |
+| body / short     | blueprint + conditional fragments                       | may depend on room state   |
+| objects          | (blueprint ∪ spawned) − removed                         | obey `visible_when_locked` |
+| coins / counters | blueprint − picked_up                                   | clamped ≥ 0                |
+| exits            | blueprint exits − locked (unless `visible_when_locked`) |                            |
+| scripts          | blueprint only                                          | read-only                  |
+| states           | overlay → zone → blueprint defaults                     |                            |
 
 ## Example
 

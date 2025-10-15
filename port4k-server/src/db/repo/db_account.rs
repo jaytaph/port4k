@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use crate::db::repo::account::AccountRepo;
 use crate::db::{Db, DbResult};
 use crate::models::account::Account;
 use crate::models::types::AccountId;
-use crate::db::repo::account::AccountRepo;
+use std::sync::Arc;
 
 pub struct AccountRepository {
     db: Arc<Db>,
@@ -19,15 +19,17 @@ impl AccountRepo for AccountRepository {
     async fn get_by_username(&self, username: &str) -> DbResult<Option<Account>> {
         let client = self.db.get_client().await?;
 
-        let stmt = client.prepare_cached(
-            r#"
+        let stmt = client
+            .prepare_cached(
+                r#"
             SELECT id, username, email, password_hash, role, created_at, last_login,
                 zone_id, current_room_id, xp, health, coins,
                 inventory, flags
             FROM accounts
             WHERE username = $1
             "#,
-        ).await?;
+            )
+            .await?;
 
         let row_opt = client.query_opt(&stmt, &[&username]).await?;
         row_opt.as_ref().map(Account::try_from_row).transpose()
@@ -36,14 +38,17 @@ impl AccountRepo for AccountRepository {
     async fn get_by_id(&self, account_id: AccountId) -> DbResult<Option<Account>> {
         let client = self.db.get_client().await?;
 
-        let stmt = client.prepare_cached(
-            r#"
+        let stmt = client
+            .prepare_cached(
+                r#"
             SELECT id, username, email, role, password_hash, created_at, last_login,
                 zone_id, current_room_id, xp, health, coins,
                 inventory, flags
             FROM accounts
             WHERE id = $1
-        "#).await?;
+        "#,
+            )
+            .await?;
 
         let row_opt = client.query_opt(&stmt, &[&account_id]).await?;
         row_opt.as_ref().map(Account::try_from_row).transpose()
@@ -62,19 +67,24 @@ impl AccountRepo for AccountRepository {
             "#,
         ).await?;
 
-        let row = client.query_one(&stmt, &[
-            &account.username,
-            &account.email,
-            &account.password_hash,
-            &account.role,
-            &account.zone_id,
-            &account.current_room_id,
-            &(account.xp as i64),
-            &(account.health as i64),
-            &(account.coins as i64),
-            &serde_json::to_value(&account.inventory)?,
-            &serde_json::to_value(&account.flags)?,
-        ]).await?;
+        let row = client
+            .query_one(
+                &stmt,
+                &[
+                    &account.username,
+                    &account.email,
+                    &account.password_hash,
+                    &account.role,
+                    &account.zone_id,
+                    &account.current_room_id,
+                    &(account.xp as i64),
+                    &(account.health as i64),
+                    &(account.coins as i64),
+                    &serde_json::to_value(&account.inventory)?,
+                    &serde_json::to_value(&account.flags)?,
+                ],
+            )
+            .await?;
 
         Account::try_from_row(&row)
     }
@@ -82,12 +92,11 @@ impl AccountRepo for AccountRepository {
     async fn update_last_login(&self, id: AccountId) -> DbResult<()> {
         let client = self.db.get_client().await?;
 
-        let stmt = client.prepare_cached(
-            "UPDATE accounts SET last_login = NOW() WHERE id = $1"
-        ).await?;
+        let stmt = client
+            .prepare_cached("UPDATE accounts SET last_login = NOW() WHERE id = $1")
+            .await?;
         client.execute(&stmt, &[&id]).await?;
 
         Ok(())
     }
-
 }

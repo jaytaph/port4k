@@ -1,6 +1,6 @@
+use crate::error::{ConfigErrorKind, InfraError};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
-use crate::error::{ConfigErrorKind, InfraError};
 
 /// Global configuration of the server
 #[derive(Debug, Clone, Deserialize)]
@@ -16,8 +16,14 @@ impl Config {
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, InfraError> {
         let path_buf = path.as_ref().to_path_buf();
 
-        let data = std::fs::read_to_string(&path_buf).map_err(|e| InfraError::Config { path: path_buf.clone(), source: ConfigErrorKind::Read(e) })?;
-        let cfg: Self = toml::from_str(&data).map_err(|e| InfraError::Config { path: path_buf.clone(), source: ConfigErrorKind::Parse(e) })?;
+        let data = std::fs::read_to_string(&path_buf).map_err(|e| InfraError::Config {
+            path: path_buf.clone(),
+            source: ConfigErrorKind::Read(e),
+        })?;
+        let cfg: Self = toml::from_str(&data).map_err(|e| InfraError::Config {
+            path: path_buf.clone(),
+            source: ConfigErrorKind::Parse(e),
+        })?;
 
         Ok(cfg)
     }
@@ -29,7 +35,7 @@ impl Config {
         fn req(key: &'static str) -> Result<String, InfraError> {
             std::env::var(key).map_err(|_| InfraError::Config {
                 path: PathBuf::from(".env"),
-                source: ConfigErrorKind::MissingEnv(key.to_string())
+                source: ConfigErrorKind::MissingEnv(key.to_string()),
             })
         }
         fn opt(key: &'static str, default: &'static str) -> String {

@@ -1,10 +1,10 @@
 //! @bp entry <bp>:<room>
 
-use std::sync::Arc;
 use crate::commands::blueprint::USAGE;
 use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use crate::util::args::parse_bp_room_key;
+use std::sync::Arc;
 
 pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();

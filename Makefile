@@ -45,7 +45,7 @@ web-fmt:
 # -----------------------------------------------------------------------------
 # Linting
 # -----------------------------------------------------------------------------
-lint: rust-lint web-lint ## Run all linters
+lint: rust-lint ## Run all linters
 
 rust-lint:
 	cd $(RUST_DIR) && $(CARGO) clippy --all-targets --all-features -- -D warnings
@@ -56,7 +56,7 @@ web-lint:
 # -----------------------------------------------------------------------------
 # Testing
 # -----------------------------------------------------------------------------
-test: rust-test web-test ## Run all tests
+test: rust-test ## Run all tests
 
 rust-test:
 	@echo "🚀 Running Rust tests..."

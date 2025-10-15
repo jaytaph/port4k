@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use crate::state::session::ConnState;
+use std::sync::Arc;
 
 pub async fn logout(ctx: Arc<CmdCtx>, _intent: Intent) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();

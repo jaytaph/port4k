@@ -1,28 +1,29 @@
-use std::sync::Arc;
-use mlua::{Function, Lua, Table, Value};
-use parking_lot::Mutex;
-use tokio::runtime::Handle;
-use tokio::sync::{mpsc, oneshot};
+use crate::Registry;
+use crate::error::AppResult;
+use crate::input::parser::Intent;
 use crate::models::account::Account;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::RoomView;
-use crate::error::AppResult;
-use crate::input::parser::Intent;
-use crate::Registry;
 use crate::state::session::Cursor;
+use mlua::{Function, Integer, Lua, Table, Value};
+use parking_lot::Mutex;
+use std::sync::Arc;
+use tokio::runtime::Handle;
+use tokio::sync::{mpsc, oneshot};
 
+//noinspection RsExternalLinter
 pub enum LuaJob {
     /// Called when a player enters a room.
     OnEnter {
         account: Account,
-        cursor: Cursor,
-        reply: oneshot::Sender<bool>
+        cursor: Box<Cursor>,
+        reply: oneshot::Sender<bool>,
     },
     /// Called when a player issues a command in a room
     OnCommand {
         account: Account,
-        cursor: Cursor,
-        intent: Intent,
+        cursor: Box<Cursor>,
+        intent: Box<Intent>,
         reply: oneshot::Sender<bool>,
     },
     // // Called when a player issues a command in playtest mode (no DB state, just ephemeral)
@@ -58,8 +59,13 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
             match job {
                 LuaJob::OnEnter { cursor, account, reply } => {
                     let _ = (|| -> AppResult<Option<String>> {
-                        let src = cursor.room_view.scripts.on_enter_lua
-                            .as_deref().unwrap_or("").to_owned();
+                        let src = cursor
+                            .room_view
+                            .scripts
+                            .on_enter_lua
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_owned();
                         if src.is_empty() {
                             return Ok(None);
                         }
@@ -67,24 +73,20 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                         let out = Arc::new(Mutex::new(String::new()));
 
                         let env = make_env(&lua)?;
-                        install_host_api(
-                            &lua,
-                            &env,
-                            &rt_handle,
-                            &registry,
-                            &cursor,
-                            &account,
-                            out.clone(),
-                        )?;
+                        install_host_api(&lua, &env, &rt_handle, &registry, &cursor, &account, out.clone())?;
 
-                        let chunk = lua.load(&src)
-                            .set_name(&format!("{}:{}:on_enter", cursor.zone_ctx.blueprint.key, cursor.room_view.room.key))
+                        let chunk = lua
+                            .load(&src)
+                            .set_name(format!(
+                                "{}:{}:on_enter",
+                                cursor.zone_ctx.blueprint.key, cursor.room_view.room.key
+                            ))
                             .set_environment(env.clone());
                         chunk.exec()?;
 
-                        if let Ok(f) = env.get::<_, Function>("on_enter") {
+                        if let Ok(f) = env.get::<Function>("on_enter") {
                             let ctx = make_enter_ctx(&lua, &cursor.zone_ctx.blueprint, &cursor.room_view, &account)?;
-                            f.call::<_, ()>(ctx)?;
+                            f.call::<()>(ctx)?;
                         }
 
                         let text = out.lock().clone();
@@ -94,10 +96,20 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                     let _ = reply.send(true);
                 }
 
-                LuaJob::OnCommand { cursor, account, intent, reply } => {
+                LuaJob::OnCommand {
+                    cursor,
+                    account,
+                    intent,
+                    reply,
+                } => {
                     let _ = (|| -> AppResult<Option<String>> {
-                        let src = cursor.room_view.scripts.on_command_lua
-                            .as_deref().unwrap_or("").to_owned();
+                        let src = cursor
+                            .room_view
+                            .scripts
+                            .on_command_lua
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_owned();
                         if src.is_empty() {
                             return Ok(None);
                         }
@@ -106,27 +118,24 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                         let out = Arc::new(Mutex::new(String::new()));
 
                         let env = make_env(&lua)?;
-                        install_host_api(
-                            &lua,
-                            &env,
-                            &rt_handle,
-                            &registry,
-                            &cursor,
-                            &account,
-                            out.clone(),
-                        )?;
+                        install_host_api(&lua, &env, &rt_handle, &registry, &cursor, &account, out.clone())?;
 
                         // ----- Load & run on_command(bp:room) -----
-                        lua.load(&src).set_name(&format!("{}:{}:on_command", cursor.zone_ctx.blueprint.key, cursor.room_view.room.key)).exec()?;
+                        lua.load(&src)
+                            .set_name(format!(
+                                "{}:{}:on_command",
+                                cursor.zone_ctx.blueprint.key, cursor.room_view.room.key
+                            ))
+                            .exec()?;
 
-                        if let Ok(func) = lua.globals().get::<_, Function>("on_command") {
+                        if let Ok(func) = lua.globals().get::<Function>("on_command") {
                             let t: Table = lua.create_table()?;
                             for (i, a) in intent.args.iter().enumerate() {
                                 t.set(i + 1, a.as_str())?;
                             }
 
                             // Synchronous call (keeps worker future Send)
-                            func.call::<_, ()>((intent.verb.as_str(), t))?;
+                            func.call::<()>((intent.verb.as_str(), t))?;
 
                             let text = out.lock().clone();
                             return Ok(Some(text));
@@ -144,12 +153,11 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
     tx
 }
 
-
-fn make_env(lua: &Lua) -> mlua::Result<Table<'_>> {
+fn make_env(lua: &Lua) -> mlua::Result<Table> {
     let env = lua.create_table()?;
     let mt = lua.create_table()?;
     mt.set("__index", lua.globals())?;
-    env.set_metatable(Some(mt));
+    _ = env.set_metatable(Some(mt));
     Ok(env)
 }
 
@@ -158,7 +166,7 @@ fn make_enter_ctx<'lua>(
     bp: &Blueprint,
     room: &'lua RoomView,
     account: &'lua Account,
-) -> mlua::Result<Table<'lua>> {
+) -> mlua::Result<Table> {
     let t = lua.create_table()?;
     t.set("blueprint_key", bp.key.as_str())?;
     t.set("room_key", room.room.key.as_str())?;
@@ -170,7 +178,7 @@ fn make_enter_ctx<'lua>(
 
 fn install_host_api(
     lua: &Lua,
-    env: &Table<'_>,
+    env: &Table,
     handle: &Handle,
     registry: &Arc<Registry>,
     cursor: &Cursor,
@@ -188,7 +196,6 @@ fn install_host_api(
         })?;
         env.set("send", send)?;
     }
-
 
     // broadcast_room(text)
     {
@@ -222,8 +229,8 @@ fn install_host_api(
         let room_id = cursor.room_view.room.id;
         let handle = handle.clone();
         let registry = registry.clone();
-        let f = lua.create_function(move |lua_ctx, (key, value): (String, Value)| {
-            let v = lua_to_serde_json(lua_ctx, value)?;
+        let f = lua.create_function(move |_lua_ctx, (key, value): (String, Value)| {
+            let v = lua_to_serde_json(value)?;
             handle
                 .block_on(registry.services.room.room_kv_set(room_id, &key, &v))
                 .map_err(mlua::Error::external)?;
@@ -257,8 +264,8 @@ fn install_host_api(
         let account_id = account.id;
         let registry = registry.clone();
         let handle = handle.clone();
-        let f = lua.create_function(move |lua_ctx, (key, value): (String, Value)| {
-            let v = lua_to_serde_json(lua_ctx, value)?;
+        let f = lua.create_function(move |_lua_ctx, (key, value): (String, Value)| {
+            let v = lua_to_serde_json(value)?;
             handle
                 .block_on(registry.services.room.player_kv_set(room_id, account_id, &key, &v))
                 .map_err(mlua::Error::external)?;
@@ -270,17 +277,17 @@ fn install_host_api(
     Ok(())
 }
 
-fn serde_json_to_lua(lua: &Lua, v: serde_json::Value) -> mlua::Result<Value<'_>> {
+fn serde_json_to_lua(lua: &Lua, v: serde_json::Value) -> mlua::Result<Value> {
     use serde_json::Value as J;
     Ok(match v {
         J::Null => Value::Nil,
         J::Bool(b) => Value::Boolean(b),
         J::Number(n) => {
             if let Some(i) = n.as_i64() {
-                Value::Integer(i as i32)
+                Value::Integer(i as Integer)
             } else if let Some(u) = n.as_u64() {
                 // note: Lua integers are i64; clamp large u64s if needed
-                Value::Integer(u as i32)
+                Value::Integer(u as Integer)
             } else {
                 Value::Number(n.as_f64().unwrap_or(0.0))
             }
@@ -303,7 +310,7 @@ fn serde_json_to_lua(lua: &Lua, v: serde_json::Value) -> mlua::Result<Value<'_>>
     })
 }
 
-fn lua_to_serde_json(lua: &Lua, v: Value) -> mlua::Result<serde_json::Value> {
+fn lua_to_serde_json(v: Value) -> mlua::Result<serde_json::Value> {
     use serde_json::{Number, Value as J};
     Ok(match v {
         Value::Nil => J::Null,
@@ -322,14 +329,14 @@ fn lua_to_serde_json(lua: &Lua, v: Value) -> mlua::Result<serde_json::Value> {
             if t.raw_len() > 0 && t.contains_key(1)? {
                 let mut vec = Vec::with_capacity(t.raw_len());
                 for val in t.sequence_values::<Value>() {
-                    vec.push(lua_to_serde_json(lua, val?)?);
+                    vec.push(lua_to_serde_json(val?)?);
                 }
                 J::Array(vec)
             } else {
                 let mut map = serde_json::Map::new();
                 for pair in t.pairs::<String, Value>() {
                     let (k, vv) = pair?;
-                    map.insert(k, lua_to_serde_json(lua, vv)?);
+                    map.insert(k, lua_to_serde_json(vv)?);
                 }
                 J::Object(map)
             }

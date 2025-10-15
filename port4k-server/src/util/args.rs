@@ -12,20 +12,19 @@ pub fn parse_bp_room_key(s: &str) -> Option<BlueprintAndRoomKey> {
 
 pub fn normalize_dir(s: &str) -> Option<&'static str> {
     match s.trim().to_ascii_lowercase().as_str() {
-        "n" | "north"        => Some("north"),
-        "ne" | "northeast"   => Some("northeast"),
-        "e" | "east"         => Some("east"),
-        "se" | "southeast"   => Some("southeast"),
-        "s" | "south"        => Some("south"),
-        "sw" | "southwest"   => Some("southwest"),
-        "w" | "west"         => Some("west"),
-        "nw" | "northwest"   => Some("northwest"),
-        "u" | "up"           => Some("up"),
-        "d" | "down"         => Some("down"),
+        "n" | "north" => Some("north"),
+        "ne" | "northeast" => Some("northeast"),
+        "e" | "east" => Some("east"),
+        "se" | "southeast" => Some("southeast"),
+        "s" | "south" => Some("south"),
+        "sw" | "southwest" => Some("southwest"),
+        "w" | "west" => Some("west"),
+        "nw" | "northwest" => Some("northwest"),
+        "u" | "up" => Some("up"),
+        "d" | "down" => Some("down"),
         _ => None,
     }
 }
-
 
 // pub fn split_args_quoted(s: &str) -> Vec<String> {
 //     let mut out = Vec::new();

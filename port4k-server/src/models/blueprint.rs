@@ -1,18 +1,22 @@
-use tokio_postgres::Row;
 use crate::db::DbResult;
 use crate::db::error::DbError;
 use crate::models::types::{AccountId, BlueprintId, RoomId};
+use tokio_postgres::Row;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BlueprintStatus { Draft, Published, Archived }
+pub enum BlueprintStatus {
+    Draft,
+    Published,
+    Archived,
+}
 
 impl BlueprintStatus {
     fn parse(s: &str) -> DbResult<Self> {
         match s {
-            "live"      => Ok(BlueprintStatus::Published), // legacy support
-            "draft"     => Ok(BlueprintStatus::Draft),
+            "live" => Ok(BlueprintStatus::Published), // legacy support
+            "draft" => Ok(BlueprintStatus::Draft),
             "published" => Ok(BlueprintStatus::Published),
-            "archived"  => Ok(BlueprintStatus::Archived),
+            "archived" => Ok(BlueprintStatus::Archived),
             _ => Err(DbError::Decode("invalid blueprint.status".into())),
         }
     }

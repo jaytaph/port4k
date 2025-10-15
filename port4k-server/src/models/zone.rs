@@ -1,16 +1,16 @@
-use std::collections::{HashMap, HashSet};
-use dashmap::DashMap;
-use parking_lot::Mutex;
-use std::sync::Arc;
-use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-use tokio_postgres::Row;
-use crate::db::{Db, DbResult};
 use crate::db::error::DbError;
+use crate::db::{Db, DbResult};
 use crate::error::{AppResult, DomainError};
 use crate::models::blueprint::Blueprint;
 use crate::models::room::ZoneRoomState;
 use crate::models::types::{AccountId, ObjectId, RoomId, ZoneId};
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use dashmap::DashMap;
+use parking_lot::Mutex;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use tokio_postgres::Row;
 
 /// Type of zone defines what is allowed and how it is persisted.
 #[derive(Clone, Debug)]
@@ -22,11 +22,20 @@ pub enum ZoneKind {
 
 /// How the zone is persisted.
 #[derive(Clone, Debug)]
-pub enum Persistence { Ephemeral, Persistent }
+pub enum Persistence {
+    Ephemeral,
+    Persistent,
+}
 
 impl Persistence {
-    #[inline] pub fn is_ephemeral(&self) -> bool { matches!(self, Persistence::Ephemeral) }
-    #[inline] pub fn is_persistent(&self) -> bool { matches!(self, Persistence::Persistent) }
+    #[inline]
+    pub fn is_ephemeral(&self) -> bool {
+        matches!(self, Persistence::Ephemeral)
+    }
+    #[inline]
+    pub fn is_persistent(&self) -> bool {
+        matches!(self, Persistence::Persistent)
+    }
 }
 
 /// Total zone policy (for now, just persistence)
@@ -38,9 +47,15 @@ pub struct ZonePolicy {
 impl ZonePolicy {
     pub fn for_kind(kind: &ZoneKind) -> Self {
         match kind {
-            ZoneKind::Live => ZonePolicy { persistence: Persistence::Persistent },
-            ZoneKind::Draft => ZonePolicy { persistence: Persistence::Persistent },
-            ZoneKind::Test { .. } => ZonePolicy { persistence: Persistence::Ephemeral },
+            ZoneKind::Live => ZonePolicy {
+                persistence: Persistence::Persistent,
+            },
+            ZoneKind::Draft => ZonePolicy {
+                persistence: Persistence::Persistent,
+            },
+            ZoneKind::Test { .. } => ZonePolicy {
+                persistence: Persistence::Ephemeral,
+            },
         }
     }
 }
@@ -62,7 +77,12 @@ impl ZoneContext {
     pub fn new(zone: Arc<Zone>, blueprint: Arc<Blueprint>) -> Self {
         let kind = zone.kind.clone();
         let policy = ZonePolicy::for_kind(&kind);
-        Self { zone, kind, policy, blueprint }
+        Self {
+            zone,
+            kind,
+            policy,
+            blueprint,
+        }
     }
 
     pub fn ephemeral(owner: AccountId, blueprint: Arc<Blueprint>) -> Self {
@@ -98,7 +118,7 @@ impl Zone {
     pub fn try_from_row(row: &Row) -> DbResult<Self> {
         let kind_s: &str = row.try_get("kind")?;
         let kind = match kind_s {
-            "live"  => ZoneKind::Live,
+            "live" => ZoneKind::Live,
             "draft" => ZoneKind::Draft,
             _ => return Err(DbError::Decode("invalid zone.kind".into())),
         };
@@ -116,7 +136,7 @@ impl Zone {
 /// Router that defines how to access zone backends based on zone policy
 pub struct ZoneRouter {
     db: Arc<DbBackend>,
-    mem: Arc<MemoryBackend>
+    mem: Arc<MemoryBackend>,
 }
 
 impl ZoneRouter {
@@ -149,7 +169,12 @@ pub trait ZoneUnitOfWork: Send {
 #[async_trait]
 pub trait ZoneState: Send + Sync {
     async fn begin(&self, zone_ctx: &ZoneContext) -> DbResult<Box<dyn ZoneUnitOfWork>>;
-    async fn zone_room_state(&self, zone_ctx: &ZoneContext, room_id: RoomId, account_id: AccountId) -> AppResult<ZoneRoomState>;
+    async fn zone_room_state(
+        &self,
+        zone_ctx: &ZoneContext,
+        room_id: RoomId,
+        account_id: AccountId,
+    ) -> AppResult<ZoneRoomState>;
 }
 
 // -----------------------------------------------------------------------------------------------
@@ -158,9 +183,7 @@ pub struct DbBackend {
 }
 
 impl DbBackend {
-    pub fn new(
-        db: Arc<Db>,
-    ) -> Self {
+    pub fn new(db: Arc<Db>) -> Self {
         Self { db }
     }
 }
@@ -255,16 +278,22 @@ impl ZoneUnitOfWork for DbUow {
         // 1) validate and apply room decrements (with row lock)
         for (room_id, obj_id, need) in &self.pending.decs {
             // SELECT qty FOR UPDATE to lock row
-            let row = tx.query_opt(
-                "SELECT qty FROM zone_room_qty
+            let row = tx
+                .query_opt(
+                    "SELECT qty FROM zone_room_qty
                  WHERE zone_id = $1 AND room_id = $2 AND obj_id = $3
                  FOR UPDATE",
-                &[&self.zone_id, room_id, obj_id],
-            ).await.map_err(DbError::from)?;
+                    &[&self.zone_id, room_id, obj_id],
+                )
+                .await
+                .map_err(DbError::from)?;
             let have: i32 = row.as_ref().map(|r| r.get(0)).unwrap_or(0);
             if have < *need {
                 return Err(DomainError::InsufficientQuantity {
-                    room_id: *room_id, obj_id: *obj_id, have, need: *need
+                    room_id: *room_id,
+                    obj_id: *obj_id,
+                    have,
+                    need: *need,
                 });
             }
             // UPDATE existing row (we know it exists when have>0; if have==0 & need==0, skip)
@@ -274,7 +303,9 @@ impl ZoneUnitOfWork for DbUow {
                     SET qty = qty - $4
                     WHERE zone_id = $1 AND room_id = $2 AND obj_id = $3",
                     &[&self.zone_id, room_id, obj_id, need],
-                ).await.map_err(DbError::from)?;
+                )
+                .await
+                .map_err(DbError::from)?;
             }
         }
 
@@ -287,7 +318,9 @@ impl ZoneUnitOfWork for DbUow {
                 ON CONFLICT (account_id, zone_id)
                 DO UPDATE SET coins = account_zone_state.coins + EXCLUDED.coins",
                 &[acct, &self.zone_id, amt],
-            ).await.map_err(DbError::from)?;
+            )
+            .await
+            .map_err(DbError::from)?;
         }
 
         // 3) apply health deltas
@@ -298,7 +331,9 @@ impl ZoneUnitOfWork for DbUow {
                 ON CONFLICT (account_id, zone_id)
                 DO UPDATE SET health = account_zone_state.health + EXCLUDED.health",
                 &[acct, &self.zone_id, d],
-            ).await.map_err(DbError::from)?;
+            )
+            .await
+            .map_err(DbError::from)?;
         }
 
         // 4) apply xp deltas
@@ -309,7 +344,9 @@ impl ZoneUnitOfWork for DbUow {
                  ON CONFLICT (account_id, zone_id)
                  DO UPDATE SET xp = account_zone_state.xp + EXCLUDED.xp",
                 &[acct, &self.zone_id, amt],
-            ).await.map_err(DbError::from)?;
+            )
+            .await
+            .map_err(DbError::from)?;
         }
 
         // 5) apply item adds (per-account, PER-ZONE inventory)
@@ -320,13 +357,17 @@ impl ZoneUnitOfWork for DbUow {
                  ON CONFLICT (account_id, zone_id, object_id)
                  DO UPDATE SET qty = account_zone_items.qty + EXCLUDED.qty",
                 &[acct, &self.zone_id, obj, qty],
-            ).await.map_err(DbError::from)?;
+            )
+            .await
+            .map_err(DbError::from)?;
             // clamp to >= 0 (delete if <= 0)
             tx.execute(
                 "DELETE FROM account_zone_items
                 WHERE account_id=$1 AND zone_id=$2 AND object_id=$3 AND qty <= 0",
                 &[acct, &self.zone_id, obj],
-            ).await.map_err(DbError::from)?;
+            )
+            .await
+            .map_err(DbError::from)?;
         }
 
         // 6) apply movement (set_current_room) PER ZONE
@@ -337,7 +378,9 @@ impl ZoneUnitOfWork for DbUow {
                  ON CONFLICT (account_id, zone_id)
                  DO UPDATE SET current_room_id = EXCLUDED.current_room_id",
                 &[acct, &self.zone_id, to_room],
-            ).await.map_err(DbError::from)?;
+            )
+            .await
+            .map_err(DbError::from)?;
         }
 
         // // 7) audit travels (optional)
@@ -395,13 +438,22 @@ pub struct MemoryBackend {
     zones: DashMap<ZoneId, Arc<MemZone>>,
 }
 
+impl Default for MemoryBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryBackend {
     pub fn new() -> Self {
         Self { zones: DashMap::new() }
     }
 
     fn zone(&self, id: ZoneId) -> Arc<MemZone> {
-        self.zones.entry(id).or_insert_with(|| Arc::new(MemZone::default())).clone()
+        self.zones
+            .entry(id)
+            .or_insert_with(|| Arc::new(MemZone::default()))
+            .clone()
     }
 }
 
@@ -420,23 +472,32 @@ struct MemZone {
 #[derive(Clone, Debug, Default)]
 struct RawState {
     room_qty: Vec<(ObjectId, i32)>,
+    #[allow(unused)]
     coins: i32,
+    #[allow(unused)]
     health: i32,
+    #[allow(unused)]
     xp: i32,
+    #[allow(unused)]
     items: Vec<(ObjectId, i32)>,
+    #[allow(unused)]
     current_room: Option<RoomId>,
 }
 
 #[async_trait]
 impl ZoneState for MemoryBackend {
     async fn begin(&self, zone_ctx: &ZoneContext) -> DbResult<Box<dyn ZoneUnitOfWork>> {
-        Ok(Box::new(MemUow { z: self.zone(zone_ctx.zone.id), pending: Default::default() }))
+        Ok(Box::new(MemUow {
+            z: self.zone(zone_ctx.zone.id),
+            pending: Default::default(),
+        }))
     }
 
     async fn zone_room_state(
-        &self, zone_ctx: &ZoneContext,
+        &self,
+        zone_ctx: &ZoneContext,
         room_id: RoomId,
-        account_id: AccountId
+        account_id: AccountId,
     ) -> AppResult<ZoneRoomState> {
         let z = self.zone(zone_ctx.zone.id);
 
@@ -453,14 +514,12 @@ impl ZoneState for MemoryBackend {
         let health = z.health.get(&account_id).map(|v| *v).unwrap_or(0);
         let xp = z.xp.get(&account_id).map(|v| *v).unwrap_or(0);
         let current_room = z.current_room.get(&account_id).map(|v| *v);
-        let items = z.items.iter()
+        let items = z
+            .items
+            .iter()
             .filter_map(|e| {
                 let ((acct, obj), qty) = (*e.key(), *e.value());
-                if acct == account_id {
-                    Some((obj, qty))
-                } else {
-                    None
-                }
+                if acct == account_id { Some((obj, qty)) } else { None }
             })
             .collect::<Vec<_>>();
 
@@ -487,7 +546,7 @@ struct Pending {
     xp_adds: Vec<(AccountId, i32)>,
 
     moves: Vec<(AccountId, RoomId)>,
-    travels: Vec<(AccountId, RoomId, RoomId)>
+    travels: Vec<(AccountId, RoomId, RoomId)>,
 }
 
 struct MemUow {
@@ -504,7 +563,12 @@ impl ZoneUnitOfWork for MemUow {
         for (room, obj, qty) in &self.pending.decs {
             let cur = self.z.room_qty.get(&(*room, *obj)).map(|v| *v).unwrap_or(0);
             if cur < *qty {
-                return Err(DomainError::InsufficientQuantity { room_id: *room, obj_id: *obj, have: cur, need: *qty });
+                return Err(DomainError::InsufficientQuantity {
+                    room_id: *room,
+                    obj_id: *obj,
+                    have: cur,
+                    need: *qty,
+                });
             }
         }
         // apply decs
@@ -538,7 +602,9 @@ impl ZoneUnitOfWork for MemUow {
         Ok(())
     }
 
-    async fn rollback(self: Box<Self>) -> AppResult<()> { Ok(()) }
+    async fn rollback(self: Box<Self>) -> AppResult<()> {
+        Ok(())
+    }
 
     async fn update_inventory(&mut self, room_id: RoomId, obj: ObjectId, qty: i32) -> AppResult<bool> {
         self.pending.decs.push((room_id, obj, qty));
@@ -571,15 +637,19 @@ impl ZoneUnitOfWork for MemUow {
     }
 }
 
-
 fn compose_zone_room_state(
     _zone_ctx: &ZoneContext,
     room_id: RoomId,
     _account_id: AccountId,
-    raw: RawState
+    raw: RawState,
 ) -> ZoneRoomState {
     let room_qty: HashMap<ObjectId, i32> = raw.room_qty.into_iter().collect();
-    let discovered_objs: HashSet<ObjectId> = raw.items.into_iter().filter(|(_obj, qty)| *qty > 0).map(|(obj, _qty)| obj).collect();
+    let discovered_objs: HashSet<ObjectId> = raw
+        .items
+        .into_iter()
+        .filter(|(_obj, qty)| *qty > 0)
+        .map(|(obj, _qty)| obj)
+        .collect();
 
     ZoneRoomState {
         // zone_id: zone_ctx.zone.id,
@@ -593,4 +663,5 @@ fn compose_zone_room_state(
         // trail: vec![], // TODO
         all_objects: room_qty,
         discovered_objects: discovered_objs,
-    }}
+    }
+}

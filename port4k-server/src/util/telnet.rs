@@ -35,6 +35,12 @@ pub struct TelnetMachine {
     sb_buf: Vec<u8>,
 }
 
+impl Default for TelnetMachine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TelnetMachine {
     pub fn new() -> Self {
         Self {

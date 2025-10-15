@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
+use std::sync::Arc;
 
 pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();
@@ -15,7 +15,13 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
     let title = &intent.args[3];
     let account_id = ctx.account_id()?;
 
-    if ctx.registry.services.blueprint.new_blueprint(bp, title, account_id).await? {
+    if ctx
+        .registry
+        .services
+        .blueprint
+        .new_blueprint(bp, title, account_id)
+        .await?
+    {
         out.append(format!("[bp] created `{}`: {}\n", bp, title).as_str());
         out.success();
     } else {

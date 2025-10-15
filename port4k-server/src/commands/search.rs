@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::{Intent, NounPhrase};
+use std::sync::Arc;
 
 pub async fn search(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();
@@ -8,7 +8,7 @@ pub async fn search(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOu
     if let Some(noun) = intent.direct {
         // look at object
         match handle_search_object(ctx, noun, &mut out).await {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 out.append(format!("Error searching object: {}", e).as_str());
                 out.failure();
@@ -17,7 +17,7 @@ pub async fn search(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOu
     } else {
         // look around
         match handle_search_room(ctx, &mut out).await {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 out.append(format!("Error searching room: {}", e).as_str());
                 out.failure();
@@ -43,7 +43,7 @@ async fn handle_search_object(ctx: Arc<CmdCtx>, noun: NounPhrase, out: &mut Comm
 
 async fn handle_search_room(ctx: Arc<CmdCtx>, out: &mut CommandOutput) -> anyhow::Result<()> {
     let _rv = ctx.room_view()?;
-    out.append(format!("You search the area but find nothing of interest.").as_str());
+    out.append("You search the area but find nothing of interest.".to_string().as_str());
     out.success();
 
     Ok(())

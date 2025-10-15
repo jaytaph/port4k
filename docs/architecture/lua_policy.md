@@ -13,11 +13,11 @@ Lua is for *behavior*, not for persistence or I/O.
 
 ## Invocation policy
 
-| Mode | Unknown verbs | Hooks | Write target |
-|------|----------------|-------|--------------|
-| Playtest | Allowed – forwarded to Lua | `on_command_playtest`, `on_enter_playtest` | Ephemeral |
-| Live | Disallowed (→ “Unknown command”) | `on_command`, `on_enter` | Persistent |
-| Draft/Test | Allowed | Both | Ephemeral |
+| Mode       | Unknown verbs                    | Hooks                                      | Write target |
+|------------|----------------------------------|--------------------------------------------|--------------|
+| Playtest   | Allowed – forwarded to Lua       | `on_command_playtest`, `on_enter_playtest` | Ephemeral    |
+| Live       | Disallowed (→ “Unknown command”) | `on_command`, `on_enter`                   | Persistent   |
+| Draft/Test | Allowed                          | Both                                       | Ephemeral    |
 
 ## Error handling
 - **Playtest:** return the error to the user.

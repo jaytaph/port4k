@@ -3,11 +3,9 @@ use std::sync::Arc;
 use tokio::runtime::Handle;
 
 use port4k_server::{
-    config,
-    db,
+    Registry, config, db,
     lua::start_lua_worker,
-    net::{telnet, http},
-    Registry,
+    net::{http, telnet},
 };
 
 #[tokio::main]
@@ -53,7 +51,8 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn spawn_background_tasks(registry: Arc<port4k_server::Registry>) {
+#[allow(unused)]
+fn spawn_background_tasks(registry: Arc<Registry>) {
     let db_for_spawn = registry.db.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_millis(1000));
@@ -71,7 +70,11 @@ fn init_tracing() {
 
     tracing_subscriber::registry()
         .with(EnvFilter::from_default_env().add_directive("port4k=debug".parse().unwrap()))
-        .with(tracing_subscriber::fmt::layer().with_target(false).with_timer(tracing_subscriber::fmt::time::uptime()))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_target(false)
+                .with_timer(tracing_subscriber::fmt::time::uptime()),
+        )
         .with(tracing_error::ErrorLayer::default())
         .init();
 }

@@ -1,13 +1,13 @@
-use uuid::Uuid;
-use std::collections::HashMap;
-use std::sync::Arc;
-use postgres_types::Json;
-use crate::db::{Db, DbResult};
 use crate::db::error::DbError;
+use crate::db::repo::room::{BlueprintAndRoomKey, RoomRepo};
+use crate::db::{Db, DbResult};
 use crate::models::blueprint::Blueprint;
 use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts};
-use crate::db::repo::room::{BlueprintAndRoomKey, RoomRepo};
 use crate::models::types::{AccountId, BlueprintId, ObjectId, RoomId, ScriptSource};
+use postgres_types::Json;
+use std::collections::HashMap;
+use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct RoomRepository {
     pub db: Arc<Db>,
@@ -21,21 +21,23 @@ impl RoomRepository {
     async fn get_draft_scripts(&self, room_id: RoomId) -> DbResult<RoomScripts> {
         let client = self.db.get_client().await?;
 
-        let rows = client.query(
-            r#"
+        let rows = client
+            .query(
+                r#"
             SELECT event, source
             FROM bp_scripts_draft
             WHERE room_id = $1 AND event IN ('on_enter', 'on_command')
             "#,
-            &[&room_id.0],
-        ).await?;
+                &[&room_id.0],
+            )
+            .await?;
 
         let mut s = RoomScripts::default();
         for r in rows {
             let event: String = r.get(0);
             let source: String = r.get(1);
             match event.as_str() {
-                "on_enter"   => s.on_enter_lua = Some(source),
+                "on_enter" => s.on_enter_lua = Some(source),
                 "on_command" => s.on_command_lua = Some(source),
                 _ => {}
             }
@@ -49,14 +51,16 @@ impl RoomRepo for RoomRepository {
     async fn blueprint_by_key(&self, bp_key: &str) -> DbResult<Blueprint> {
         let client = self.db.get_client().await?;
 
-        let row = client.query_one(
-            r#"
+        let row = client
+            .query_one(
+                r#"
             SELECT id, key, title, owner_id, entry_room_id, status, created_at
             FROM blueprints
             WHERE key = $1
             "#,
-            &[&bp_key],
-        ).await?;
+                &[&bp_key],
+            )
+            .await?;
 
         Blueprint::try_from_row(&row)
     }
@@ -64,14 +68,16 @@ impl RoomRepo for RoomRepository {
     async fn room_by_id(&self, bp_id: BlueprintId, room_id: RoomId) -> DbResult<BlueprintRoom> {
         let client = self.db.get_client().await?;
 
-        let row = client.query_one(
-            r#"
+        let row = client
+            .query_one(
+                r#"
             SELECT r.id, r.bp_id, r.key, r.title, r.body, r.lockdown, r.short, r.hints, r.scripts
             FROM bp_rooms r
             WHERE r.id = $1 AND r.bp_id = $2
             "#,
-            &[&room_id.0, &bp_id.0],
-        ).await?;
+                &[&room_id.0, &bp_id.0],
+            )
+            .await?;
 
         BlueprintRoom::try_from_row(&row)
     }
@@ -79,15 +85,17 @@ impl RoomRepo for RoomRepository {
     async fn room_by_key(&self, key: &BlueprintAndRoomKey) -> DbResult<BlueprintRoom> {
         let client = self.db.get_client().await?;
 
-        let row = client.query_one(
-            r#"
+        let row = client
+            .query_one(
+                r#"
             SELECT r.id, r.bp_id, r.key, r.title, r.body, r.lockdown, r.short, r.hints, r.scripts
             FROM bp_rooms r
             JOIN blueprints bp ON bp.id = r.bp_id
             WHERE bp.key = $1 AND r.key = $2
             "#,
-            &[&key.bp_key, &key.room_key],
-        ).await?;
+                &[&key.bp_key, &key.room_key],
+            )
+            .await?;
 
         BlueprintRoom::try_from_row(&row)
     }
@@ -110,15 +118,17 @@ impl RoomRepo for RoomRepository {
     async fn room_exits(&self, room_id: RoomId) -> DbResult<Vec<RoomExitRow>> {
         let client = self.db.get_client().await?;
 
-        let rows = client.query(
-            r#"
+        let rows = client
+            .query(
+                r#"
             SELECT from_room_id, dir, to_room_id, locked, description, visible_when_locked
             FROM bp_exits
             WHERE from_room_id = $1
             ORDER BY dir
             "#,
-            &[&room_id.0],
-        ).await?;
+                &[&room_id.0],
+            )
+            .await?;
 
         let exits = rows
             .iter()
@@ -130,25 +140,29 @@ impl RoomRepo for RoomRepository {
     async fn room_objects(&self, room_id: RoomId) -> DbResult<Vec<RoomObject>> {
         let client = self.db.get_client().await?;
 
-        let obj_rows = client.query(
-            r#"
+        let obj_rows = client
+            .query(
+                r#"
             SELECT id, room_id, name, short, description, examine, state, use_lua, position
             FROM bp_objects
             WHERE room_id = $1
             ORDER BY COALESCE(position, 0), name
             "#,
-            &[&room_id.0],
-        ).await?;
+                &[&room_id.0],
+            )
+            .await?;
 
         // Gather nouns in one go
-        let noun_rows = client.query(
-            r#"
+        let noun_rows = client
+            .query(
+                r#"
             SELECT room_id, obj_id, noun
             FROM bp_object_nouns
             WHERE room_id = $1
             "#,
-            &[&room_id.0],
-        ).await?;
+                &[&room_id.0],
+            )
+            .await?;
 
         let mut nouns_by_obj: HashMap<Uuid, Vec<String>> = HashMap::new();
         for r in noun_rows {
@@ -157,32 +171,35 @@ impl RoomRepo for RoomRepository {
             nouns_by_obj.entry(obj_id).or_default().push(noun);
         }
 
-        let objects = obj_rows.into_iter().map(|r| {
-            let id: Uuid = r.get(0);
+        let objects = obj_rows
+            .into_iter()
+            .map(|r| {
+                let id: Uuid = r.get(0);
 
-            let state_json: Option<Json<Vec<String>>> = r.get(6);
-            let state: Vec<String> = state_json.map(|j| j.0).unwrap_or_default();
+                let state_json: Option<Json<Vec<String>>> = r.get(6);
+                let state: Vec<String> = state_json.map(|j| j.0).unwrap_or_default();
 
-            RoomObject {
-                id: ObjectId::from_uuid(id),
-                name: r.get(2),
-                short: r.get(3),
-                description: r.get(4),
-                examine: r.get(5),
-                state,
-                use_lua: r.get(7),
-                position: r.get(8),
-                nouns: nouns_by_obj.remove(&id).unwrap_or_default(),
-                initial_qty: None,
-                qty: None,
-                locked: false,
-                revealed: false,
-                takeable: false,
-                stackable: false,
-                is_coin: false,
-                discovery: crate::models::room::Discovery::Visible,
-            }
-        }).collect();
+                RoomObject {
+                    id: ObjectId::from_uuid(id),
+                    name: r.get(2),
+                    short: r.get(3),
+                    description: r.get(4),
+                    examine: r.get(5),
+                    state,
+                    use_lua: r.get(7),
+                    position: r.get(8),
+                    nouns: nouns_by_obj.remove(&id).unwrap_or_default(),
+                    initial_qty: None,
+                    qty: None,
+                    locked: false,
+                    revealed: false,
+                    takeable: false,
+                    stackable: false,
+                    is_coin: false,
+                    discovery: crate::models::room::Discovery::Visible,
+                }
+            })
+            .collect();
 
         Ok(objects)
     }
@@ -191,7 +208,7 @@ impl RoomRepo for RoomRepository {
         let client = self.db.get_client().await?;
 
         let (table, enter_col, cmd_col) = match src {
-            ScriptSource::Live  => ("bp_room_scripts", "on_enter_lua", "on_command_lua"),
+            ScriptSource::Live => ("bp_room_scripts", "on_enter_lua", "on_command_lua"),
             ScriptSource::Draft => {
                 // Draft is per-event; fetch both rows and merge.
                 // We’ll do a small UNION query to return both in one pass.
@@ -199,10 +216,17 @@ impl RoomRepo for RoomRepository {
             }
         };
 
-        let row_opt = client.query_opt(
-            &format!("SELECT {enter}, {cmd} FROM {table} WHERE room_id = $1", enter = enter_col, cmd = cmd_col, table = table),
-            &[&room_id.0],
-        ).await?;
+        let row_opt = client
+            .query_opt(
+                &format!(
+                    "SELECT {enter}, {cmd} FROM {table} WHERE room_id = $1",
+                    enter = enter_col,
+                    cmd = cmd_col,
+                    table = table
+                ),
+                &[&room_id.0],
+            )
+            .await?;
 
         if let Some(r) = row_opt {
             Ok(RoomScripts {
@@ -217,14 +241,16 @@ impl RoomRepo for RoomRepository {
     async fn room_kv(&self, room_id: RoomId) -> DbResult<RoomKv> {
         let client = self.db.get_client().await?;
 
-        let rows = client.query(
-            r#"
+        let rows = client
+            .query(
+                r#"
             SELECT key, value
             FROM bp_room_kv
             WHERE room_id = $1
             "#,
-            &[&room_id.0],
-        ).await?;
+                &[&room_id.0],
+            )
+            .await?;
 
         let kv = rows
             .into_iter()
@@ -242,8 +268,9 @@ impl RoomRepo for RoomRepository {
     async fn set_entry(&self, key: &BlueprintAndRoomKey) -> DbResult<bool> {
         let c = self.db.get_client().await?;
 
-        let n = c.execute(
-            r#"
+        let n = c
+            .execute(
+                r#"
             UPDATE blueprints AS b
             SET entry_room_id = r.id
             FROM bp_rooms AS r
@@ -251,13 +278,19 @@ impl RoomRepo for RoomRepository {
                 AND r.key = $2
                 AND r.bp_id = b.id
             "#,
-            &[&key.bp_key, &key.room_key],
-        ).await?;
+                &[&key.bp_key, &key.room_key],
+            )
+            .await?;
 
         Ok(n == 1)
     }
 
-    async fn add_exit(&self, from_key: &BlueprintAndRoomKey, dir: &str, to_key: &BlueprintAndRoomKey) -> DbResult<bool> {
+    async fn add_exit(
+        &self,
+        from_key: &BlueprintAndRoomKey,
+        dir: &str,
+        to_key: &BlueprintAndRoomKey,
+    ) -> DbResult<bool> {
         if from_key.bp_key != to_key.bp_key {
             return Err(DbError::Validation("from/to must be in the same blueprint".into()));
         }
@@ -265,8 +298,9 @@ impl RoomRepo for RoomRepository {
         let dir = dir.to_lowercase();
 
         let c = self.db.get_client().await?;
-        let n = c.execute(
-            r#"
+        let n = c
+            .execute(
+                r#"
             INSERT INTO bp_exits (from_room_id, dir, to_room_id, locked, description, visible_when_locked)
             SELECT fr.id, $3, tr.id, false, '', false
             FROM bp_rooms AS fr
@@ -276,8 +310,9 @@ impl RoomRepo for RoomRepository {
             ON CONFLICT (from_room_id, dir)
             DO UPDATE SET to_room_id = EXCLUDED.to_room_id
             "#,
-            &[&from_key.bp_key, &from_key.room_key, &dir, &to_key.room_key],
-        ).await?;
+                &[&from_key.bp_key, &from_key.room_key, &dir, &to_key.room_key],
+            )
+            .await?;
 
         Ok(n == 1)
     }
@@ -285,7 +320,9 @@ impl RoomRepo for RoomRepository {
     async fn set_locked(&self, key: &BlueprintAndRoomKey, locked: bool) -> DbResult<bool> {
         let c = self.db.get_client().await?;
 
-        let n = c.execute(r#"
+        let n = c
+            .execute(
+                r#"
             UPDATE bp_rooms AS r
             SET locked = $3
             FROM blueprints AS bp
@@ -293,8 +330,9 @@ impl RoomRepo for RoomRepository {
                 AND bp.key = $1
                 AND r.key = $2
             "#,
-            &[&key.bp_key, &key.room_key, &locked],
-            ).await?;
+                &[&key.bp_key, &key.room_key, &locked],
+            )
+            .await?;
 
         Ok(n == 1)
     }
@@ -302,29 +340,27 @@ impl RoomRepo for RoomRepository {
     async fn insert_blueprint(&self, bp_key: &str, title: &str, account_id: AccountId) -> DbResult<bool> {
         let c = self.db.get_client().await?;
 
-        let n = c.execute(
-            r#"
+        let n = c
+            .execute(
+                r#"
             INSERT INTO blueprints (key, title, owner_id, status)
             VALUES ($1, $2, $3, 'draft')
             ON CONFLICT (key) DO NOTHING
             "#,
-            &[&bp_key, &title, &account_id],
-        ).await?;
+                &[&bp_key, &title, &account_id],
+            )
+            .await?;
 
         Ok(n == 1)
     }
 
-    async fn insert_room(
-        &self,
-        key: &BlueprintAndRoomKey,
-        title: &str,
-        body: &str,
-    ) -> DbResult<bool> {
+    async fn insert_room(&self, key: &BlueprintAndRoomKey, title: &str, body: &str) -> DbResult<bool> {
         let c = self.db.get_client().await?;
 
         // Insert only if the blueprint exists; ignore if (bp_id, key) already exists.
-        let n = c.execute(
-            r#"
+        let n = c
+            .execute(
+                r#"
             INSERT INTO bp_rooms (bp_id, key, title, body, locked, short, hints, scripts)
             SELECT b.id, $2, $3, $4,
                 false,
@@ -335,24 +371,26 @@ impl RoomRepo for RoomRepository {
             WHERE b.key = $1
             ON CONFLICT (bp_id, key) DO NOTHING
             "#,
-            &[&key.bp_key, &key.room_key, &title, &body],
-        ).await?;
+                &[&key.bp_key, &key.room_key, &title, &body],
+            )
+            .await?;
 
         Ok(n == 1)
     }
 
-
     async fn submit(&self, bp_key: &str) -> DbResult<bool> {
         let c = self.db.get_client().await?;
 
-        let n = c.execute(
-            r#"
+        let n = c
+            .execute(
+                r#"
             UPDATE blueprints
             SET status = 'pending'
             WHERE key = $1 AND status = 'draft'
             "#,
-            &[&bp_key],
-        ).await?;
+                &[&bp_key],
+            )
+            .await?;
 
         Ok(n == 1)
     }

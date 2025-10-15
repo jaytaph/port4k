@@ -1,11 +1,11 @@
 #![allow(unused)]
 
-use std::sync::Arc;
-use crate::models::blueprint::Blueprint;
 use crate::db::repo::room::{BlueprintAndRoomKey, RoomRepo};
 use crate::error::AppResult;
+use crate::models::blueprint::Blueprint;
 use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts, RoomView};
 use crate::models::types::{AccountId, BlueprintId, RoomId, ScriptSource};
+use std::sync::Arc;
 
 pub struct BlueprintService {
     repo: Arc<dyn RoomRepo>,
@@ -52,7 +52,12 @@ impl BlueprintService {
     }
 
     /// Adds an exit from one room to another in a blueprint.
-    pub async fn add_exit(&self, from_key: &BlueprintAndRoomKey, dir: &str, to_key: &BlueprintAndRoomKey) -> AppResult<bool> {
+    pub async fn add_exit(
+        &self,
+        from_key: &BlueprintAndRoomKey,
+        dir: &str,
+        to_key: &BlueprintAndRoomKey,
+    ) -> AppResult<bool> {
         let res = self.repo.add_exit(from_key, dir, to_key).await?;
         Ok(res)
     }

@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use parking_lot::RwLock;
+use crate::Session;
 use crate::models::room::RoomView;
 use crate::renderer::RenderVars;
-use crate::Session;
+use parking_lot::RwLock;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Returns a list of variables available for rendering templates.
 pub fn generate_render_vars(sess: Arc<RwLock<Session>>, rv: Option<&RoomView>) -> RenderVars {
@@ -17,8 +17,14 @@ fn get_global_vars(sess: Arc<RwLock<Session>>) -> HashMap<String, String> {
     let mut vars = HashMap::new();
 
     // Generic vars not tied to account or location
-    vars.insert("wall_time".to_string(), chrono::Local::now().format("%H:%M:%S").to_string());
-    vars.insert("online_time".to_string(), format!("{}", sess.read().session_started.elapsed().as_secs()));
+    vars.insert(
+        "wall_time".to_string(),
+        chrono::Local::now().format("%H:%M:%S").to_string(),
+    );
+    vars.insert(
+        "online_time".to_string(),
+        format!("{}", sess.read().session_started.elapsed().as_secs()),
+    );
     vars.insert("online_users".to_string(), format!("{}", 123));
     vars.insert("unread_messages".to_string(), format!("{}", 0));
     vars.insert("active_quests".to_string(), format!("{}", 0));
@@ -54,7 +60,14 @@ fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
         dirs.join(", ")
     };
     vars.insert("exits_line".to_string(), exits_line);
-    vars.insert("exits".to_string(), rv.exits.iter().map(|e| e.dir.to_string()).collect::<Vec<String>>().join(", "));
+    vars.insert(
+        "exits".to_string(),
+        rv.exits
+            .iter()
+            .map(|e| e.dir.to_string())
+            .collect::<Vec<String>>()
+            .join(", "),
+    );
 
     // Add objects
     let objs: Vec<String> = rv.objects.iter().map(|o| o.name.to_string()).collect();
@@ -64,7 +77,14 @@ fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
         objs.join(", ")
     };
     vars.insert("items_line".to_string(), objs_line);
-    vars.insert("items".to_string(), rv.objects.iter().map(|o| o.name.to_string()).collect::<Vec<String>>().join(", "));
+    vars.insert(
+        "items".to_string(),
+        rv.objects
+            .iter()
+            .map(|o| o.name.to_string())
+            .collect::<Vec<String>>()
+            .join(", "),
+    );
 
     vars
 }

@@ -96,10 +96,8 @@ impl LineEditor {
         if line.trim().is_empty() {
             return;
         }
-        if self.cfg.dedup_consecutive_history {
-            if self.history.last().map_or(false, |h| h == &line) {
-                return;
-            }
+        if self.cfg.dedup_consecutive_history && self.history.last() == Some(&line) {
+            return;
         }
         self.history.push(line);
         self.trim_history();
@@ -251,12 +249,12 @@ impl LineEditor {
         if s.starts_with(b"\x1b[") {
             if let Some(&last) = s.last() {
                 let is_final = (last.is_ascii_alphabetic()) || last == b'~';
-                if is_final {
+                return if is_final {
                     self.esc.clear();
-                    return EditEvent::None;
+                    EditEvent::None
                 } else {
-                    return EditEvent::None; // keep accumulating
-                }
+                    EditEvent::None // keep accumulating
+                };
             }
             return EditEvent::None;
         }
