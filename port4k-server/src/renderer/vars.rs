@@ -63,8 +63,8 @@ fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
     } else {
         objs.join(", ")
     };
-    vars.insert("objects_line".to_string(), objs_line);
-    vars.insert("objects".to_string(), rv.objects.iter().map(|o| o.name.to_string()).collect::<Vec<String>>().join(", "));
+    vars.insert("items_line".to_string(), objs_line);
+    vars.insert("items".to_string(), rv.objects.iter().map(|o| o.name.to_string()).collect::<Vec<String>>().join(", "));
 
     vars
 }

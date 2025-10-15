@@ -11,7 +11,7 @@ use crate::renderer::{render_template, RenderVars};
 use crate::renderer::room_view::render_room_view;
 
 const MOTD: &'static str = r#"
-====================  PORT4K  ====================
+==============  PORT4K INCOMING MESSAGE =================
 Welcome back, {c:yellow}{v:account.name}{c}!  (last login: {v:last_login})
 Server time: {c:white}{v:wall_time}{c}
 Location: {c:white:bold}{v:cursor.zone} - {v:cursor.room.title}{c}
@@ -31,7 +31,9 @@ Tips:
 Exits from here: {c:blue:bold}{v:room.exits_line}{c}
 
 Enjoy your stay, {v:account.role} {v:account.name}.
-=================================================
+
+====================  END OF MESSAGE ====================
+
 "#;
 
 pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {

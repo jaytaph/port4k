@@ -1,5 +1,5 @@
 use std::{io, pin::Pin, task::{Context, Poll}, time::Duration};
-use tokio::io::{AsyncWrite, AsyncWriteExt};
+use tokio::io::AsyncWrite;
 use tokio::time::{sleep, Sleep};
 
 pub enum Pace {
@@ -28,32 +28,23 @@ impl<W> SlowWriter<W> {
         }
     }
 
-    /// Temporarily disable pacing for the duration of the guard.
-    pub fn pause_pacing(&mut self) -> PacingGuard<'_, W> {
-        let was = self.pacing_enabled;
-        self.set_pacing(false);
-        PacingGuard { w: self, prev: was }
-    }
-
-    /// Convenience: write immediately (no pacing) for prompts/status lines.
-    pub async fn write_all_fast(&mut self, buf: &[u8]) -> io::Result<()>
-    where
-        W: AsyncWrite + Unpin,
-    {
-        let _g = self.pause_pacing();
-        self.inner.write_all(buf).await
-    }
+    // /// Temporarily disable pacing for the duration of the guard.
+    // pub fn pause_pacing(&mut self) -> PacingGuard<'_, W> {
+    //     let was = self.pacing_enabled;
+    //     self.set_pacing(false);
+    //     PacingGuard { w: self, prev: was }
+    // }
 }
 
-pub struct PacingGuard<'a, W> {
-    w: &'a mut SlowWriter<W>,
-    prev: bool,
-}
-impl<'a, W> Drop for PacingGuard<'a, W> {
-    fn drop(&mut self) {
-        self.w.set_pacing(self.prev);
-    }
-}
+// pub struct PacingGuard<'a, W> {
+//     w: &'a mut SlowWriter<W>,
+//     prev: bool,
+// }
+// impl<'a, W> Drop for PacingGuard<'a, W> {
+//     fn drop(&mut self) {
+//         self.w.set_pacing(self.prev);
+//     }
+// }
 
 impl<W: AsyncWrite + Unpin> AsyncWrite for SlowWriter<W> {
     fn poll_write(
@@ -102,7 +93,6 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for SlowWriter<W> {
     }
 }
 
-// --- your existing helpers (with ASCII-art line handling) ---
 fn next_chunk_len(buf: &[u8], pace: &Pace) -> usize {
     if let Some(len) = ansi_prefix_len(buf) { return len.max(1); }
 

@@ -22,9 +22,9 @@ pub async fn handle_connection(
     sess: Arc<RwLock<Session>>,
 ) -> AppResult<()> {
     // Split stream into read/write halves and wrap write half to ensure CRLF outputs.
-    let (r, mut w) = stream.into_split();
-    let mut crlf_w = &mut CrlfWriter::new(&mut w);
-    let mut writer = SlowWriter::new(&mut crlf_w, Pace::PerWord { delay: Duration::from_millis(15) });
+    let (r, w) = stream.into_split();
+    let crlf_w = CrlfWriter::new(w);
+    let mut writer = SlowWriter::new(crlf_w, Pace::PerWord { delay: Duration::from_millis(1) });
 
     let mut reader = BufReader::new(r);
     let mut editor = LineEditor::new("> ");
@@ -38,7 +38,7 @@ pub async fn handle_connection(
 }
 
 async fn start_session<W: AsyncWrite + Unpin>(
-    w: &mut W,
+    w: &mut SlowWriter<W>,
     telnet: &mut TelnetMachine,
     editor: &mut LineEditor,
     sess: Arc<RwLock<Session>>,
@@ -66,7 +66,7 @@ async fn start_session<W: AsyncWrite + Unpin>(
 
 async fn read_loop<W: AsyncWrite + Unpin>(
     reader: &mut BufReader<OwnedReadHalf>,
-    w: &mut W,
+    w: &mut SlowWriter<W>,
     telnet: &mut TelnetMachine,
     editor: &mut LineEditor,
     ctx: Arc<AppCtx>,
@@ -110,7 +110,7 @@ async fn cleanup(sess: Arc<RwLock<Session>>, registry: Arc<Registry>) {
 async fn handle_data_byte<W: AsyncWrite + Unpin>(
     b: u8,
     reader: &mut BufReader<OwnedReadHalf>,
-    w: &mut W,
+    w: &mut SlowWriter<W>,
     telnet: &mut TelnetMachine,
     editor: &mut LineEditor,
     sess: Arc<RwLock<Session>>,
@@ -202,7 +202,7 @@ enum LoginOutcome {
 async fn try_handle_login<W: AsyncWrite + Unpin>(
     raw: &str,
     reader: &mut BufReader<OwnedReadHalf>,
-    w: &mut W,
+    w: &mut SlowWriter<W>,
     telnet: &mut TelnetMachine,
     ctx: Arc<AppCtx>,
     sess: Arc<RwLock<Session>>
@@ -232,9 +232,9 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
         write_with_newline(w, b"No such user. Try `register <name> <password>`.").await?;
         return Ok(LoginOutcome::Handled);
     }
-
     w.write_all(b"Password: ").await?;
     w.flush().await?;
+
     let pw = read_secret_line(reader, w, telnet).await?;
 
     if pw.is_empty() {
@@ -247,7 +247,7 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
 
     // // All is ok
     // let Some(account) = state.registry.repos.account.get_by_username(&username).await? else {
-    //     write_with_newline(w, b"Account retrieval error.").await?;
+    //     write_with_newline(w, "Account retrieval error.").await?;
     //     return Ok(LoginOutcome::Handled);
     // };
 
@@ -262,22 +262,28 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
     Ok(LoginOutcome::Handled)
 }
 
-async fn repaint_prompt<W: AsyncWrite + Unpin>(sess: Arc<RwLock<Session>>, w: &mut W, editor: &mut LineEditor, generate_new_prompt: bool) -> std::io::Result<()> {
+async fn repaint_prompt<W: AsyncWrite + Unpin>(
+    sess: Arc<RwLock<Session>>,
+    w: &mut SlowWriter<W>,
+    editor: &mut LineEditor,
+    generate_new_prompt: bool
+) -> std::io::Result<()> {
     if generate_new_prompt {
         let prompt = generate_prompt(sess.clone(), &"{v:account.name:Not logged in} [{v:room:Nowhere}] @ {c:yellow:bold}{v:wall_time}{c} > ");
         editor.set_prompt(&prompt);
     }
 
-    {
-        w.write_all_fast(editor.repaint_line().as_bytes()).await?;
-        w.flush().await
-    }
+    w.set_pacing(false);
+    w.write_all(editor.repaint_line().as_bytes()).await?;
+    w.set_pacing(true);
+    w.flush().await
 }
 
 /// Write text, ensuring it ends in CRLF (good Telnet hygiene)
 async fn write_with_newline<W: AsyncWrite + Unpin>(w: &mut W, bytes: &[u8]) -> std::io::Result<()> {
     w.write_all(bytes).await?;
-    if !bytes.ends_with(b"\n") || !bytes.ends_with(b"\n") {
+
+    if !bytes.ends_with(b"\n") {
         w.write_all(b"\n").await?;
     }
     Ok(())

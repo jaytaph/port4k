@@ -306,7 +306,7 @@ impl RoomView {
         self
     }
 
-    pub fn visible_objects<'a>(&'a self, zr: &'a ZoneRoomState) -> impl Iterator<Item=&RoomObject> + 'a {
+    pub fn visible_objects<'a>(&'a self, zr: &'a ZoneRoomState) -> impl Iterator<Item=&'a RoomObject> + 'a {
         self.objects.iter().filter(|o| is_visible_to(o, self, zr))
     }
 }
@@ -367,6 +367,7 @@ mod tests {
             position: None,
             state: vec![], // blueprint flags already reflected in the booleans below
             nouns: nouns.iter().map(|s| s.to_string()).collect(),
+            discovery: Discovery::Visible,
             initial_qty,
             qty,
             locked,

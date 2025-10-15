@@ -29,9 +29,16 @@ pub enum Token {
 }
 
 #[derive(Clone, Debug)]
+pub enum Alignment {
+    Left,
+    Center,
+    Right,
+}
+
+#[derive(Clone, Debug)]
 pub enum VarFmt {
     // %[-]Ns
-    String { width: Option<u32>, left: bool },
+    String { width: Option<u32>, alignment: Alignment },
     // %0Nd or %Nd
     Int { width: Option<u32>, zero_pad: bool },
 }
@@ -119,7 +126,7 @@ fn parse_token(raw: String, content: String) -> Token {
     }
 }
 
-fn parse_var(raw: String, rest: &str, is_roomvar: bool) -> Token {
+fn parse_var(raw: String, rest: &str, is_room_var: bool) -> Token {
     // we need to split possible trailing |%fmt from the right
     let mut vv = rest.rsplitn(2, '|');
     let right = vv.next().unwrap_or("");
@@ -138,7 +145,7 @@ fn parse_var(raw: String, rest: &str, is_roomvar: bool) -> Token {
     let name = parts.next().unwrap_or("").trim().to_string();
     let default = parts.next().map(|s| s.to_string());
 
-    if is_roomvar {
+    if is_room_var {
         return Token::RoomVar { raw, name, default, fmt };
     }
     Token::Var { raw, name, default, fmt }
@@ -214,11 +221,14 @@ fn parse_format(spec: &str) -> Option<VarFmt> {
     let bytes = spec.as_bytes();
     let mut i = 1;
 
-    let mut left = false;
+    let mut alignment = Alignment::Right;
     let mut zero = false;
 
     if i < bytes.len() && bytes[i] == b'-' {
-        left = true;
+        alignment = Alignment::Left;
+        i += 1;
+    } else if i < bytes.len() && bytes[i] == b'*' {
+        alignment = Alignment::Center;
         i += 1;
     } else if i < bytes.len() && bytes[i] == b'0' {
         zero = true;
@@ -242,7 +252,7 @@ fn parse_format(spec: &str) -> Option<VarFmt> {
     match ty {
         's' => Some(VarFmt::String {
             width: if has_width { Some(width) } else { None },
-            left,
+            alignment,
         }),
         'd' => Some(VarFmt::Int {
             width: if has_width { Some(width) } else { None },

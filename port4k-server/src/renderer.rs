@@ -9,6 +9,7 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 pub use parser::{Token, VarFmt};
 use crate::models::room::RoomView;
+use crate::renderer::parser::Alignment;
 use crate::Session;
 
 #[derive(Default)]
@@ -114,9 +115,9 @@ pub fn render_template_with_opts(template: &str, vars: &RenderVars, opts: &Rende
 fn apply_format(fmt: Option<&VarFmt>, value: &str) -> String {
     match fmt {
         None => value.to_string(),
-        Some(VarFmt::String { width, left }) => {
+        Some(VarFmt::String { width, alignment }) => {
             if let Some(w) = width {
-                pad_string(value, *w as usize, *left)
+                pad_string(value, *w as usize, alignment.clone())
             } else {
                 value.to_string()
             }
@@ -136,22 +137,47 @@ fn apply_format(fmt: Option<&VarFmt>, value: &str) -> String {
     }
 }
 
-fn pad_string(s: &str, width: usize, left: bool) -> String {
+fn pad_string(s: &str, width: usize, alignment: Alignment) -> String {
     if s.len() >= width { return s.to_string(); }
     let pad = width - s.len();
-    if left {
-        // left-align in a field -> pad on the right
-        let mut out = String::with_capacity(width);
-        out.push_str(s);
-        for _ in 0..pad { out.push(' '); }
-        out
-    } else {
-        // right-align -> pad on the left
-        let mut out = String::with_capacity(width);
-        for _ in 0..pad { out.push(' '); }
-        out.push_str(s);
-        out
+    match alignment {
+        Alignment::Center => {
+            let left_pad = pad / 2;
+            let right_pad = pad - left_pad;
+            let mut out = String::with_capacity(width);
+            for _ in 0..left_pad { out.push(' '); }
+            out.push_str(s);
+            for _ in 0..right_pad { out.push(' '); }
+            out
+        }
+        Alignment::Left => {
+            // left-align in a field -> pad on the right
+            let mut out = String::with_capacity(width);
+            out.push_str(s);
+            for _ in 0..pad { out.push(' '); }
+            out
+        }
+        Alignment::Right => {
+            // right-align -> pad on the left
+            let mut out = String::with_capacity(width);
+            for _ in 0..pad { out.push(' '); }
+            out.push_str(s);
+            out
+        }
     }
+    // if left {
+    //     // left-align in a field -> pad on the right
+    //     let mut out = String::with_capacity(width);
+    //     out.push_str(s);
+    //     for _ in 0..pad { out.push(' '); }
+    //     out
+    // } else {
+    //     // right-align -> pad on the left
+    //     let mut out = String::with_capacity(width);
+    //     for _ in 0..pad { out.push(' '); }
+    //     out.push_str(s);
+    //     out
+    // }
 }
 
 #[cfg(test)]

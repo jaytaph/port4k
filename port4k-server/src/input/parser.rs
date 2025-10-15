@@ -363,10 +363,15 @@ fn detect_verb(tokens: &[Token]) -> (Verb, usize, Option<Preposition>, Option<St
 fn verb_map() -> HashMap<&'static str, Verb> {
     use Verb::*;
     let mut m = HashMap::new();
-    // look/examine
-    for k in ["look", "l", "examine", "x", "inspect"].iter() {
+    // look
+    for k in ["look", "l"].iter() {
         m.insert(*k, Look);
     }
+    // examine
+    for k in ["examine", "x", "inspect"].iter() {
+        m.insert(*k, Examine);
+    }
+    m.insert("search", Search);
     // take
     for k in ["take", "get", "grab"].iter() {
         m.insert(*k, Take);

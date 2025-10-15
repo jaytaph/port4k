@@ -15,14 +15,8 @@ pub async fn examine(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandO
             }
         }
     } else {
-        // examine around
-        match handle_examine_room(ctx, &mut out).await {
-            Ok(_) => {},
-            Err(e) => {
-                out.append(format!("Error examining room: {}", e).as_str());
-                out.failure();
-            }
-        }
+        out.append("You must specify what you want to examine.");
+        out.failure();
     }
 
     Ok(out)
@@ -31,20 +25,22 @@ pub async fn examine(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandO
 async fn handle_examine_object(ctx: Arc<CmdCtx>, noun: NounPhrase, out: &mut CommandOutput) -> anyhow::Result<()> {
     let rv = ctx.room_view()?;
     if let Some(obj) = rv.object_by_noun(&noun.head) {
-        out.append(&obj.description);
-        out.success();
-    } else {
-        out.append(format!("You see no {} here to examine.", noun.head).as_str());
-        out.failure();
+        match obj.examine.clone() {
+            None => {
+                out.append(format!("You examine {}, but you find nothing special.", noun.head).as_str());
+                out.success();
+            },
+            Some(message) => {
+                out.append(message.as_str());
+                out.success();
+            }
+        }
+        return Ok(());
+
     }
 
-    Ok(())
-}
-
-async fn handle_examine_room(ctx: Arc<CmdCtx>, out: &mut CommandOutput) -> anyhow::Result<()> {
-    let rv = ctx.room_view()?;
-    out.append(rv.room.body.as_str());
-    out.success();
+    out.append(format!("You see no {} here to examine.", noun.head).as_str());
+    out.failure();
 
     Ok(())
 }

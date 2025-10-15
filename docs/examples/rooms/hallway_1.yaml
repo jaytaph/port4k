@@ -108,7 +108,7 @@ objects:
 
 exits:
   - dir: south
-    to: "entry_hall"
+    to: "entry"
     description: "Back to the phosphor-lit Entry Hall."
     locked: false
     visible_when_locked: true
