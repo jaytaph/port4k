@@ -9,6 +9,8 @@ pub mod telnet;
 pub mod visibility;
 
 pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
+    dbg!(&base);
+    dbg!(subdir);
     let p = Path::new(subdir);
 
     let mut comps = p.components();
