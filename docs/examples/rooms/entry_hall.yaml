@@ -1,64 +1,81 @@
+version: 2
 id: entry
 name: Entry Hall
 short: "A small, quiet room lit by phosphor glow."
-description: |  
-  The room is narrow and still, its curved walls lined with pale panels that pulse faintly with phosphorescent light. 
-  The glow casts long shadows across the floor, where fine dust has gathered in the seams of the metal plates. A faint 
-  hum from hidden conduits echoes in the silence, broken only by the occasional drip of condensation from overhead pipes.
+description: |
+  The room is narrow and still, its curved walls lined with pale panels that pulse faintly
+  with phosphorescent light. The glow casts long shadows across the floor, where fine dust
+  has gathered in the seams of the metal plates. A faint hum from hidden conduits echoes in
+  the silence, broken only by the occasional drip of condensation from overhead pipes.
 o:
-  To the north, a {o:blast_door} blocks further passage. A flickering {o:wall_console} beside it blinks weakly. Near 
-  the corner, a {o:toolkit} lies half-buried in dust. Etched into the wall are faint {o:markings}.
+  To the north, a {o:blast_door} blocks further passage. A flickering {o:wall_console} beside
+  it blinks weakly. Near the corner, a {o:toolkit} lies half-buried in dust. Etched into the
+  wall are faint {o:markings}.
+
+# Free-form room KV available to Lua and UI
+kv:
+  ambience: "low_hum"
+  dust_level: "high"
+
 hints:
-    - "The blast door might be locked; perhaps there's a way to unlock it."
-    - "The console looks damaged but might still be usable."
-    - "The toolkit could contain useful items."
-    - "The markings might provide clues about the room's purpose."
-    - "Check the console for any error messages or prompts."
-    - "Look for any signs of power sources or wiring near the console."
-    - "Examine the toolkit to see what tools are available."
-    - "Try to decipher the markings; they might indicate hazards or instructions."
-    - "Consider using tools from the toolkit to repair or interact with the console."
+  - text: "The blast door might be locked; perhaps there's a way to unlock it."
+    when: first_look
+    once: true
+  - text: "The console looks damaged but might still be usable."
+    when: enter
+    cooldown: 3
+  - text: "The toolkit could contain useful items."
+    when: search
+    once: true
+  - text: "Try: 'enter 4312 on console' after powering it."
+    when: after_fail        # e.g., after a wrong 'enter' attempt
+    cooldown: 2
+
 objects:
   - id: blast_door
     nouns: ["door","blast door"]
     short: "sealed blast door"
     description: "A heavy composite barrier with old scoring along the seams."
+    flags: ["overlay","non_stackable"]   # keeps door visible even if another overlay exists
+    visible: always
     state:
       locked: true
       powered: true
+      revealed: true
+    controls:
+      - exit:north.locked                 # keep exit lock in sync with this door
     examine: "The locking mechanism is intact; manual overrides are scarred but functional."
     use: |
       return function(ctx, verb, _)
+        if verb ~= "open" then return false end
         local locked = ctx:get_object_state("blast_door","locked")
-        if verb == "open" then
-          if locked then
-            ctx:say("The door is locked tight.")
-          else
-            ctx:say("Hydraulics hiss as the blast door slides open.")
-            -- (Your engine handles movement via 'go north'; this is flavor.)
-          end
-          return true
+        if locked then
+          ctx:say("The door is locked tight.")
+        else
+          ctx:say("Hydraulics hiss as the blast door slides open.")
         end
-        return false
+        return true
       end
 
   - id: wall_console
     nouns: ["console","terminal","panel"]
     short: "flickering wall console"
     description: "A recessed maintenance terminal with a cracked display."
+    flags: []
+    visible: always
     state:
       powered: false
       code_required: "4312"
+      revealed: true
     examine: "Power is intermittent; a maintenance login prompt flickers in and out."
     use: |
-      -- Supported player inputs:
+      -- Supported inputs:
       --   use console
       --   power console with <item>
       --   enter <code> on console
       return function(ctx, verb, args)
         local powered = ctx:get_object_state("wall_console","powered")
         if not powered then
-          -- allow: power console with microcell
           if verb == "power" and ctx:has_item("microcell") then
             ctx:set_object_state("wall_console","powered", true)
             ctx:consume_item("microcell")
@@ -69,26 +86,26 @@ objects:
             return true
           end
         end
-      
-        -- when powered: expect a code
+
         if verb == "enter" and #args > 0 then
           local code = table.concat(args, " ")
           local required = ctx:get_object_state("wall_console","code_required") or "4312"
           if code == required then
             ctx:say("Code accepted. Releasing blast door locks.")
-            ctx:set_exit_locked("north", false)                 -- unlock exit
-            ctx:set_object_state("blast_door","locked", false)  -- reflect in object
+            ctx:set_exit_locked("north", false)
+            ctx:set_object_state("blast_door","locked", false)
           else
             ctx:say("ACCESS DENIED.")
+            ctx:hint_trigger("after_fail")    -- lets the engine consider an after_fail hint
           end
           return true
         end
-      
+
         if verb == "use" then
           ctx:say("The console awaits a code. Try: enter <code> on console")
           return true
         end
-      
+
         return false
       end
 
@@ -96,11 +113,16 @@ objects:
     nouns: ["toolkit","tools","case"]
     short: "discarded toolkit"
     description: "A battered case; one latch is broken."
-    examine: "Inside: a multi-spanner, fiber probe, and a depleted microcell."
+    flags: []
+    visible: when_revealed
+    state:
+      revealed: true
+    examine: "Inside: a multi-spanner, fiber probe, and a microcell."
     loot:
       items:
         - "multi_spanner"
         - "fiber_probe"
+        - "microcell"         # charged, for a simple first-room loop
       credits: 0
       once: true
 
@@ -108,31 +130,46 @@ objects:
     nouns: ["markings","symbols","etchings"]
     short: "etched markings"
     description: "Jagged symbols carved into the wall paint."
+    flags: []
+    visible: always
+    state:
+      revealed: true
     examine: "The symbols loosely match hazard glyphs for 'pressure loss' and 'quarantine'."
 
 exits:
   - dir: north
     to: "hallway_1"
     description: "A reinforced corridor beyond the door."
-    locked: true              # (per-exit lock)
-    visible_when_locked: true # show as 'north (locked)'
+    locked: true
+    visible_when_locked: true
 
 scripts:
-  # Called when player enters the room (optional)
   on_enter: |
     return function(ctx)
       if not ctx:get_object_state("wall_console","powered") then
         ctx:say("The console flickers once and dies. It might need a power source.")
       end
+      ctx:hint_consider("enter")    -- engine may surface an 'enter' hint
     end
 
-  # Route generic commands not matching engine verbs (optional)
   on_command: |
-    -- Example: allow 'read markings' here if your parser passes verb/noun
+    -- Allow "read markings"
     return function(ctx, verb, args)
       if verb == "read" and ctx:matches_noun(args, {"markings","symbols","etchings"}) then
         ctx:say("The symbols resemble hazard glyphs: 'pressure loss' and 'quarantine'.")
-        return true -- handled
+        return true
       end
-      return false -- let engine handle or show unknown
+      return false
     end
+
+# Optional: inline item catalog (skip if you have a global one)
+items_catalog:
+  - id: multi_spanner
+    name: "Multi-Spanner"
+    stackable: false
+  - id: fiber_probe
+    name: "Fiber Probe"
+    stackable: false
+  - id: microcell
+    name: "Microcell"
+    stackable: true

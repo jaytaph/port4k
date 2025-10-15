@@ -1,3 +1,4 @@
+version: 2
 id: hallway_1
 name: Reinforced Hallway
 short: "A narrow corridor with ribbed plating and emergency beacons."
@@ -8,21 +9,39 @@ description: |
   Overhead, a {o:power_conduit} snakes along the ceiling, its casing cracked. On the eastern bulkhead,
   a recessed {o:access_panel} sits beside a hardened {o:east_door}. To the west, the passage opens
   toward dim observation ports. The way back {o:south_exit} leads to the Entry Hall.
+o: "Overhead {o:power_conduit}; east bulkhead {o:access_panel} and {o:east_door}; back {o:south_exit}."
+kv:
+  ambience: "alarm_beacons"
+  grid_section: "A-3"
+
 hints:
-  - "The power conduit looks damaged—try repairing it with proper tools."
-  - "If the corridor has power, access panels may accept diagnostics probes."
-  - "A hardened east door likely ties into the access panel's security relays."
-  - "Emergency beacons suggest the main grid is offline or bypassed."
-  - "If you found tools in the previous room, they might help here."
+  - text: "The power conduit looks damaged—try repairing it with proper tools."
+    when: first_look
+    once: true
+  - text: "If the corridor has power, access panels may accept diagnostics probes."
+    when: enter
+    cooldown: 2
+  - text: "A hardened east door likely ties into the access panel's security relays."
+    when: enter
+  - text: "Emergency beacons suggest the main grid is offline or bypassed."
+    when: manual
+  - text: "If you found tools in the previous room, they might help here."
+    when: search
+    once: true
 
 objects:
   - id: power_conduit
     nouns: ["conduit","power conduit","cable","wiring"]
     short: "fractured power conduit"
     description: "A segmented power trunk with heat-blistered casing and exposed couplings."
+    flags: []
+    visible: always
     state:
       powered: false
       damaged: true
+      revealed: true
+    controls:
+      - object:access_panel.online
     examine: "Couplings are warped; some segments could be reseated with the right spanner."
     use: |
       -- Repair with multi_spanner → restore corridor power
@@ -37,7 +56,8 @@ objects:
             ctx:set_object_state("power_conduit","damaged", false)
             ctx:set_object_state("power_conduit","powered", true)
             ctx:emit_room("With a metallic thunk, couplings seat and the corridor lights surge to steady white.")
-            -- Optional: broadcast flavor or set a room-level flag if you support it
+            -- If your engine wires 'controls', it can flip access_panel.online automatically;
+            -- otherwise on_enter below keeps it in sync.
           else
             ctx:say("You need a multi-spanner to reseat the warped couplings.")
           end
@@ -50,9 +70,15 @@ objects:
     nouns: ["panel","access panel","maintenance panel","console"]
     short: "recessed access panel"
     description: "A lockout panel with diagnostics pins and a tiny status display."
+    flags: []
+    visible: always
     state:
-      online: false      # follows conduit power
+      online: false
       bypassed: false
+      revealed: true
+    controls:
+      - exit:east.locked
+      - object:east_door.locked
     examine: "Its status light is dark; without corridor power, the panel is inert."
     use: |
       -- Use fiber_probe to bypass when powered; unlock east exit
@@ -84,8 +110,13 @@ objects:
     nouns: ["door","east door","bulkhead"]
     short: "hardened east door"
     description: "A thick composite bulkhead door with impact scarring."
+    flags: ["overlay","non_stackable"]
+    visible: always
     state:
       locked: true
+      revealed: true
+    controls:
+      - exit:east.locked
     examine: "No handles—purely powered from the panel. A manual release slot is sealed."
     use: |
       return function(ctx, verb, _)
@@ -104,6 +135,10 @@ objects:
     nouns: ["south","entry hall","hall"]
     short: "way south"
     description: "The corridor narrows back toward the Entry Hall."
+    flags: []
+    visible: always
+    state:
+      revealed: true
     examine: "Faint phosphor light leaks in from the Entry Hall."
 
 exits:

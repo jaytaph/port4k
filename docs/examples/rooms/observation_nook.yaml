@@ -1,3 +1,4 @@
+version: 2
 id: observation_nook
 name: Observation Nook
 short: "A dim alcove with narrow viewports and a bench."
@@ -6,16 +7,33 @@ description: |
   a starfield drifts past, broken by the dark geometry of station struts. A patchy {o:wall_map} is
   bolted beside the bench, and a scuffed {o:storage_locker} sits half-tucked under it. A faint draft
   whispers through a {o:vent_grille} near the floor. The brighter corridor lies {o:east_exit}.
+o: "Viewports above; {o:wall_map} and {o:storage_locker} by the bench; draft through {o:vent_grille}; exit {o:east_exit}."
+kv:
+  ambience: "quiet_hum"
+  view: "starfield"
+
 hints:
-  - "Maps often hide route notes—try reading or tracing markings."
-  - "Lockers may require codes, tools, or a lucky shove."
-  - "A loose grille could conceal stashed items."
-  - "The viewport offers lore and orientation—try 'scan' here too."
+  - text: "Maps often hide route notes—try reading or tracing markings."
+    when: first_look
+    once: true
+  - text: "Lockers may require codes, tools, or a lucky shove."
+    when: enter
+    cooldown: 2
+  - text: "A loose grille could conceal stashed items."
+    when: search
+    once: true
+  - text: "The viewport offers lore and orientation—try 'scan' here too."
+    when: manual
+
 objects:
   - id: wall_map
     nouns: ["map","wall map","chart"]
     short: "patched wall map"
     description: "A faded sector chart with hand-scratched updates."
+    flags: []
+    visible: always
+    state:
+      revealed: true
     examine: "Someone added a note: 'MBAY spare code → mirrored of ENTRY'."
     use: |
       return function(ctx, verb, args)
@@ -30,9 +48,12 @@ objects:
     nouns: ["locker","storage","box"]
     short: "scuffed storage locker"
     description: "A metal locker with a numeric keypad and dented side."
+    flags: []
+    visible: always
     state:
       locked: true
       opened: false
+      revealed: true
     examine: "Keypad shows smudges on 1, 2, 3, 4. The dented panel might pry with the right tool."
     use: |
       return function(ctx, verb, args)
@@ -74,9 +95,12 @@ objects:
     nouns: ["vent","grille","grate"]
     short: "loose vent grille"
     description: "A rectangular grille with two missing screws."
+    flags: []
+    visible: always
     state:
       loosened: false
       cache_taken: false
+      revealed: true
     examine: "You can wiggle it; the screws are barely holding."
     use: |
       return function(ctx, verb, args)
@@ -106,6 +130,10 @@ objects:
     nouns: ["east","hallway"]
     short: "bright corridor east"
     description: "Light spills in from the main corridor."
+    flags: []
+    visible: always
+    state:
+      revealed: true
     examine: "You can hear the faint beep of a distant panel."
 
 exits:
