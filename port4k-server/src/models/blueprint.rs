@@ -13,7 +13,7 @@ impl BlueprintStatus {
             "draft"     => Ok(BlueprintStatus::Draft),
             "published" => Ok(BlueprintStatus::Published),
             "archived"  => Ok(BlueprintStatus::Archived),
-            _ => Err(DbError::Decode("invalid blueprint.status")),
+            _ => Err(DbError::Decode("invalid blueprint.status".into())),
         }
     }
 }

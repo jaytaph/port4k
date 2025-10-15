@@ -23,7 +23,7 @@ INSERT INTO public.bp_rooms (bp_id, key, title, body, short, lockdown, hints, ob
 SELECT b.id, 'entry', 'The Hub',
        'You stand in a circular chamber buzzing with quiet energy. Corridors lead north and east. A heavy door hints at something valuable nearby.',
        'The central hub hums softly.',
-       FALSE, '[]'::jsonb, '[]'::jsonb, '{}'::jsonb
+       FALSE, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb
 FROM public.blueprints b
 WHERE b.key = 'hub'
 ON CONFLICT (bp_id, key) DO NOTHING;
@@ -32,7 +32,7 @@ INSERT INTO public.bp_rooms (bp_id, key, title, body, short, lockdown, hints, ob
 SELECT b.id, 'north_corridor', 'North Corridor',
        'A dim hallway with exposed conduits along the wall. The hub lies to the south.',
        'A dim north corridor.',
-       FALSE, '[]'::jsonb, '[]'::jsonb, '{}'::jsonb
+       FALSE, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb
 FROM public.blueprints b
 WHERE b.key = 'hub'
 ON CONFLICT (bp_id, key) DO NOTHING;
@@ -41,7 +41,7 @@ INSERT INTO public.bp_rooms (bp_id, key, title, body, short, lockdown, hints, ob
 SELECT b.id, 'east_corridor', 'East Corridor',
        'A narrow passage cluttered with crates. The hub is back to the west. A reinforced hatch lies further on.',
        'A cluttered east corridor.',
-       FALSE, '[]'::jsonb, '[]'::jsonb, '{}'::jsonb
+       FALSE, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb
 FROM public.blueprints b
 WHERE b.key = 'hub'
 ON CONFLICT (bp_id, key) DO NOTHING;
@@ -50,7 +50,7 @@ INSERT INTO public.bp_rooms (bp_id, key, title, body, short, lockdown, hints, ob
 SELECT b.id, 'vault', 'Maintenance Vault',
        'A compact vault with neatly arranged supplies. The blast door to the west looks sturdy.',
        'A tidy maintenance vault.',
-       FALSE, '[]'::jsonb, '[]'::jsonb, '{}'::jsonb
+       FALSE, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb
 FROM public.blueprints b
 WHERE b.key = 'hub'
 ON CONFLICT (bp_id, key) DO NOTHING;
@@ -129,7 +129,7 @@ WITH hub_room AS (
              SELECT room_id, 'terminal', 'a flickering terminal',
                     'An aging console with a phosphor display.',
                     'The terminal shows a blinking cursor: READY _',
-                    '{}'::jsonb, 1
+                    '[]'::jsonb, 1
              FROM hub_room
              ON CONFLICT DO NOTHING
              RETURNING id, room_id
@@ -152,7 +152,7 @@ WITH n_room AS (
              SELECT room_id, 'poster', 'a peeling poster',
                     'A faded poster warns: "AUTHORIZED PERSONNEL ONLY".',
                     'The date is smudged beyond recognition.',
-                    '{}'::jsonb, 1
+                    '[]'::jsonb, 1
              FROM n_room
              ON CONFLICT DO NOTHING
              RETURNING id, room_id
@@ -175,7 +175,7 @@ WITH e_room AS (
              SELECT room_id, 'crate', 'a sealed crate',
                     'A sturdy cargo crate sealed with a magnetic clasp.',
                     'There''s a small notch that looks like it fits a card.',
-                    '{}'::jsonb, 1
+                    '[]'::jsonb, 1
              FROM e_room
              ON CONFLICT DO NOTHING
              RETURNING id, room_id
@@ -198,7 +198,7 @@ WITH v_room AS (
              SELECT room_id, 'chest', 'a compact supply chest',
                     'A compact chest with emergency supplies.',
                     'It''s locked but the mechanism looks simple.',
-                    '{}'::jsonb, 1
+                    '[]'::jsonb, 1
              FROM v_room
              ON CONFLICT DO NOTHING
              RETURNING id, room_id

@@ -1,12 +1,14 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_postgres::Row;
 use uuid::Uuid;
 use crate::db::DbResult;
+use crate::db::error::DbError;
 use crate::models::json_string_vec_opt;
-use crate::models::types::{AccountId, BlueprintId, Direction, ObjectId, RoomId, ZoneId};
+use crate::models::types::{BlueprintId, Direction, ObjectId, RoomId, ZoneId};
+use crate::util::visibility::is_visible_to;
 
 static OBJ_REF_RE: Lazy<regex::Regex> =
     Lazy::new(|| regex::Regex::new(r"\{obj:([a-zA-Z0-9_\- ]+)}").unwrap());
@@ -59,7 +61,8 @@ pub struct RoomExitRow {
 impl RoomExitRow {
     pub fn try_from_row(row: &Row) -> DbResult<Self> {
         let dir_s: String = row.try_get("dir")?;
-        let dir = Direction::from(dir_s.as_str());
+        let dir = Direction::parse(&dir_s)
+            .ok_or_else(|| DbError::Decode(format!("invalid direction in bp_exits: {}", dir_s)))?;
 
         Ok(Self {
             from_room_id: row.try_get("from_room_id")?,
@@ -145,18 +148,27 @@ pub struct RoomScripts {
 /// `zone_room_state` row merged into runtime view.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZoneRoomState {
-    pub zone_id: ZoneId,
-    pub account_id: AccountId,
+    // Zone ID we are in (is this needed)
+    // pub zone_id: ZoneId,
+    /// Account ID of the player whose state this is
+    // pub account_id: AccountId,
+    /// Room ID this state is for
     pub room_id: RoomId,
-    pub coins: i32,
-    pub health: i32,
-    pub xp: i32,
-    pub current_room: Option<RoomId>,
-    pub room_qty: HashMap<ObjectId, i32>,
-    pub trail: Vec<(RoomId, RoomId)>,
+
+    // pub coins: i32, // @TODO: is this needed here or just in player state?
+    // pub health: i32, // @TODO: is this needed here or just in player state?
+    // pub xp: i32,  // @TODO: is this needed here or just in player state?
+
+    // pub current_room: Option<RoomId>,
+
+    /// Items in the room and their quantities, including hidden/undiscovered ones
+    pub all_objects: HashMap<ObjectId, i32>,
+    /// Objects that are visibible for the player (this assumes that ALL quantities are visible at the same time)
+    pub discovered_objects: HashSet<ObjectId>,
+
+    // Trail of rooms the player has visited to get here (for backtracking)
+    // pub trail: Vec<(RoomId, RoomId)>,
 }
-
-
 
 /// ZoneObjectState overlay for objects in a room in a zone.
 pub struct ZoneObjectState {
@@ -179,18 +191,38 @@ pub type RoomKv = HashMap<String, Vec<String>>;
 #[allow(unused)]
 pub type PlayerKv = HashMap<String, Vec<String>>; // flattened per player; usually fetched later for a specific account
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Discovery {
+    Visible,                 // always listed
+    Hidden,                  // never listed until discovered
+    Obscured { dc: u8 },     // requires a perception check >= dc
+    Conditional { key: String, value: String }, // visible if room_kv[key]==value
+    Scripted,                // let Lua decide
+}
+
 /// Runtime-friendly object with resolved nouns.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoomObject {
+    /// Blueprint Object ID
     pub id: ObjectId,
+    /// Name of the object (ie: "wrench")
     pub name: String,
+    /// Short description (one-liner)
     pub short: String,
+    /// Full description
     pub description: String,
+    /// Examine text (if any)
     pub examine: Option<String>,
+    /// Lua script to run when `use`
     pub use_lua: Option<String>,
+    /// Position for ordering (optional)
     pub position: Option<i32>,
+    /// State strings (arbitrary flags)
     pub state: Vec<String>,
+    /// Synonyms / alternate nouns (terminal, console, computer, screen)
     pub nouns: Vec<String>,
+    /// How is this object discovered in the room?
+    pub discovery: Discovery,
 
     // Overlay
     pub initial_qty: Option<i32>,
@@ -273,6 +305,10 @@ impl RoomView {
 
         self
     }
+
+    pub fn visible_objects<'a>(&'a self, zr: &'a ZoneRoomState) -> impl Iterator<Item=&'a RoomObject> + 'a {
+        self.objects.iter().filter(|o| is_visible_to(o, self, zr))
+    }
 }
 
 
@@ -300,7 +336,7 @@ mod tests {
     fn exit(from: RoomId, to: RoomId, locked: bool, visible_when_locked: bool) -> RoomExitRow {
         RoomExitRow {
             from_room_id: from,
-            dir: Direction::from("east"),
+            dir: Direction::parse("east").expect("valid dir"),
             to_room_id: to,
             locked,
             description: Some("A steel door".into()),
@@ -331,6 +367,7 @@ mod tests {
             position: None,
             state: vec![], // blueprint flags already reflected in the booleans below
             nouns: nouns.iter().map(|s| s.to_string()).collect(),
+            discovery: Discovery::Visible,
             initial_qty,
             qty,
             locked,

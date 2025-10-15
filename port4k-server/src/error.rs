@@ -58,6 +58,9 @@ pub enum DomainError {
 
     #[error(transparent)]
     Password(#[from] password_hash::Error),
+
+    #[error("invalid data: {0}")]
+    InvalidData(String),
 }
 
 #[derive(Debug, thiserror::Error)]

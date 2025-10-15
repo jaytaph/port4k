@@ -1,31 +1,45 @@
 use std::sync::Arc;
-use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
-use crate::{success, ConnState};
-use crate::error::DomainError;
+use crate::ConnState;
 use crate::models::types::Direction;
-use crate::renderer::{render_room, Theme};
+use crate::renderer::RenderVars;
+use crate::renderer::room_view::render_room_view;
 
 pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
+    let mut out = CommandOutput::new();
+
     if !ctx.has_cursor() {
-        return Err(CommandError::Domain(DomainError::NoCurrentRoom));
+        out.append("You are not in a world\n");
+        out.failure();
+        return Ok(out);
     }
 
     let Some(dir) = intent.direction else {
-        return Err(CommandError::InvalidArgs("No direction specified".to_string()));
+        out.append("No direction specified.\n");
+        out.append("Usage: go <direction>\n");
+        out.failure();
+        return Ok(out);
     };
     let dir = Direction::from(dir);
 
     let c = ctx.cursor()?;
-    let account_id = ctx.account_id()?;
-    let (_from, _to) = ctx.registry.services.navigator.go(&c, account_id, dir).await?;
+    let account = ctx.account()?;
+    let (_from_id, to_id) = ctx.registry.services.navigator.go(&c, account.id, dir).await?;
 
-    // // reuse your render path
-    // let view_repo = ctx.registry.services.zone_router.view_repo_for(&ctx.zone_ctx);
-    // let room_view = view_repo.room_view(&ctx.zone_ctx, to, ctx.screen_width).await?;
-    // let text = render_room(&room_view);
+    let c = ctx.registry.services.zone.generate_cursor(ctx.clone(), &account, to_id).await?;
+    {
+        let mut s = ctx.sess.write();
+        s.account = Some(account.clone());  // @TODO: Is this wise? Why clone?
+        s.state = ConnState::LoggedIn;
+        s.cursor = Some(c);
+    }
 
-    let text = "we moved to another room".to_string();
+    // Render the new room
+    let c = ctx.cursor()?;
 
-    Ok(success!(text))
+    let vars = RenderVars::new(ctx.sess.clone(), Some(&c.room_view));
+    out.append(render_room_view(&vars, 80).await.as_str());
+    out.success();
+    Ok(out)
 }

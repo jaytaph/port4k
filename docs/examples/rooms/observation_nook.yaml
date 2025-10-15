@@ -3,9 +3,9 @@ name: Observation Nook
 short: "A dim alcove with narrow viewports and a bench."
 description: |
   The alcove widens just enough for a bench under a row of narrow viewports. Beyond the armored glass,
-  a starfield drifts past, broken by the dark geometry of station struts. A patchy {obj:wall_map} is
-  bolted beside the bench, and a scuffed {obj:storage_locker} sits half-tucked under it. A faint draft
-  whispers through a {obj:vent_grille} near the floor. The brighter corridor lies {obj:east_exit}.
+  a starfield drifts past, broken by the dark geometry of station struts. A patchy {o:wall_map} is
+  bolted beside the bench, and a scuffed {o:storage_locker} sits half-tucked under it. A faint draft
+  whispers through a {o:vent_grille} near the floor. The brighter corridor lies {o:east_exit}.
 hints:
   - "Maps often hide route notes—try reading or tracing markings."
   - "Lockers may require codes, tools, or a lucky shove."

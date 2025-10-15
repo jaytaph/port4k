@@ -1,13 +1,13 @@
-id: entry_hall
+id: entry
 name: Entry Hall
 short: "A small, quiet room lit by phosphor glow."
 description: |  
   The room is narrow and still, its curved walls lined with pale panels that pulse faintly with phosphorescent light. 
   The glow casts long shadows across the floor, where fine dust has gathered in the seams of the metal plates. A faint 
   hum from hidden conduits echoes in the silence, broken only by the occasional drip of condensation from overhead pipes.
-
-  To the north, a {obj:blast_door} blocks further passage. A flickering {obj:wall_console} beside it blinks weakly. Near 
-  the corner, a {obj:toolkit} lies half-buried in dust. Etched into the wall are faint {obj:markings}.
+o:
+  To the north, a {o:blast_door} blocks further passage. A flickering {o:wall_console} beside it blinks weakly. Near 
+  the corner, a {o:toolkit} lies half-buried in dust. Etched into the wall are faint {o:markings}.
 hints:
     - "The blast door might be locked; perhaps there's a way to unlock it."
     - "The console looks damaged but might still be usable."

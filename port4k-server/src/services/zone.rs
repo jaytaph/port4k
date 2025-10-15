@@ -27,29 +27,19 @@ impl ZoneService {
     }
 
     /// Fetches the current zone context (saved in db?), or generates a new one if none exists.
-    pub async fn generate_cursor(&self, ctx: Arc<CmdCtx>, account: &Account, zone_key: Option<&str>, bp_key: Option<&str>) -> AppResult<Cursor> {
-        // For now, we always use the first blueprint
-        let blueprint = Arc::new(ctx.registry.services.blueprint.get_by_key(bp_key.unwrap_or("hub")).await?);
-        let Some(zone) = ctx.registry.services.zone.get_by_key(zone_key.unwrap_or("hub")).await? else {
-            return Err(DomainError::NotFound.into());
-        };
+    pub async fn generate_cursor(&self, ctx: Arc<CmdCtx>, account: &Account, room_id: RoomId) -> AppResult<Cursor> {
+        // Get the room from the zone's blueprint to ensure it exists
+        let zone_ctx = ctx.zone_ctx()?;
+        let room = ctx.registry.services.blueprint.room_by_id(zone_ctx.blueprint.id, room_id).await?;
 
-        let zone_ctx = ZoneContext{
-            zone: Arc::new(zone),
-            kind: ZoneKind::Live,
-            policy: ZonePolicy {
-                persistence: Persistence::Persistent,
-            },
-            blueprint: blueprint.clone(),
-        };
-
+        // Generate the new room view for given account, zone(_ctx) and room
         let room_view = ctx.registry.services.room.build_room_view(
             ctx.registry.zone_router.clone(),
             &zone_ctx,
             account.id,
-            blueprint.entry_room_id,
+            room_id,
         ).await?;
 
-        Ok(Cursor { zone_ctx, room_view })
+        Ok(Cursor { zone_ctx, room_id, room_view })
     }
 }

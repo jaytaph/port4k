@@ -1,0 +1,84 @@
+# =============================================================================
+# Project: Port4k / Gosub
+# Local Dev & CI Consistency Makefile
+# =============================================================================
+
+# ----------- CONFIG ----------------------------------------------------------
+
+RUST_DIR       ?= port4k-server
+WEB_DIR        ?= port4k-site
+DOCKER_IMAGE   ?= port4k
+POSTGRES_URL   ?= postgres://postgres:postgres@localhost:5432/port4k_test
+
+CARGO          ?= cargo
+NPM            ?= npm
+
+# -----------------------------------------------------------------------------
+# PHONY TARGETS
+# -----------------------------------------------------------------------------
+.PHONY: all fmt lint test rust web docker-build docker-run clean help
+
+all: fmt lint test ## Run all checks (fmt + lint + test)
+
+help:
+	@echo ""
+	@echo "Available targets:"
+	@echo "  make fmt            - Format all code (Rust, JS)"
+	@echo "  make lint           - Run all linters"
+	@echo "  make test           - Run all test suites"
+	@echo "  make rust-test      - Run Rust tests with Postgres"
+	@echo "  make web-test       - Run web tests"
+	@echo "  make docker-build   - Build Docker image"
+	@echo "  make docker-run     - Run container locally"
+	@echo "  make clean          - Clean build artifacts"
+	@echo ""
+
+# -----------------------------------------------------------------------------
+# Formatting
+# -----------------------------------------------------------------------------
+rust-fmt:
+	cd $(RUST_DIR) && $(CARGO) fmt --all
+
+web-fmt:
+	cd $(WEB_DIR) && $(NPM) run format --if-present
+
+# -----------------------------------------------------------------------------
+# Linting
+# -----------------------------------------------------------------------------
+lint: rust-lint web-lint ## Run all linters
+
+rust-lint:
+	cd $(RUST_DIR) && $(CARGO) clippy --all-targets --all-features -- -D warnings
+
+web-lint:
+	cd $(WEB_DIR) && $(NPM) run lint --if-present
+
+# -----------------------------------------------------------------------------
+# Testing
+# -----------------------------------------------------------------------------
+test: rust-test web-test ## Run all tests
+
+rust-test:
+	@echo "🚀 Running Rust tests..."
+	cd $(RUST_DIR) && DATABASE_URL=$(POSTGRES_URL) $(CARGO) test --all --all-features --verbose
+
+web-test:
+	@echo "🌐 Running Web tests..."
+	cd $(WEB_DIR) && $(NPM) test --if-present
+
+# -----------------------------------------------------------------------------
+# Docker targets
+# -----------------------------------------------------------------------------
+docker-build:
+	docker build -t $(DOCKER_IMAGE):latest .
+
+docker-run:
+	docker run --rm -it -p 8080:8080 $(DOCKER_IMAGE):latest
+
+# -----------------------------------------------------------------------------
+# Cleanup
+# -----------------------------------------------------------------------------
+clean:
+	@echo "🧹 Cleaning..."
+	cd $(RUST_DIR) && $(CARGO) clean
+	cd $(WEB_DIR) && rm -rf node_modules dist || true

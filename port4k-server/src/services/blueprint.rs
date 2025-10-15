@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 use crate::models::blueprint::Blueprint;
-use crate::db::repo::room::RoomRepo;
+use crate::db::repo::room::{BlueprintAndRoomKey, RoomRepo};
 use crate::error::AppResult;
 use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts, RoomView};
 use crate::models::types::{AccountId, BlueprintId, RoomId, ScriptSource};
@@ -21,8 +21,13 @@ impl BlueprintService {
         Ok(blueprint)
     }
 
-    pub async fn room(&self, _bp_id: BlueprintId, room_id: RoomId) -> AppResult<BlueprintRoom> {
-        let bp_room = self.repo.room(room_id).await?;
+    pub async fn room_by_id(&self, bp_id: BlueprintId, room_id: RoomId) -> AppResult<BlueprintRoom> {
+        let bp_room = self.repo.room_by_id(bp_id, room_id).await?;
+        Ok(bp_room)
+    }
+
+    pub async fn room_by_key(&self, key: BlueprintAndRoomKey) -> AppResult<BlueprintRoom> {
+        let bp_room = self.repo.room_by_key(&key).await?;
         Ok(bp_room)
     }
 
@@ -46,34 +51,33 @@ impl BlueprintService {
         Ok(kv_pairs)
     }
 
-
     /// Adds an exit from one room to another in a blueprint.
-    pub async fn add_exit(&self, bp: &str, from_key: &str, dir: &str, to_key: &str) -> AppResult<bool> {
-        let res = self.repo.add_exit(bp, from_key, dir, to_key).await?;
+    pub async fn add_exit(&self, from_key: &BlueprintAndRoomKey, dir: &str, to_key: &BlueprintAndRoomKey) -> AppResult<bool> {
+        let res = self.repo.add_exit(from_key, dir, to_key).await?;
         Ok(res)
     }
 
     /// Sets the entry room for a blueprint.
-    pub async fn set_entry(&self, bp: &str, room_key: &str) -> AppResult<bool> {
-        let res = self.repo.set_entry(bp, room_key).await?;
+    pub async fn set_entry(&self, key: &BlueprintAndRoomKey) -> AppResult<bool> {
+        let res = self.repo.set_entry(key).await?;
         Ok(res)
     }
 
     /// Locks or unlocks a room in a blueprint.
-    pub async fn set_locked(&self, bp: &str, room_key: &str, locked: bool) -> AppResult<bool> {
-        let res = self.repo.set_locked(bp, room_key, locked).await?;
+    pub async fn set_locked(&self, key: &BlueprintAndRoomKey, locked: bool) -> AppResult<bool> {
+        let res = self.repo.set_locked(key, locked).await?;
         Ok(res)
     }
 
     /// Creates a new blueprint.
-    pub async fn new_blueprint(&self, bp: &str, title: &str, account_id: AccountId) -> AppResult<bool> {
-        let res = self.repo.insert_blueprint(bp, title, account_id).await?;
+    pub async fn new_blueprint(&self, bp_key: &str, title: &str, account_id: AccountId) -> AppResult<bool> {
+        let res = self.repo.insert_blueprint(bp_key, title, account_id).await?;
         Ok(res)
     }
 
     /// Creates a new room in a blueprint.
-    pub async fn new_room(&self, bp: &str, room: &str, title: &str, body: &str) -> AppResult<bool> {
-        let res = self.repo.insert_room(bp, room, title, body).await?;
+    pub async fn new_room(&self, key: &BlueprintAndRoomKey, title: &str, body: &str) -> AppResult<bool> {
+        let res = self.repo.insert_room(key, title, body).await?;
         Ok(res)
     }
 

@@ -2,12 +2,14 @@ use crate::input::parser::{Verb, parse_command};
 use crate::state::session::{Cursor, Session};
 use std::sync::Arc;
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::SendError;
 use crate::{ansi, Registry};
 use crate::db::error::DbError;
 use crate::error::{AppResult, DomainError};
+use crate::input::shell::{handle_shell_cmd, parse_shell_cmd};
 use crate::models::account::Account;
 use crate::models::types::AccountId;
 use crate::lua::LuaJob;
@@ -26,6 +28,8 @@ mod who;
 mod blueprint;
 mod debug_cmd;
 mod playtest;
+mod examine;
+mod search;
 
 pub type CommandResult<T> = Result<T, CommandError>;
 
@@ -121,48 +125,83 @@ impl CmdCtx {
     }
 }
 
-pub struct CommandOutput {
-    pub message: String,
-    pub is_error: bool,
-}
-
-#[macro_export]
-macro_rules! success {
-    ($msg:expr) => {
-        CommandOutput { is_error: false, message: $msg.to_string() }
-    };
-}
-
-#[macro_export]
-macro_rules! failure {
-    ($msg:expr) => {
-        CommandOutput { is_error: true, message: $msg.to_string() }
-    };
-}
 
 pub async fn process_command(
     raw: &str,
     ctx: Arc<CmdCtx>,
 ) -> CommandResult<CommandOutput> {
+
+    // See if we match a shell command, and handle it if so
+    if let Some(shell) = parse_shell_cmd(&raw) {
+        let out = handle_shell_cmd(shell, ctx.clone()).await?;
+        return Ok(out);
+    }
+
+    let mut out = CommandOutput::new();
+
     let intent = parse_command(raw);
-
     match intent.verb {
-        Verb::Close => Ok(success!("Goodbye!\n".to_string())),
-        Verb::Help => Ok(success!(help_text())),
+        Verb::Close => {
+            out.append("Goodbye! Connection closed by user.\n");
+            out.success();
+            Ok(out)
+        },
+        Verb::Help => {
+            out.append(help_text().as_str());
+            out.success();
+            Ok(out)
+        },
         Verb::Look => look::look(ctx.clone(), intent).await,
+        Verb::Examine => examine::examine(ctx.clone(), intent).await,
+        Verb::Search => search::search(ctx.clone(), intent).await,
         Verb::Take => take::take(ctx.clone(), intent).await,
-        Verb::Drop => Ok(failure!("Drop command not implemented yet.\n".to_string())),
-        Verb::Open => Ok(failure!("Open command not implemented yet.\n".to_string())),
-        Verb::Unlock => Ok(failure!("Unlock command not implemented yet.\n".to_string())),
-        Verb::Lock => Ok(failure!("Lock command not implemented yet.\n".to_string())),
-        Verb::Use => Ok(failure!("Use command not implemented yet.\n".to_string())),
-        Verb::Put => Ok(failure!("Put command not implemented yet.\n".to_string())),
-        Verb::Talk => Ok(failure!("Talk command not implemented yet.\n".to_string())),
+        Verb::Drop => {
+            out.append("Drop command not implemented yet.\n");
+            out.failure();
+            Ok(out)
+        },
+        Verb::Open => {
+            out.append("Open command not implemented yet.\n");
+            out.failure();
+            Ok(out)
+        },
+        Verb::Unlock => {
+            out.append("Unlock command not implemented yet.\n");
+            out.failure();
+            Ok(out)
+        },
+        Verb::Lock => {
+            out.append("Lock command not implemented yet.\n");
+            out.failure();
+            Ok(out)
+        },
+        Verb::Use => {
+            out.append("Use command not implemented yet.\n");
+            out.failure();
+            Ok(out)
+        },
+        Verb::Put => {
+            out.append("Put command not implemented yet.\n");
+            out.failure();
+            Ok(out)
+        },
+        Verb::Talk => {
+            out.append("Talk command not implemented yet.\n");
+            out.failure();
+            Ok(out)
+        },
         Verb::Go => go::go(ctx.clone(), intent).await,
-        Verb::Inventory => Ok(failure!("Inventory command not implemented yet.\n".to_string())),
-        Verb::Quit => Ok(success!("Goodbye!\n".to_string())),
+        Verb::Inventory => {
+            out.append("Inventory command not implemented yet.\n");
+            out.failure();
+            Ok(out)
+        },
+        Verb::Quit => {
+            out.append("Goodbye! Connection closed by user.\n");
+            out.success();
+            Ok(out)
+        },
         Verb::Who => who::who(ctx.clone()).await,
-
         Verb::Logout => logout::logout(ctx.clone(), intent).await,
         Verb::Login => login::login(ctx.clone(), intent).await,
         Verb::Register => register::register(ctx.clone(), intent).await,
@@ -205,4 +244,54 @@ pub fn help_text() -> String {
     fg_green = ansi::FG_GREEN,
     reset = ansi::RESET,
     )
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CmdStatus {
+    Success,
+    Failure,
+    Neutral,
+}
+
+pub struct CommandOutput {
+    pub status: CmdStatus,
+    pub lines: Vec<String>,
+    // more fields we might want later
+}
+
+impl CommandOutput {
+    pub fn new() -> Self {
+        Self {
+            status: CmdStatus::Neutral,
+            lines: Vec::new(),
+        }
+    }
+
+    pub fn append(&mut self, line: &str) {
+        self.lines.push(line.to_string());
+    }
+
+    pub fn success(&mut self) {
+        self.status = CmdStatus::Success;
+    }
+
+    pub fn failure(&mut self) {
+        self.status = CmdStatus::Failure;
+    }
+
+    pub fn failed(&self) -> bool {
+        self.status == CmdStatus::Failure
+    }
+
+    pub fn succeeded(&self) -> bool {
+        self.status == CmdStatus::Success
+    }
+
+    pub fn message(&self) -> String {
+        self.lines.join("")
+    }
+
+    pub fn messages(&self) -> Vec<String> {
+        self.lines.clone()
+    }
 }

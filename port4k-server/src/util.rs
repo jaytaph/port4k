@@ -5,6 +5,8 @@ use crate::error::{AppResult, DomainError, InfraError};
 
 pub mod args;
 pub mod telnet;
+pub mod visibility;
+pub mod handlers;
 
 pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
     let p = Path::new(subdir);

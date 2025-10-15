@@ -1,12 +1,16 @@
 use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
-use crate::success;
 
 pub async fn who(ctx: Arc<CmdCtx>) -> CommandResult<CommandOutput> {
+    let mut out = CommandOutput::new();
+
     let list = ctx.registry.who().await;
-    Ok(if list.is_empty() {
-        success!("No one is online.\n")
+    if list.is_empty() {
+        out.append("No one is online.\n");
     } else {
-        success!(format!("Online ({}): {}\n", list.len(), list.join(", ")))
-    })
+        out.append(format!("Online ({}): {}\n", list.len(), list.join(", ")).as_str());
+    };
+
+    out.success();
+    Ok(out)
 }

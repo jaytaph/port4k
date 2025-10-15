@@ -1,11 +1,13 @@
+use crate::db::repo::room::BlueprintAndRoomKey;
+
 /// Utility functions for argument parsing
-pub fn parse_bp_room_key(s: &str) -> Option<(String, String)> {
-    let (bp, room) = s.split_once(':')?;
-    if bp.is_empty() || room.is_empty() {
+pub fn parse_bp_room_key(s: &str) -> Option<BlueprintAndRoomKey> {
+    let (bp_key, room_key) = s.split_once(':')?;
+    if bp_key.is_empty() || room_key.is_empty() {
         return None;
     }
 
-    Some((bp.to_string(), room.to_string()))
+    Some(BlueprintAndRoomKey::new(bp_key, room_key))
 }
 
 pub fn normalize_dir(s: &str) -> Option<&'static str> {

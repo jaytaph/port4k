@@ -4,8 +4,8 @@ short: "An oil-stained service room full of parts and half-dead machines."
 description: |
   Rows of open framework racks line the walls, each crammed with spare parts and tagged assemblies.
   Overhead gantries hang quiet, their hooks swaying ever so slightly in the recycled air. A dented
-  {obj:workbench} sits beneath a flickering strip, littered with fasteners and cut wire. On the far wall,
-  a {obj:generator} hums feebly beside a rack-mounted {obj:charger}. A narrow way {obj:west_exit} returns to the hallway.
+  {o:workbench} sits beneath a flickering strip, littered with fasteners and cut wire. On the far wall,
+  a {o:generator} hums feebly beside a rack-mounted {o:charger}. A narrow way {o:west_exit} returns to the hallway.
 hints:
   - "If you need power, a generator or charger might help."
   - "A charged microcell could wake up dead consoles elsewhere."

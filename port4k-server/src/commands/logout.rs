@@ -2,11 +2,14 @@ use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use crate::state::session::ConnState;
-use crate::{failure, success};
 
 pub async fn logout(ctx: Arc<CmdCtx>, _intent: Intent) -> CommandResult<CommandOutput> {
+    let mut out = CommandOutput::new();
+
     if !ctx.is_logged_in() {
-        return Ok(failure!("You must be logged in to log out.\n"));
+        out.append("You must be logged in to log out.\n");
+        out.failure();
+        return Ok(out);
     }
 
     let mut s = ctx.sess.write();
@@ -14,5 +17,7 @@ pub async fn logout(ctx: Arc<CmdCtx>, _intent: Intent) -> CommandResult<CommandO
     s.account = None;
     s.cursor = None;
 
-    Ok(success!("You have been logged out.\n"))
+    out.append("You have been logged out.\n");
+    out.success();
+    Ok(out)
 }

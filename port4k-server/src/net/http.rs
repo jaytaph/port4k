@@ -69,10 +69,10 @@ async fn ws_handler(mut socket: WebSocket, registry: Arc<Registry>, lua_tx: mpsc
         let cmd = text.trim();
         match process_command(cmd, ctx.clone()).await {
             Ok(res) => {
-                let resp = if res.is_error {
-                    format!("error: {}\n", res.message)
+                let resp = if res.failed() {
+                    format!("error: {}\n", res.message())
                 } else {
-                    format!("{}\n", res.message)
+                    format!("{}\n", res.message())
                 };
                 let _ = socket
                     .send(Message::Text(format!("{}> ", ensure_nl(resp))))

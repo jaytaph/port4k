@@ -9,7 +9,6 @@ pub mod accounts;
 pub mod blueprint;
 pub mod characters;
 pub mod loot;
-pub mod rooms;
 
 pub mod repo;
 pub mod error;

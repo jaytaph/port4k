@@ -28,13 +28,16 @@ impl NavigatorService {
         dir: Direction,
     ) -> AppResult<(RoomId, RoomId)> {
         let from_id = cursor.room_view.room.id;
-        let (_exit, to_id) = self.resolve_exit_checked(&cursor.zone_ctx, from_id, dir).await?;
+        let (_exit, to_id) = self.resolve_exit_checked(&cursor, account_id, from_id, dir).await?;
 
         let state = self.zone_router.state_for(&cursor.zone_ctx);
 
         let mut uow = state.begin(&cursor.zone_ctx).await?;
         uow.set_current_room(account_id, to_id).await?;
         uow.record_travel(account_id, from_id, to_id).await?;
+        // If you have tolls, deduct coins here:
+        // uow.update_coins(account_id, -toll_amount).await?;
+        // If you want to award travel XP:
         // uow.update_xp(account_id, 5).await?;
         uow.commit().await?;
 
@@ -43,13 +46,80 @@ impl NavigatorService {
 
     async fn resolve_exit_checked(
         &self,
-        _zone_ctx: &ZoneContext,
+        cursor: &Cursor,
+        _account_id: AccountId,
         from: RoomId,
-        _dir: Direction,
+        dir: Direction,
     ) -> AppResult<(ResolvedExit, RoomId)> {
-        // TODO: look up exit, check locked, lua hooks, visibility, etc.
-        // Return Err(AppError::user("You can’t go that way")) on failure.
-        let exit = ResolvedExit { from, to_room: RoomId::new(), locked_message: None };
-        Ok((exit.clone(), exit.to_room))
+        // 1) Find matching exit in the current room view
+        let want = dir.to_short();
+        let exit_row = cursor
+            .room_view
+            .exits
+            .iter()
+            .find(|e| e.dir.to_short() == want && e.from_room_id == from)
+            .cloned();
+            // .map_e(|| DomainError::InvalidDirection);
+
+        let exit_row = match exit_row {
+            Some(e) => e,
+            None => return Err(DomainError::InvalidDirection(format!("No exit '{want}' from here."))),
+        };
+
+        // 2) Pull the player’s per-zone state for checks (xp/coins/inventory)
+        // let state_repo = self.zone_router.state_for(&cursor.zone_ctx);
+        // let zstate = state_repo
+        //     .zone_room_state(&cursor.zone_ctx, from, account_id)
+        //     .await?;
+
+        // // 3) Parse constraints/flags from the exit. Adjust field access to your model.
+        // // Here we assume ExitRow has an optional `state: serde_json::Value`.
+        let (locked, locked_msg) = (exit_row.locked, "The way is locked.".to_string());
+            // parse_exit_state(&exit_row.state);
+
+        if locked {
+            return Err(DomainError::LockedExit(locked_msg));
+        }
+
+        // if let Some(mx) = min_xp {
+        //     if zstate.xp < mx {
+        //         return Err(DomainError::LockedExit(format!(
+        //             "You need at least {mx} XP to go that way."
+        //         )));
+        //     }
+        // }
+
+        // if let Some(item) = req_item {
+        //     let need = req_qty.unwrap_or(1);
+        //     let have = zstate
+        //         .items
+        //         .iter()
+        //         .find(|(oid, _)| *oid == item)
+        //         .map(|(_, qty)| *qty)
+        //         .unwrap_or(0);
+        //     if have < need {
+        //         return Err(DomainError::LockedExit("You’re missing something important.".into()));
+        //     }
+        // }
+
+        // if let Some(cost) = toll {
+        //     if zstate.coins < cost {
+        //         return Err(DomainError::LockedExit(format!(
+        //             "You need {cost} coins to pass."
+        //         )));
+        //     }
+        // }
+
+        // 4) Optional: Lua pre-hook (can_go)
+        // TODO: call into your Lua worker with (zone_ctx, account_id, exit_row).
+        // If it returns false or a message, surface that as a user error.
+
+        // 5) Success
+        let resolved = ResolvedExit {
+            from,
+            to_room: exit_row.to_room_id,
+            locked_message: locked_msg.into(),
+        };
+        Ok((resolved, exit_row.to_room_id))
     }
 }
