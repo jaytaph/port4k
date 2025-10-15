@@ -10,9 +10,10 @@ pub fn passive_discovery(
     for obj in &rv.objects {
         if let Discovery::Obscured { dc } = obj.discovery
             && perception >= dc
-                && zr.discovered_objects.insert(obj.id) {
-                    revealed.push(obj.id);
-                }
+            && zr.discovered_objects.insert(obj.id)
+        {
+            revealed.push(obj.id);
+        }
     }
     revealed
 }

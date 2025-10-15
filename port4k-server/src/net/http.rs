@@ -35,7 +35,9 @@ async fn ws_upgrade(ws: WebSocketUpgrade, State(state): State<AppCtx>) -> impl I
 }
 
 async fn ws_handler(mut socket: WebSocket, registry: Arc<Registry>, lua_tx: mpsc::Sender<LuaJob>) {
-    let _ = socket.send(Message::Text(format!("{}{}> ", BANNER, ENTRY).into())).await;
+    let _ = socket
+        .send(Message::Text(format!("{}{}> ", BANNER, ENTRY).into()))
+        .await;
 
     let sess = Arc::new(RwLock::new(Session::new(Protocol::WebSocket)));
 
@@ -65,7 +67,9 @@ async fn ws_handler(mut socket: WebSocket, registry: Arc<Registry>, lua_tx: mpsc
                 } else {
                     format!("{}\n", res.message())
                 };
-                let _ = socket.send(Message::Text(format!("{}> ", ensure_nl(resp)).into())).await;
+                let _ = socket
+                    .send(Message::Text(format!("{}> ", ensure_nl(resp)).into()))
+                    .await;
             }
             Err(e) => {
                 let _ = socket.send(Message::Text(format!("error: {}\n> ", e).into())).await;

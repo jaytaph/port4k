@@ -20,12 +20,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
     // If you want to enforce permissions later:
     // if !ctx.sess.lock().await.is_admin() { return Ok("[bp] permission denied.\n".into()); }
 
-    let blueprint = ctx
-        .registry
-        .repos
-        .room
-        .blueprint_by_key(bp_key)
-        .await?;
+    let blueprint = ctx.registry.repos.room.blueprint_by_key(bp_key).await?;
 
     let base_path = Path::new(ctx.registry.config.import_dir.as_str());
     match crate::import::import_blueprint_subdir(blueprint.id, subdir, base_path, &ctx.registry.db).await {

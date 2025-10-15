@@ -32,7 +32,8 @@ pub async fn fallback(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Command
             intent: Box::new(intent),
             reply: tx,
         })
-        .await.map_err(Box::new)?;
+        .await
+        .map_err(Box::new)?;
 
     match timeout(LUA_CMD_TIMEOUT, rx).await {
         Err(_) => {

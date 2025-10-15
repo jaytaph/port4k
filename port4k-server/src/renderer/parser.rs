@@ -171,7 +171,6 @@ fn parse_color(_raw: String, rest: Option<&str>) -> Token {
                 return Token::ColorReset;
             }
 
-            
             let mut bg: Option<String> = None;
             let mut attrs: Vec<String> = Vec::new();
 

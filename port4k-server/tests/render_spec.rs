@@ -1,4 +1,6 @@
-use port4k_server::renderer::{MissingVarPolicy, RenderOptions, render_template, render_template_with_opts, RenderVars};
+use port4k_server::renderer::{
+    MissingVarPolicy, RenderOptions, RenderVars, render_template, render_template_with_opts,
+};
 
 #[test]
 fn var_basic_and_default() {

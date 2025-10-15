@@ -28,7 +28,7 @@ pub async fn look(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutp
             out.append(format!("You don't see any '{}' here.", noun.head).as_str());
             out.failure();
             Ok(out)
-        }
+        };
     }
 
     // No direct noun -> show room description

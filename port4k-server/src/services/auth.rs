@@ -3,8 +3,8 @@ use crate::error::{AppResult, DomainError};
 use crate::models::account::Account;
 use crate::models::types::AccountId;
 use argon2::Argon2;
-use password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use password_hash::rand_core::OsRng;
+use password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use std::sync::Arc;
 
 pub struct AuthService {

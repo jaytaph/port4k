@@ -468,10 +468,11 @@ fn split_on_preposition(
     // If the first token literally equals the forced preposition, drop it.
     if let Some(fp) = forced_prep
         && let Some(first) = tokens.first()
-            && canonical_prep(&first.lower) == Some(fp) {
-                return (vec![], tokens[1..].to_vec(), Some(fp));
-            }
-        // Otherwise keep scanning as normal but prefer the forced preposition if encountered.
+        && canonical_prep(&first.lower) == Some(fp)
+    {
+        return (vec![], tokens[1..].to_vec(), Some(fp));
+    }
+    // Otherwise keep scanning as normal but prefer the forced preposition if encountered.
 
     for (i, tok) in tokens.iter().enumerate() {
         if let Some(p) = canonical_prep(&tok.lower) {

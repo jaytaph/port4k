@@ -96,10 +96,9 @@ impl LineEditor {
         if line.trim().is_empty() {
             return;
         }
-        if self.cfg.dedup_consecutive_history
-            && self.history.last() == Some(&line) {
-                return;
-            }
+        if self.cfg.dedup_consecutive_history && self.history.last() == Some(&line) {
+            return;
+        }
         self.history.push(line);
         self.trim_history();
     }
@@ -255,7 +254,7 @@ impl LineEditor {
                     EditEvent::None
                 } else {
                     EditEvent::None // keep accumulating
-                }
+                };
             }
             return EditEvent::None;
         }
