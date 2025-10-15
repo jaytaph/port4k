@@ -237,7 +237,7 @@ mod tests {
     fn escapes() {
         let vars = RenderVars::default();
         let s = render_template("{{v}} -> {v:name}", &vars, 80);
-        assert_eq!(s, "{v} -> {v:name}");
+        assert_eq!(s, "{v} -> \u{1b}[36;41m{{v:name}}\u{1b}[0m");
     }
 
     #[test]

@@ -190,11 +190,16 @@ pub type PlayerKv = HashMap<String, Vec<String>>; // flattened per player; usual
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub enum Discovery {
     #[default]
-    Visible,                                    // always listed
-    Hidden,                                     // never listed until discovered
-    Obscured { dc: u8 },                        // requires a perception check >= dc
-    Conditional { key: String, value: String }, // visible if room_kv[key]==value
-    Scripted,                                   // let Lua decide
+    Visible, // always listed
+    Hidden, // never listed until discovered
+    Obscured {
+        dc: u8,
+    }, // requires a perception check >= dc
+    Conditional {
+        key: String,
+        value: String,
+    }, // visible if room_kv[key]==value
+    Scripted, // let Lua decide
 }
 
 /// Runtime-friendly object with resolved nouns.
@@ -245,7 +250,6 @@ impl RoomObject {
         let discovered = is_visible_to(self, rv, zr);
         discovered && self.is_visible()
     }
-
 }
 
 /// Runtime view the engine uses.
@@ -640,7 +644,7 @@ mod tests {
             id: coins_id,
             name: "gold coin".into(),
             stackable: true,
-            revealed: false,              // covered/buried
+            revealed: false, // covered/buried
             locked: false,
             discovery: Discovery::Visible, // even if globally visible...
             ..Default::default()
