@@ -17,9 +17,6 @@ use parking_lot::RwLock;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-/// We are entering container / DI territory here. We have to be careful that we don't create
-/// circular references.
-
 pub struct Repos {
     pub account: Arc<dyn AccountRepo>,
     pub room: Arc<dyn RoomRepo>,

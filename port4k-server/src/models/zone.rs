@@ -438,6 +438,12 @@ pub struct MemoryBackend {
     zones: DashMap<ZoneId, Arc<MemZone>>,
 }
 
+impl Default for MemoryBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryBackend {
     pub fn new() -> Self {
         Self { zones: DashMap::new() }
@@ -466,10 +472,15 @@ struct MemZone {
 #[derive(Clone, Debug, Default)]
 struct RawState {
     room_qty: Vec<(ObjectId, i32)>,
+    #[allow(unused)]
     coins: i32,
+    #[allow(unused)]
     health: i32,
+    #[allow(unused)]
     xp: i32,
+    #[allow(unused)]
     items: Vec<(ObjectId, i32)>,
+    #[allow(unused)]
     current_room: Option<RoomId>,
 }
 

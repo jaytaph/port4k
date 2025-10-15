@@ -46,6 +46,7 @@ pub async fn handle_connection(stream: TcpStream, ctx: Arc<AppCtx>, sess: Arc<Rw
     Ok(())
 }
 
+//noinspection RsExternalLinter
 async fn start_session<W: AsyncWrite + Unpin>(
     w: &mut SlowWriter<W>,
     telnet: &mut TelnetMachine,
@@ -242,7 +243,7 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
         return Ok(LoginOutcome::Handled);
     };
 
-    if !ctx.registry.services.account.exists(&username).await? {
+    if !ctx.registry.services.account.exists(username).await? {
         write_with_newline(w, b"No such user. Try `register <name> <password>`.").await?;
         return Ok(LoginOutcome::Handled);
     }
@@ -257,7 +258,7 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
     }
 
     let password = pw.trim_matches(['\r', '\n']);
-    let account = ctx.registry.services.auth.authenticate(&username, password).await?;
+    let account = ctx.registry.services.auth.authenticate(username, password).await?;
 
     // // All is ok
     // let Some(account) = state.registry.repos.account.get_by_username(&username).await? else {
@@ -289,7 +290,7 @@ async fn repaint_prompt<W: AsyncWrite + Unpin>(
     if generate_new_prompt {
         let prompt = generate_prompt(
             sess.clone(),
-            &"{v:account.name:Not logged in} [{v:room:Nowhere}] @ {c:yellow:bold}{v:wall_time}{c} > ",
+            "{v:account.name:Not logged in} [{v:room:Nowhere}] @ {c:yellow:bold}{v:wall_time}{c} > ",
         );
         editor.set_prompt(&prompt);
     }
@@ -342,7 +343,7 @@ async fn read_secret_line<W: AsyncWrite + Unpin>(
                         }
                         _ => {
                             // Only accept printable ASCII; ignore others for secrets
-                            if b >= 0x20 && b < 0x7F {
+                            if (0x20..0x7F).contains(&b) {
                                 out.push(b);
                             }
                         }

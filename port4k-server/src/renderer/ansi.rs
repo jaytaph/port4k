@@ -5,16 +5,14 @@ pub const RESET: &str = "\x1b[0m";
 pub fn compose_sgr(fg: Option<&str>, bg: Option<&str>, attrs: &[String]) -> String {
     let mut codes: Vec<&'static str> = Vec::new();
 
-    if let Some(name) = fg {
-        if let Some(code) = fg_code(name) {
+    if let Some(name) = fg
+        && let Some(code) = fg_code(name) {
             codes.push(code);
         }
-    }
-    if let Some(name) = bg {
-        if let Some(code) = bg_code(name) {
+    if let Some(name) = bg
+        && let Some(code) = bg_code(name) {
             codes.push(code);
         }
-    }
     for a in attrs {
         if let Some(code) = attr_code(a.as_str()) {
             codes.push(code);

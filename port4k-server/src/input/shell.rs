@@ -69,7 +69,7 @@ async fn dump_json_or_debug<T: Serialize + core::fmt::Debug>(label: &str, value:
     let mut out = String::new();
     out.push_str(format!("--- {label} ---").as_str());
     out.push_str(rendered.as_str());
-    out.push_str("--- end ---".into());
+    out.push_str("--- end ---");
 
     out
 }

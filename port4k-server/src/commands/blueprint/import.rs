@@ -1,7 +1,6 @@
 //! @bp import <bp> <dir>
 
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
-use crate::db::error::DbError;
 use crate::input::parser::Intent;
 use std::path::Path;
 use std::sync::Arc;
@@ -26,11 +25,10 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
         .repos
         .room
         .blueprint_by_key(bp_key)
-        .await
-        .map_err(DbError::from)?;
+        .await?;
 
     let base_path = Path::new(ctx.registry.config.import_dir.as_str());
-    match crate::import::import_blueprint_subdir(blueprint.id, subdir, &base_path, &ctx.registry.db).await {
+    match crate::import::import_blueprint_subdir(blueprint.id, subdir, base_path, &ctx.registry.db).await {
         Ok(()) => {
             out.append(
                 format!(

@@ -51,7 +51,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
                 .registry
                 .services
                 .blueprint
-                .add_exit(&from_key, &dir, &to_key)
+                .add_exit(&from_key, dir, &to_key)
                 .await?
             {
                 let _ = writeln!(

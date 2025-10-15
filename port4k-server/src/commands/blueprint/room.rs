@@ -53,7 +53,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
 
         // @bp room lock <bp>:<room>
         "lock" => {
-            if sub_args.len() < 1 {
+            if sub_args.is_empty() {
                 out.append(USAGE);
                 out.failure();
                 return Ok(out);
@@ -73,7 +73,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
 
         // @bp room unlock <bp>:<room>
         "unlock" => {
-            if sub_args.len() < 1 {
+            if sub_args.is_empty() {
                 out.append(USAGE);
                 out.failure();
                 return Ok(out);
@@ -94,7 +94,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
         _ => {
             out.append(super::USAGE);
             out.failure();
-            return Ok(out);
+            Ok(out)
         }
     }
 }

@@ -101,7 +101,7 @@ pub async fn import_blueprint_subdir(
                 o.use_ = o._use_compat.take();
             }
         }
-        for (_, h) in &mut room.scripts.objects {
+        for h in room.scripts.objects.values_mut() {
             if h.use_.is_none() {
                 h.use_ = h._use_compat.take();
             }

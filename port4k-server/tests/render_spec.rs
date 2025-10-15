@@ -1,37 +1,37 @@
-use port4k_server::renderer::{MissingVarPolicy, RenderOptions, render_template, render_template_with_opts};
-use std::collections::HashMap;
-
-fn vars(pairs: &[(&str, &str)]) -> HashMap<String, String> {
-    pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
-}
+use port4k_server::renderer::{MissingVarPolicy, RenderOptions, render_template, render_template_with_opts, RenderVars};
 
 #[test]
 fn var_basic_and_default() {
-    let v = vars(&[("name", "Nova")]);
-    assert_eq!(render_template("Hello {v:name}!", &v), "Hello Nova!");
-    assert_eq!(render_template("Hello {v:missing:World}!", &v), "Hello World!");
+    let mut vars = RenderVars::default();
+    vars.global.insert("name".to_string(), "Nova".to_string());
+
+    assert_eq!(render_template("Hello {v:name}!", &vars, 80), "Hello Nova!");
+    assert_eq!(render_template("Hello {v:missing:World}!", &vars, 80), "Hello World!");
 }
 
 #[test]
 fn var_missing_policy() {
-    let v = HashMap::new();
+    let vars = RenderVars::default();
+
     // default: LeaveToken
-    assert_eq!(render_template("X{v:who}Y", &v), "X{v:who}Y");
+    assert_eq!(render_template("X{v:who}Y", &vars, 80), "X{v:who}Y");
 
     let s = render_template_with_opts(
         "X{v:who}Y",
-        &v,
+        &vars,
         &RenderOptions {
             missing_var: MissingVarPolicy::Empty,
+            max_width: 80,
         },
     );
     assert_eq!(s, "XY");
 
     let s = render_template_with_opts(
         "X{v:who}Y",
-        &v,
+        &vars,
         &RenderOptions {
             missing_var: MissingVarPolicy::Undefined,
+            max_width: 80,
         },
     );
     assert_eq!(s, "XundefinedY");
@@ -39,41 +39,49 @@ fn var_missing_policy() {
 
 #[test]
 fn var_string_format_padding() {
-    let v = vars(&[("name", "Ada")]);
-    assert_eq!(render_template("-{v:name|%-6s}-", &v), "-Ada   -"); // left-align, pad right
-    assert_eq!(render_template("-{v:name|%6s}-", &v), "-   Ada-"); // right-align, pad left
-    assert_eq!(render_template("-{v:name|%3s}-", &v), "-Ada-"); // equal width
-    assert_eq!(render_template("-{v:name|%2s}-", &v), "-Ada-"); // shorter than content
+    let mut vars = RenderVars::default();
+    vars.global.insert("name".to_string(), "Ada".to_string());
+
+    assert_eq!(render_template("-{v:name|%-6s}-", &vars, 80), "-Ada   -"); // left-align, pad right
+    assert_eq!(render_template("-{v:name|%6s}-", &vars, 80), "-   Ada-"); // right-align, pad left
+    assert_eq!(render_template("-{v:name|%3s}-", &vars, 80), "-Ada-"); // equal width
+    assert_eq!(render_template("-{v:name|%2s}-", &vars, 80), "-Ada-"); // shorter than content
 }
 
 #[test]
 fn var_int_format_padding_and_zero() {
-    let v = vars(&[("score", "7"), ("big", "12345")]);
-    assert_eq!(render_template("S={v:score|%5d}", &v), "S=    7");
-    assert_eq!(render_template("S={v:score|%05d}", &v), "S=00007");
-    assert_eq!(render_template("B={v:big|%5d}", &v), "B=12345");
-    assert_eq!(render_template("B={v:big|%03d}", &v), "B=12345"); // width <= len
+    let mut vars = RenderVars::default();
+    vars.global.insert("score".to_string(), "7".to_string());
+    vars.global.insert("big".to_string(), "12345".to_string());
+
+    assert_eq!(render_template("S={v:score|%5d}", &vars, 80), "S=    7");
+    assert_eq!(render_template("S={v:score|%05d}", &vars, 80), "S=00007");
+    assert_eq!(render_template("B={v:big|%5d}", &vars, 80), "B=12345");
+    assert_eq!(render_template("B={v:big|%03d}", &vars, 80), "B=12345"); // width <= len
 }
 
 #[test]
 fn var_int_parse_fallback_to_zero() {
-    let v = vars(&[("weird", "abc")]);
+    let mut vars = RenderVars::default();
+    vars.global.insert("weird".to_string(), "abc".to_string());
+
     // Non-numeric with %d → 0
-    assert_eq!(render_template("N={v:weird|%05d}", &v), "N=00000");
+    assert_eq!(render_template("N={v:weird|%05d}", &vars, 80), "N=00000");
 }
 
 #[test]
 fn var_default_can_contain_pipes() {
     // Default includes pipes and spaces; fmt applies after default chosen
-    let v = HashMap::new();
-    let s = render_template("-{v:title:alpha | beta | gamma|%25s}-", &v);
+    let vars = RenderVars::default();
+    let s = render_template("-{v:title:alpha | beta | gamma|%25s}-", &vars, 80);
     assert_eq!(s, "-     alpha | beta | gamma-");
 }
 
 #[test]
 fn color_reset_and_simple_fg() {
-    let v = HashMap::new();
-    let s = render_template("{c:red}X{c}", &v);
+    let vars = RenderVars::default();
+
+    let s = render_template("{c:red}X{c}", &vars, 80);
     // Must include an SGR start and reset end
     assert!(s.starts_with("\x1b["));
     assert!(s.contains("[31")); // red fg somewhere
@@ -82,9 +90,10 @@ fn color_reset_and_simple_fg() {
 
 #[test]
 fn color_fg_bg_attrs_any_order() {
-    let v = HashMap::new();
+    let vars = RenderVars::default();
+
     // yellow on red, bold+underline
-    let s = render_template("{c:yellow:red:bold,underline}ALERT{c}", &v);
+    let s = render_template("{c:yellow:red:bold,underline}ALERT{c}", &vars, 80);
     // We don't enforce order; just assert presence
     assert!(s.contains("\x1b[")); // SGR start
     assert!(s.contains("33")); // yellow fg
@@ -96,9 +105,10 @@ fn color_fg_bg_attrs_any_order() {
 
 #[test]
 fn color_attr_second_field_is_attrs_not_bg() {
-    let v = HashMap::new();
+    let vars = RenderVars::default();
+
     // second token "bold" is not a color → treated as attrs
-    let s = render_template("{c:yellow:bold}Y{c}", &v);
+    let s = render_template("{c:yellow:bold}Y{c}", &vars, 80);
     // yellow + bold present
     assert!(s.contains("33"));
     assert!(s.contains("1"));
@@ -106,33 +116,44 @@ fn color_attr_second_field_is_attrs_not_bg() {
 
 #[test]
 fn escapes_and_unknown_tokens() {
-    let v = HashMap::new();
+    let vars = RenderVars::default();
+
     // Escapes
-    assert_eq!(render_template("{{}}", &v), "{}");
-    assert_eq!(render_template("{{v}} -> {v:name}", &v), "{v} -> {v:name}");
+    assert_eq!(render_template("{{}}", &vars, 80), "{}");
+    assert_eq!(render_template("{{v}} -> {v:name}", &vars, 80), "{v} -> {v:name}");
     // Unknown token passthrough
-    assert_eq!(render_template("X{x:foo}Y", &v), "X{x:foo}Y");
+    assert_eq!(render_template("X{x:foo}Y", &vars, 80), "X{x:foo}Y");
 }
 
 #[test]
 fn unterminated_brace_is_literal() {
-    let v = vars(&[("name", "Nova")]);
-    assert_eq!(render_template("Hello {v:name", &v), "Hello {v:name");
+    let mut vars = RenderVars::default();
+    vars.global.insert("name".to_string(), "Nova".to_string());
+
+    assert_eq!(render_template("Hello {v:name", &vars, 80), "Hello {v:name");
 }
 
 #[test]
 fn multiple_tokens_sequence() {
-    let v = vars(&[("a", "1"), ("b", "2"), ("c", "3")]);
-    let s = render_template("{v:a}{v:b}{v:c}", &v);
+    let mut vars = RenderVars::default();
+    vars.global.insert("a".to_string(), "1".to_string());
+    vars.global.insert("b".to_string(), "2".to_string());
+    vars.global.insert("c".to_string(), "3".to_string());
+
+    let s = render_template("{v:a}{v:b}{v:c}", &vars, 80);
     assert_eq!(s, "123");
 }
 
 #[test]
 fn mixed_all_together() {
-    let v = vars(&[("pilot", "Nova"), ("coins", "42")]);
+    let mut vars = RenderVars::default();
+    vars.global.insert("pilot".to_string(), "Nova".to_string());
+    vars.global.insert("coins".to_string(), "42".to_string());
+
     let s = render_template(
         "{c:white:blue:bold}Pilot{c}: {v:pilot|%-6s} Coins:{v:coins|%04d}{c}",
-        &v,
+        &vars,
+        80,
     );
     assert!(s.contains("Pilot"));
     assert!(s.contains("Nova  ")); // left padded to width

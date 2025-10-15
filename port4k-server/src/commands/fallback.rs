@@ -27,12 +27,12 @@ pub async fn fallback(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Command
     let (tx, rx) = oneshot::channel();
     ctx.lua_tx
         .send(LuaJob::OnCommand {
-            cursor,
+            cursor: Box::new(cursor),
             account,
-            intent,
+            intent: Box::new(intent),
             reply: tx,
         })
-        .await?;
+        .await.map_err(Box::new)?;
 
     match timeout(LUA_CMD_TIMEOUT, rx).await {
         Err(_) => {

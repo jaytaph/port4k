@@ -4,7 +4,7 @@ use crate::models::account::Account;
 use crate::models::types::AccountId;
 use argon2::Argon2;
 use password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
-use rand_core::OsRng;
+use password_hash::rand_core::OsRng;
 use std::sync::Arc;
 
 pub struct AuthService {

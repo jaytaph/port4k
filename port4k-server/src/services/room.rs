@@ -84,7 +84,7 @@ impl RoomService {
                 .map_err(DomainError::from)
         };
         let kv_fut = async { self.room_repo.room_kv(room_id).await.map_err(DomainError::from) };
-        let state_fut = async { zone_state.zone_room_state(&zone_ctx, room_id, account_id).await };
+        let state_fut = async { zone_state.zone_room_state(zone_ctx, room_id, account_id).await };
 
         let (room, exits, objects, scripts, room_kv, zone_state) =
             try_join!(room_fut, exits_fut, objects_fut, scripts_fut, kv_fut, state_fut)?;

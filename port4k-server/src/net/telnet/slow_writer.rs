@@ -8,6 +8,7 @@ use tokio::io::AsyncWrite;
 use tokio::time::{Sleep, sleep};
 
 pub enum Pace {
+    #[allow(unused)]
     PerChar { delay: Duration },
     PerWord { delay: Duration },
 }
@@ -94,7 +95,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for SlowWriter<W> {
         Pin::new(&mut self.inner).poll_flush(cx)
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.inner).poll_shutdown(cx)
     }
 }
@@ -142,7 +143,7 @@ fn is_ws(b: u8) -> bool {
     matches!(b, b' ' | b'\t')
 }
 fn is_alnum(b: u8) -> bool {
-    (b'A'..=b'Z').contains(&b) || (b'a'..=b'z').contains(&b) || (b'0'..=b'9').contains(&b)
+    b.is_ascii_uppercase() || b.is_ascii_lowercase() || b.is_ascii_digit()
 }
 fn ansi_prefix_len(buf: &[u8]) -> Option<usize> {
     if buf.len() >= 2 && buf[0] == 0x1B && buf[1] == b'[' {

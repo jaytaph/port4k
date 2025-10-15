@@ -51,7 +51,8 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn spawn_background_tasks(registry: Arc<port4k_server::Registry>) {
+#[allow(unused)]
+fn spawn_background_tasks(registry: Arc<Registry>) {
     let db_for_spawn = registry.db.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_millis(1000));

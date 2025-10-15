@@ -15,9 +15,9 @@ use std::sync::Arc;
 #[derive(Default)]
 pub struct RenderVars {
     // Global values accessed with {v:var_name}
-    global: HashMap<String, String>,
+    pub global: HashMap<String, String>,
     // RoomView values accessed with {rv:var_name}
-    room_view: HashMap<String, String>,
+    pub room_view: HashMap<String, String>,
 }
 
 impl RenderVars {
@@ -85,7 +85,7 @@ pub fn render_template_with_opts(template: &str, vars: &RenderVars, opts: &Rende
             }
             None => match opts.missing_var {
                 MissingVarPolicy::Color => out.push_str(&format!("\x1b[36;41m{{{}}}\x1b[0m", raw)),
-                MissingVarPolicy::LeaveToken => out.push_str(&raw),
+                MissingVarPolicy::LeaveToken => out.push_str(raw),
                 MissingVarPolicy::Empty => {}
                 MissingVarPolicy::Undefined => out.push_str("undefined"),
             },
@@ -102,7 +102,7 @@ pub fn render_template_with_opts(template: &str, vars: &RenderVars, opts: &Rende
                 fmt,
             } => {
                 let chosen = vars.room_view.get(&name).cloned().or(default);
-                do_variable_substitution(chosen, &raw, &fmt, &opts, &mut out);
+                do_variable_substitution(chosen, &raw, &fmt, opts, &mut out);
             }
             Token::Var {
                 raw,
@@ -111,7 +111,7 @@ pub fn render_template_with_opts(template: &str, vars: &RenderVars, opts: &Rende
                 fmt,
             } => {
                 let chosen = vars.global.get(&name).cloned().or(default);
-                do_variable_substitution(chosen, &raw, &fmt, &opts, &mut out);
+                do_variable_substitution(chosen, &raw, &fmt, opts, &mut out);
             }
             Token::ColorReset => out.push_str(ansi::RESET),
             Token::Color { fg, bg, attrs } => {

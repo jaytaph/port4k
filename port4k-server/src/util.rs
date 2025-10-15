@@ -18,8 +18,7 @@ pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
             return Err(DomainError::Validation {
                 field: "subdir",
                 message: "must be a single path segment".into(),
-            }
-            .into());
+            });
         }
     }
 
@@ -32,9 +31,8 @@ pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
         if md.file_type().is_symlink() {
             return Err(DomainError::Validation {
                 field: "subdir",
-                message: format!("symlink not allowed: {}", joined.display()).into(),
-            }
-            .into());
+                message: format!("symlink not allowed: {}", joined.display()),
+            });
         }
     }
 
@@ -44,15 +42,13 @@ pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
         return Err(DomainError::Validation {
             field: "subdir",
             message: "path escapes content base".into(),
-        }
-        .into());
+        });
     }
     if !target_can.is_dir() {
         return Err(DomainError::Validation {
             field: "subdir",
-            message: format!("not a directory: {}", target_can.display()).into(),
-        }
-        .into());
+            message: format!("not a directory: {}", target_can.display()),
+        });
     }
 
     Ok(target_can)
@@ -93,9 +89,8 @@ pub fn list_yaml_files_guarded(dir: &Path) -> AppResult<Vec<PathBuf>> {
         if len > MAX_FILE_BYTES as u64 {
             return Err(DomainError::Validation {
                 field: "import",
-                message: format!("file too large: {} ({} bytes)", path.display(), len).into(),
-            }
-            .into());
+                message: format!("file too large: {} ({} bytes)", path.display(), len),
+            });
         }
 
         total = total.saturating_add(len);
@@ -103,8 +98,7 @@ pub fn list_yaml_files_guarded(dir: &Path) -> AppResult<Vec<PathBuf>> {
             return Err(DomainError::Validation {
                 field: "import",
                 message: "import exceeds total size limit".into(),
-            }
-            .into());
+            });
         }
 
         files.push(path);
@@ -112,9 +106,8 @@ pub fn list_yaml_files_guarded(dir: &Path) -> AppResult<Vec<PathBuf>> {
         if files.len() > MAX_FILES_PER_IMPORT {
             return Err(DomainError::Validation {
                 field: "import",
-                message: format!("too many files (> {})", MAX_FILES_PER_IMPORT).into(),
-            }
-            .into());
+                message: format!("too many files (> {})", MAX_FILES_PER_IMPORT),
+            });
         }
     }
 

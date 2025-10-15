@@ -33,6 +33,7 @@ mod who;
 
 pub type CommandResult<T> = Result<T, CommandError>;
 
+//noinspection RsExternalLinter
 #[derive(Debug, Error)]
 pub enum CommandError {
     #[error("unknown command: {0}")]
@@ -51,7 +52,7 @@ pub enum CommandError {
     NoCursor,
 
     #[error(transparent)]
-    Send(#[from] SendError<LuaJob>),
+    Send(#[from] Box<SendError<LuaJob>>),
 
     #[error("custom error: {0}")]
     Custom(String),
@@ -89,7 +90,7 @@ impl CmdCtx {
     }
 
     pub fn is_logged_in(&self) -> bool {
-        self.sess.try_read().map_or(false, |s| s.account.is_some())
+        self.sess.try_read().is_some_and(|s| s.account.is_some())
     }
 
     pub fn account_id(&self) -> AppResult<AccountId> {
@@ -103,7 +104,7 @@ impl CmdCtx {
     }
 
     pub fn has_zone_ctx(&self) -> bool {
-        self.sess.try_read().map_or(false, |s| s.zone_ctx.is_some())
+        self.sess.try_read().is_some_and(|s| s.zone_ctx.is_some())
     }
 
     pub fn zone_ctx(&self) -> AppResult<ZoneContext> {
@@ -117,7 +118,7 @@ impl CmdCtx {
     }
 
     pub fn has_cursor(&self) -> bool {
-        self.sess.try_read().map_or(false, |s| s.cursor.is_some())
+        self.sess.try_read().is_some_and(|s| s.cursor.is_some())
     }
 
     pub fn room_view(&self) -> AppResult<RoomView> {
@@ -127,7 +128,7 @@ impl CmdCtx {
 
 pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult<CommandOutput> {
     // See if we match a shell command, and handle it if so
-    if let Some(shell) = parse_shell_cmd(&raw) {
+    if let Some(shell) = parse_shell_cmd(raw) {
         let out = handle_shell_cmd(shell, ctx.clone()).await?;
         return Ok(out);
     }
@@ -252,6 +253,12 @@ pub struct CommandOutput {
     pub status: CmdStatus,
     pub lines: Vec<String>,
     // more fields we might want later
+}
+
+impl Default for CommandOutput {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CommandOutput {

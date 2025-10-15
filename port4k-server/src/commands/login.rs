@@ -10,7 +10,7 @@ use crate::state::session::ConnState;
 use anyhow::anyhow;
 use std::sync::Arc;
 
-const MOTD: &'static str = r#"
+const MOTD: &str = r#"
 ==============  PORT4K INCOMING MESSAGE =================
 Welcome back, {c:yellow}{v:account.name}{c}!  (last login: {v:last_login})
 Server time: {c:white}{v:wall_time}{c}
@@ -53,7 +53,7 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOut
         return Ok(out);
     }
 
-    let Ok(account) = ctx.registry.services.auth.authenticate(&username, pass).await else {
+    let Ok(account) = ctx.registry.services.auth.authenticate(username, pass).await else {
         out.append("Login failed. Check your username and password.\n");
         out.failure();
         return Ok(out);

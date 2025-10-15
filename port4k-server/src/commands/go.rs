@@ -1,7 +1,6 @@
 use crate::ConnState;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
-use crate::models::types::Direction;
 use crate::renderer::RenderVars;
 use crate::renderer::room_view::render_room_view;
 use std::sync::Arc;
@@ -21,7 +20,6 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput
         out.failure();
         return Ok(out);
     };
-    let dir = Direction::from(dir);
 
     let c = ctx.cursor()?;
     let account = ctx.account()?;

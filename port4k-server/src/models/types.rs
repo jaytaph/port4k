@@ -23,6 +23,12 @@ macro_rules! define_id {
         #[serde(transparent)] // JSON = plain UUID string
         pub struct $name(pub uuid::Uuid);
 
+        impl Default for $name {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+
         impl $name {
             #[inline]
             pub fn new() -> Self {

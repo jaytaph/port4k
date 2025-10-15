@@ -68,7 +68,7 @@ pub enum DomainError {
     InvalidData(String),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum ConfigErrorKind {
     #[error("failed to read file: {0}")]
     Read(std::io::Error),

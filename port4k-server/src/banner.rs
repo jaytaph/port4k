@@ -1,4 +1,4 @@
-pub const BANNER: &str = concat!(
+pub static BANNER: &str = concat!(
     "\n",
     "\x1b[36m",
     "______          _       ___ _     \n",
@@ -10,7 +10,7 @@ pub const BANNER: &str = concat!(
     "\x1b[0m\n"
 );
 
-pub const ENTRY: &str = concat!(
+pub static ENTRY: &str = concat!(
     "\n",
     "\x1b[1;35m",
     "★ WELCOME TO PORT4K, YOUR LAST STOP BEFORE THE VOID ★",

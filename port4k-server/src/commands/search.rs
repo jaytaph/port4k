@@ -43,7 +43,7 @@ async fn handle_search_object(ctx: Arc<CmdCtx>, noun: NounPhrase, out: &mut Comm
 
 async fn handle_search_room(ctx: Arc<CmdCtx>, out: &mut CommandOutput) -> anyhow::Result<()> {
     let _rv = ctx.room_view()?;
-    out.append(format!("You search the area but find nothing of interest.").as_str());
+    out.append("You search the area but find nothing of interest.".to_string().as_str());
     out.success();
 
     Ok(())

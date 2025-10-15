@@ -171,12 +171,12 @@ fn parse_color(_raw: String, rest: Option<&str>) -> Token {
                 return Token::ColorReset;
             }
 
-            let fg: Option<String>;
+            
             let mut bg: Option<String> = None;
             let mut attrs: Vec<String> = Vec::new();
 
             // always parse first as fg
-            fg = Some(items.remove(0).to_string());
+            let fg: Option<String> = Some(items.remove(0).to_string());
 
             if !items.is_empty() {
                 // heuristic: if the next section contains ',', it's attrs; otherwise treat it as bg or attrs

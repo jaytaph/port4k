@@ -11,7 +11,7 @@ const USAGE: &str = r#"Usage:
 
 pub enum Next {
     /// Contains the cursor to return to live mode
-    ExitToLive(Cursor),
+    ExitToLive(Box<Cursor>),
     /// Not currently in playtest mode
     NotInPlaytest,
     /// Not logged in
@@ -49,7 +49,7 @@ pub fn check_playtest(ctx: Arc<CmdCtx>) -> Next {
     }
 
     let c = s.prev_cursors.first().unwrap().clone();
-    Next::ExitToLive(c)
+    Next::ExitToLive(Box::new(c))
 }
 
 pub async fn exit_playtest(ctx: Arc<CmdCtx>, out: &mut CommandOutput) -> anyhow::Result<()> {
@@ -65,7 +65,7 @@ pub async fn exit_playtest(ctx: Arc<CmdCtx>, out: &mut CommandOutput) -> anyhow:
         Next::ExitToLive(c) => {
             let mut s = ctx.sess.write();
             s.prev_cursors.pop();
-            s.cursor = Some(c);
+            s.cursor = Some(*c);
 
             out.append("[playtest] exited to live mode.\n");
             out.success();

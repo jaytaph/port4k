@@ -160,7 +160,7 @@ pub struct ZoneRoomState {
     // pub current_room: Option<RoomId>,
     /// Items in the room and their quantities, including hidden/undiscovered ones
     pub all_objects: HashMap<ObjectId, i32>,
-    /// Objects that are visibible for the player (this assumes that ALL quantities are visible at the same time)
+    /// Objects that are visible for the player (this assumes that ALL quantities are visible at the same time)
     pub discovered_objects: HashSet<ObjectId>,
     // Trail of rooms the player has visited to get here (for backtracking)
     // pub trail: Vec<(RoomId, RoomId)>,
@@ -345,6 +345,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn obj(
         name: &str,
         nouns: &[&str],

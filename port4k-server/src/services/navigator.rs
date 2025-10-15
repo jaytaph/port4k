@@ -23,7 +23,7 @@ impl NavigatorService {
 
     pub async fn go(&self, cursor: &Cursor, account_id: AccountId, dir: Direction) -> AppResult<(RoomId, RoomId)> {
         let from_id = cursor.room_view.room.id;
-        let (_exit, to_id) = self.resolve_exit_checked(&cursor, account_id, from_id, dir).await?;
+        let (_exit, to_id) = self.resolve_exit_checked(cursor, account_id, from_id, dir).await?;
 
         let state = self.zone_router.state_for(&cursor.zone_ctx);
 
