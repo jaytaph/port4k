@@ -170,8 +170,6 @@ pub struct ZoneRoomState {
     // pub trail: Vec<(RoomId, RoomId)>,
 }
 
-
-
 /// ZoneObjectState overlay for objects in a room in a zone.
 pub struct ZoneObjectState {
     /// Zone in which the room lives

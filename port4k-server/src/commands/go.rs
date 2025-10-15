@@ -3,7 +3,8 @@ use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use crate::ConnState;
 use crate::models::types::Direction;
-use crate::renderer::{render_room, Theme};
+use crate::renderer::RenderVars;
+use crate::renderer::room_view::render_room_view;
 
 pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();
@@ -37,7 +38,8 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput
     // Render the new room
     let c = ctx.cursor()?;
 
-    out.append(render_room(&Theme::blue(), 80, c.room_view).as_str());
+    let vars = RenderVars::new(ctx.sess.clone(), Some(&c.room_view));
+    out.append(render_room_view(&vars, 80).await.as_str());
     out.success();
     Ok(out)
 }

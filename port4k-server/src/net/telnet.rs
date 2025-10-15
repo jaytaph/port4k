@@ -1,5 +1,6 @@
 mod connection;
 mod crlf_wrapper;
+mod slow_writer;
 
 use std::sync::Arc;
 use parking_lot::RwLock;

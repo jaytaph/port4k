@@ -4,12 +4,21 @@ use std::collections::HashSet;
 #[derive(Clone, Debug)]
 pub enum Token {
     Text(String),
+    /// Any {rv:...} variable; kept separate for possible special handling
+    RoomVar {
+        raw: String,             // original token text for LeaveToken
+        name: String,
+        default: Option<String>,
+        fmt: Option<VarFmt>,
+    },
+    /// Any {v:...} variable
     Var {
         raw: String,             // original token text for LeaveToken
         name: String,
         default: Option<String>,
         fmt: Option<VarFmt>,
     },
+    /// Any {c:...} color spec
     Color {
         fg: Option<String>,
         bg: Option<String>,
@@ -103,13 +112,14 @@ fn parse_token(raw: String, content: String) -> Token {
     let rest = parts.next();
 
     match kind {
-        "v" => parse_var(raw, rest.unwrap_or("")),
+        "rv" => parse_var(raw, rest.unwrap_or(""), true),
+        "v" => parse_var(raw, rest.unwrap_or(""), false),
         "c" => parse_color(raw, rest),
         _ => Token::Unknown(raw),
     }
 }
 
-fn parse_var(raw: String, rest: &str) -> Token {
+fn parse_var(raw: String, rest: &str, is_roomvar: bool) -> Token {
     // we need to split possible trailing |%fmt from the right
     let mut vv = rest.rsplitn(2, '|');
     let right = vv.next().unwrap_or("");
@@ -128,6 +138,9 @@ fn parse_var(raw: String, rest: &str) -> Token {
     let name = parts.next().unwrap_or("").trim().to_string();
     let default = parts.next().map(|s| s.to_string());
 
+    if is_roomvar {
+        return Token::RoomVar { raw, name, default, fmt };
+    }
     Token::Var { raw, name, default, fmt }
 }
 

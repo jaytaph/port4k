@@ -2,17 +2,19 @@ use crate::input::readline::{EditEvent, LineEditor};
 use crate::util::telnet::{TelnetIn, TelnetMachine};
 use crate::{ConnState, process_command, Session, Registry};
 use std::sync::Arc;
+use std::time::Duration;
 use parking_lot::RwLock;
 use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::net::tcp::OwnedReadHalf;
 use crate::banner::{BANNER, ENTRY};
-use crate::commands::CmdCtx;
+use crate::commands::{CmdCtx, CommandOutput};
 use crate::models::account::Account;
 use crate::error::AppResult;
 use crate::net::AppCtx;
 use crate::net::telnet::crlf_wrapper::CrlfWriter;
-use crate::renderer::{get_vars, render};
+use crate::net::telnet::slow_writer::{Pace, SlowWriter};
+use crate::renderer::{render_template, RenderVars};
 
 pub async fn handle_connection(
     stream: TcpStream,
@@ -22,13 +24,14 @@ pub async fn handle_connection(
     // Split stream into read/write halves and wrap write half to ensure CRLF outputs.
     let (r, mut w) = stream.into_split();
     let mut crlf_w = &mut CrlfWriter::new(&mut w);
+    let mut writer = SlowWriter::new(&mut crlf_w, Pace::PerWord { delay: Duration::from_millis(15) });
 
     let mut reader = BufReader::new(r);
     let mut editor = LineEditor::new("> ");
     let mut telnet = TelnetMachine::new();
 
-    start_session(&mut crlf_w, &mut telnet, &mut editor, sess.clone()).await?;
-    read_loop(&mut reader, &mut crlf_w, &mut telnet, &mut editor, ctx.clone(), sess.clone()).await?;
+    start_session(&mut writer, &mut telnet, &mut editor, sess.clone()).await?;
+    read_loop(&mut reader, &mut writer, &mut telnet, &mut editor, ctx.clone(), sess.clone()).await?;
     cleanup(sess.clone(), ctx.registry.clone()).await;
 
     Ok(())
@@ -88,8 +91,9 @@ async fn read_loop<W: AsyncWrite + Unpin>(
 }
 
 fn generate_prompt(sess: Arc<RwLock<Session>>, prompt: &str) -> String {
-    let vars = get_vars(sess.clone());
-    render(prompt, &vars)
+    // No roomview vars in prompt generation
+    let vars = RenderVars::new(sess.clone(), None);
+    render_template(prompt, &vars, 80)
 }
 
 async fn cleanup(sess: Arc<RwLock<Session>>, registry: Arc<Registry>) {
@@ -146,7 +150,6 @@ async fn handle_naws(cols: u16, rows: u16, sess: Arc<RwLock<Session>>) {
 }
 
 async fn dispatch_command<W: AsyncWrite + Unpin>(raw: &str, w: &mut W, ctx: Arc<AppCtx>, sess: Arc<RwLock<Session>>) -> AppResult<()> {
-
     let cmd_ctx = Arc::new(CmdCtx {
         registry: ctx.registry.clone(),
         lua_tx: ctx.lua_tx.clone(),
@@ -155,19 +158,38 @@ async fn dispatch_command<W: AsyncWrite + Unpin>(raw: &str, w: &mut W, ctx: Arc<
 
     match process_command(raw, cmd_ctx.clone()).await {
         Ok(res) => {
-            let out = if res.failed() {
-                format!("error: {}", res.message())
+            if res.succeeded() {
+                output_success(w, res).await;
             } else {
-                res.message()
+                output_error(w, res).await;
             };
-
-            write_with_newline(w, out.as_bytes()).await?;
+            // write_with_newline(w, out.as_bytes()).await?;
         }
         Err(e) => {
             write_with_newline(w, format!("error: {e}").as_bytes()).await?;
         }
     }
     Ok(())
+}
+
+async fn output_error<W: AsyncWrite + Unpin>(w: &mut W, out: CommandOutput) {
+    let _ = write_with_newline(w, b"\n").await;
+    let _ = write_with_newline(w, b"An error occurred while processing your command.").await;
+    let _ = write_with_newline(w, b"\n").await;
+    for msg in out.messages() {
+        let _ = write_with_newline(w, msg.as_bytes()).await;
+        let _ = write_with_newline(w, b"\n").await;
+    }
+    let _ = write_with_newline(w, b"\n").await;
+}
+
+async fn output_success<W: AsyncWrite + Unpin>(w: &mut W, out: CommandOutput) {
+    let _ = write_with_newline(w, b"\n").await;
+    for msg in out.messages() {
+        let _ = write_with_newline(w, msg.as_bytes()).await;
+        let _ = write_with_newline(w, b"\n").await;
+    }
+    let _ = write_with_newline(w, b"\n").await;
 }
 
 #[derive(PartialEq, Eq)]
@@ -242,12 +264,14 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
 
 async fn repaint_prompt<W: AsyncWrite + Unpin>(sess: Arc<RwLock<Session>>, w: &mut W, editor: &mut LineEditor, generate_new_prompt: bool) -> std::io::Result<()> {
     if generate_new_prompt {
-        let prompt = generate_prompt(sess.clone(), &"{v:account.name:Not logged in} [{v:room:Nowhere}] @ {v:wall_time} > ");
+        let prompt = generate_prompt(sess.clone(), &"{v:account.name:Not logged in} [{v:room:Nowhere}] @ {c:yellow:bold}{v:wall_time}{c} > ");
         editor.set_prompt(&prompt);
     }
 
-    w.write_all(editor.repaint_line().as_bytes()).await?;
-    w.flush().await
+    {
+        w.write_all_fast(editor.repaint_line().as_bytes()).await?;
+        w.flush().await
+    }
 }
 
 /// Write text, ensuring it ends in CRLF (good Telnet hygiene)

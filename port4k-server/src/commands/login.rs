@@ -7,15 +7,16 @@ use crate::models::account::Account;
 use crate::db::repo::room::BlueprintAndRoomKey;
 use crate::error::DomainError;
 use crate::models::zone::{Persistence, ZoneContext, ZoneKind, ZonePolicy};
-use crate::renderer::{render_room, render_text, Theme};
+use crate::renderer::{render_template, RenderVars};
+use crate::renderer::room_view::render_room_view;
 
 const MOTD: &'static str = r#"
 ====================  PORT4K  ====================
 Welcome back, {c:yellow}{v:account.name}{c}!  (last login: {v:last_login})
 Server time: {c:white}{v:wall_time}{c}
-Location: {c:white}{v:cursor.zone} — {v:cursor.room.title}{c}
+Location: {c:white:bold}{v:cursor.zone} - {v:cursor.room.title}{c}
 
-Account:  HP {c:white}{v:account.health}/100{c}   XP {c:white}{v:account.xp}{c}   Coins {c:white}{v:account.coins}{c}
+Account:  HP {c:green:bold}{v:account.health}/100{c}   XP {c:green:bold}{v:account.xp}{c}   Coins {c:green:bold}{v:account.coins}{c}
 
 News:
  - New vault area unlocked in The Hub.
@@ -27,7 +28,7 @@ Tips:
  - Use cardinal directions or verbs like {c:blue}'in'{c}/{c:blue}'out'{c} to move.
  - Stuck? Try {c:blue}'look'{c}, {c:blue}'hint'{c}, or {c:blue}'scan'{c}.
 
-Exits from here: {c:blue}{v:room.exits_line}{c}
+Exits from here: {c:blue:bold}{v:room.exits_line}{c}
 
 Enjoy your stay, {v:account.role} {v:account.name}.
 =================================================
@@ -87,19 +88,19 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOut
     ctx.registry.set_online(&account, true).await;
 
     let cursor = ctx.cursor().map_err(|_| DomainError::NotFound)?;
-    let theme = Theme::blue();
     let width = 80;
 
     let show_motd = true; // @TODO: Make configurable per-account
     if !show_motd {
-        out.append(format!("Welcome back, {}! You are in {} — {}.\n", account.username, cursor.zone_ctx.zone.title, cursor.room_view.room.title).as_str());
+        out.append(format!("Welcome back, {{c:yellow}}{}{{c}}! You are in {{c:blue:bold}}{}:{}{{c}}.\n", account.username, cursor.zone_ctx.zone.title, cursor.room_view.room.title).as_str());
         out.success();
         return Ok(out);
     }
 
     // Render the MOTD and the current room
-    out.append(render_text(ctx.sess.clone(), &theme, width, MOTD).as_str());
-    out.append(render_room(&theme, width, cursor.room_view).as_str());
+    let vars = RenderVars::new(ctx.sess.clone(), Some(&cursor.room_view));
+    out.append(render_template(MOTD, &vars, width).as_str());
+    out.append(render_room_view(&vars, width).await.as_str());
     out.success();
     Ok(out)
 }
