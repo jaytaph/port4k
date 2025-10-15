@@ -1,4 +1,4 @@
-use crate::renderer::{render_template, RenderVars};
+use crate::renderer::{RenderVars, render_template};
 
 pub async fn render_room_view(vars: &RenderVars, max_width: usize) -> String {
     let mut res = Vec::new();

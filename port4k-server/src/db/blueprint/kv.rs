@@ -1,6 +1,6 @@
+use super::super::Db;
 use crate::db::DbResult;
 use crate::models::types::{AccountId, RoomId};
-use super::super::Db;
 
 impl Db {
     pub async fn bp_room_kv_get(&self, room_id: RoomId, key: &str) -> DbResult<Option<serde_json::Value>> {
@@ -15,12 +15,7 @@ impl Db {
         Ok(row.map(|r| r.get::<_, serde_json::Value>(0)))
     }
 
-    pub async fn bp_room_kv_set(
-        &self,
-        room_id: RoomId,
-        key: &str,
-        value: &serde_json::Value,
-    ) -> DbResult<()> {
+    pub async fn bp_room_kv_set(&self, room_id: RoomId, key: &str, value: &serde_json::Value) -> DbResult<()> {
         let c = self.pool.get().await?;
         c.execute(
             "INSERT INTO bp_room_kv (room_id, key, value)

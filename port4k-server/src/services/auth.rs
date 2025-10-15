@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use crate::db::repo::account::AccountRepo;
+use crate::error::{AppResult, DomainError};
+use crate::models::account::Account;
+use crate::models::types::AccountId;
 use argon2::Argon2;
 use password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use rand_core::OsRng;
-use crate::models::account::Account;
-use crate::db::repo::account::AccountRepo;
-use crate::error::{AppResult, DomainError};
-use crate::models::types::AccountId;
+use std::sync::Arc;
 
 pub struct AuthService {
     repo: Arc<dyn AccountRepo>,
@@ -26,7 +26,8 @@ impl AuthService {
         let salt = SaltString::generate(&mut OsRng);
         let hash = self
             .argon
-            .hash_password(password.as_bytes(), &salt).map_err(DomainError::Password)?
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(DomainError::Password)?
             .to_string();
 
         let account = Account {

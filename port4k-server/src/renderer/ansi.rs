@@ -6,10 +6,14 @@ pub fn compose_sgr(fg: Option<&str>, bg: Option<&str>, attrs: &[String]) -> Stri
     let mut codes: Vec<&'static str> = Vec::new();
 
     if let Some(name) = fg {
-        if let Some(code) = fg_code(name) { codes.push(code); }
+        if let Some(code) = fg_code(name) {
+            codes.push(code);
+        }
     }
     if let Some(name) = bg {
-        if let Some(code) = bg_code(name) { codes.push(code); }
+        if let Some(code) = bg_code(name) {
+            codes.push(code);
+        }
     }
     for a in attrs {
         if let Some(code) = attr_code(a.as_str()) {
@@ -17,11 +21,15 @@ pub fn compose_sgr(fg: Option<&str>, bg: Option<&str>, attrs: &[String]) -> Stri
         }
     }
 
-    if codes.is_empty() { return String::new(); }
+    if codes.is_empty() {
+        return String::new();
+    }
 
     let mut s = String::from("\x1b[");
     for (i, c) in codes.iter().enumerate() {
-        if i > 0 { s.push(';'); }
+        if i > 0 {
+            s.push(';');
+        }
         s.push_str(c);
     }
     s.push('m');

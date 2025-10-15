@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use crate::error::{AppResult, DomainError};
 use crate::models::types::{AccountId, Direction, RoomId};
 use crate::models::zone::ZoneRouter;
 use crate::state::session::Cursor;
+use std::sync::Arc;
 
 #[allow(unused)]
 #[derive(Clone)]
@@ -21,12 +21,7 @@ impl NavigatorService {
         Self { zone_router }
     }
 
-    pub async fn go(
-        &self,
-        cursor: &Cursor,
-        account_id: AccountId,
-        dir: Direction,
-    ) -> AppResult<(RoomId, RoomId)> {
+    pub async fn go(&self, cursor: &Cursor, account_id: AccountId, dir: Direction) -> AppResult<(RoomId, RoomId)> {
         let from_id = cursor.room_view.room.id;
         let (_exit, to_id) = self.resolve_exit_checked(&cursor, account_id, from_id, dir).await?;
 
@@ -59,7 +54,7 @@ impl NavigatorService {
             .iter()
             .find(|e| e.dir.to_short() == want && e.from_room_id == from)
             .cloned();
-            // .map_e(|| DomainError::InvalidDirection);
+        // .map_e(|| DomainError::InvalidDirection);
 
         let exit_row = match exit_row {
             Some(e) => e,
@@ -75,7 +70,7 @@ impl NavigatorService {
         // // 3) Parse constraints/flags from the exit. Adjust field access to your model.
         // // Here we assume ExitRow has an optional `state: serde_json::Value`.
         let (locked, locked_msg) = (exit_row.locked, "The way is locked.".to_string());
-            // parse_exit_state(&exit_row.state);
+        // parse_exit_state(&exit_row.state);
 
         if locked {
             return Err(DomainError::LockedExit(locked_msg));

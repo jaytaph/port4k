@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
+use std::sync::Arc;
 
 pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();

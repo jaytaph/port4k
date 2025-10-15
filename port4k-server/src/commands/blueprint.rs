@@ -34,7 +34,7 @@ pub async fn blueprint(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Comman
             out.append(USAGE);
             out.failure();
             Ok(out)
-        },
+        }
     }
 }
 

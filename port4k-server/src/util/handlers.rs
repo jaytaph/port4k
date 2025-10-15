@@ -4,7 +4,7 @@ use crate::models::types::ObjectId;
 pub fn passive_discovery(
     rv: &RoomView,
     zr: &mut ZoneRoomState,
-    perception: u8,            // from character sheet; fall back to default
+    perception: u8, // from character sheet; fall back to default
 ) -> Vec<ObjectId> {
     let mut revealed = vec![];
     for obj in &rv.objects {

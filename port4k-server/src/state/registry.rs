@@ -1,9 +1,5 @@
 use crate::config::Config;
 use crate::db::Db;
-use std::collections::BTreeSet;
-use std::sync::Arc;
-use parking_lot::RwLock;
-use crate::models::account::Account;
 use crate::db::repo::account::AccountRepo;
 use crate::db::repo::db_account::AccountRepository;
 use crate::db::repo::db_kv::KvRepository;
@@ -12,8 +8,14 @@ use crate::db::repo::db_zone::ZoneRepository;
 use crate::db::repo::kv::KvRepo;
 use crate::db::repo::room::RoomRepo;
 use crate::db::repo::zone::ZoneRepo;
+use crate::models::account::Account;
 use crate::models::zone::{DbBackend, MemoryBackend, ZoneRouter};
-use crate::services::{AccountService, AuthService, BlueprintService, RoomService, CursorService, NavigatorService, ZoneService};
+use crate::services::{
+    AccountService, AuthService, BlueprintService, CursorService, NavigatorService, RoomService, ZoneService,
+};
+use parking_lot::RwLock;
+use std::collections::BTreeSet;
+use std::sync::Arc;
 
 /// We are entering container / DI territory here. We have to be careful that we don't create
 /// circular references.

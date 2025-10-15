@@ -1,7 +1,7 @@
+use super::{Db, DbResult};
 use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod, Runtime};
 use std::str::FromStr;
 use tokio_postgres::NoTls;
-use super::{Db, DbResult};
 
 impl Db {
     pub fn new(url: &str) -> DbResult<Self> {
@@ -15,10 +15,7 @@ impl Db {
             },
         );
 
-        let pool = Pool::builder(mgr)
-            .max_size(16)
-            .runtime(Runtime::Tokio1)
-            .build()?;
+        let pool = Pool::builder(mgr).max_size(16).runtime(Runtime::Tokio1).build()?;
 
         Ok(Self { pool })
     }

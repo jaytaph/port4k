@@ -1,37 +1,46 @@
-use crate::input::readline::{EditEvent, LineEditor};
-use crate::util::telnet::{TelnetIn, TelnetMachine};
-use crate::{ConnState, process_command, Session, Registry};
-use std::sync::Arc;
-use std::time::Duration;
-use parking_lot::RwLock;
-use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::net::TcpStream;
-use tokio::net::tcp::OwnedReadHalf;
 use crate::banner::{BANNER, ENTRY};
 use crate::commands::{CmdCtx, CommandOutput};
-use crate::models::account::Account;
 use crate::error::AppResult;
+use crate::input::readline::{EditEvent, LineEditor};
+use crate::models::account::Account;
 use crate::net::AppCtx;
 use crate::net::telnet::crlf_wrapper::CrlfWriter;
 use crate::net::telnet::slow_writer::{Pace, SlowWriter};
-use crate::renderer::{render_template, RenderVars};
+use crate::renderer::{RenderVars, render_template};
+use crate::util::telnet::{TelnetIn, TelnetMachine};
+use crate::{ConnState, Registry, Session, process_command};
+use parking_lot::RwLock;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::net::TcpStream;
+use tokio::net::tcp::OwnedReadHalf;
 
-pub async fn handle_connection(
-    stream: TcpStream,
-    ctx: Arc<AppCtx>,
-    sess: Arc<RwLock<Session>>,
-) -> AppResult<()> {
+pub async fn handle_connection(stream: TcpStream, ctx: Arc<AppCtx>, sess: Arc<RwLock<Session>>) -> AppResult<()> {
     // Split stream into read/write halves and wrap write half to ensure CRLF outputs.
     let (r, w) = stream.into_split();
     let crlf_w = CrlfWriter::new(w);
-    let mut writer = SlowWriter::new(crlf_w, Pace::PerWord { delay: Duration::from_millis(1) });
+    let mut writer = SlowWriter::new(
+        crlf_w,
+        Pace::PerWord {
+            delay: Duration::from_millis(1),
+        },
+    );
 
     let mut reader = BufReader::new(r);
     let mut editor = LineEditor::new("> ");
     let mut telnet = TelnetMachine::new();
 
     start_session(&mut writer, &mut telnet, &mut editor, sess.clone()).await?;
-    read_loop(&mut reader, &mut writer, &mut telnet, &mut editor, ctx.clone(), sess.clone()).await?;
+    read_loop(
+        &mut reader,
+        &mut writer,
+        &mut telnet,
+        &mut editor,
+        ctx.clone(),
+        sess.clone(),
+    )
+    .await?;
     cleanup(sess.clone(), ctx.registry.clone()).await;
 
     Ok(())
@@ -149,7 +158,12 @@ async fn handle_naws(cols: u16, rows: u16, sess: Arc<RwLock<Session>>) {
     s.tty_rows = Some(rows as usize);
 }
 
-async fn dispatch_command<W: AsyncWrite + Unpin>(raw: &str, w: &mut W, ctx: Arc<AppCtx>, sess: Arc<RwLock<Session>>) -> AppResult<()> {
+async fn dispatch_command<W: AsyncWrite + Unpin>(
+    raw: &str,
+    w: &mut W,
+    ctx: Arc<AppCtx>,
+    sess: Arc<RwLock<Session>>,
+) -> AppResult<()> {
     let cmd_ctx = Arc::new(CmdCtx {
         registry: ctx.registry.clone(),
         lua_tx: ctx.lua_tx.clone(),
@@ -205,7 +219,7 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
     w: &mut SlowWriter<W>,
     telnet: &mut TelnetMachine,
     ctx: Arc<AppCtx>,
-    sess: Arc<RwLock<Session>>
+    sess: Arc<RwLock<Session>>,
 ) -> AppResult<LoginOutcome> {
     // Only handle `login <username>` with exactly one arg here
     let Some(rest) = raw.strip_prefix("login ") else {
@@ -258,7 +272,11 @@ async fn try_handle_login<W: AsyncWrite + Unpin>(
     }
     ctx.registry.set_online(&account, true).await;
 
-    write_with_newline(w, format!("Welcome, {}! Type `look` or `help`.", account.username).as_bytes()).await?;
+    write_with_newline(
+        w,
+        format!("Welcome, {}! Type `look` or `help`.", account.username).as_bytes(),
+    )
+    .await?;
     Ok(LoginOutcome::Handled)
 }
 
@@ -266,10 +284,13 @@ async fn repaint_prompt<W: AsyncWrite + Unpin>(
     sess: Arc<RwLock<Session>>,
     w: &mut SlowWriter<W>,
     editor: &mut LineEditor,
-    generate_new_prompt: bool
+    generate_new_prompt: bool,
 ) -> std::io::Result<()> {
     if generate_new_prompt {
-        let prompt = generate_prompt(sess.clone(), &"{v:account.name:Not logged in} [{v:room:Nowhere}] @ {c:yellow:bold}{v:wall_time}{c} > ");
+        let prompt = generate_prompt(
+            sess.clone(),
+            &"{v:account.name:Not logged in} [{v:room:Nowhere}] @ {c:yellow:bold}{v:wall_time}{c} > ",
+        );
         editor.set_prompt(&prompt);
     }
 

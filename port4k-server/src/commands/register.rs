@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use crate::models::account::Account;
+use std::sync::Arc;
 
 pub async fn register(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();
@@ -12,7 +12,11 @@ pub async fn register(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Command
         return Ok(out);
     }
 
-    let (username, email, pass) = (intent.args[0].as_str(), intent.args[1].as_str(), intent.args[2].as_str());
+    let (username, email, pass) = (
+        intent.args[0].as_str(),
+        intent.args[1].as_str(),
+        intent.args[2].as_str(),
+    );
     if Account::validate_username(username).is_err() {
         out.append("Invalid username or password.\n");
         out.failure();

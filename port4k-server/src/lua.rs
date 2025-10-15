@@ -1,22 +1,22 @@
-use std::sync::Arc;
-use mlua::{Function, Lua, Table, Value};
-use parking_lot::Mutex;
-use tokio::runtime::Handle;
-use tokio::sync::{mpsc, oneshot};
+use crate::Registry;
+use crate::error::AppResult;
+use crate::input::parser::Intent;
 use crate::models::account::Account;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::RoomView;
-use crate::error::AppResult;
-use crate::input::parser::Intent;
-use crate::Registry;
 use crate::state::session::Cursor;
+use mlua::{Function, Lua, Table, Value};
+use parking_lot::Mutex;
+use std::sync::Arc;
+use tokio::runtime::Handle;
+use tokio::sync::{mpsc, oneshot};
 
 pub enum LuaJob {
     /// Called when a player enters a room.
     OnEnter {
         account: Account,
         cursor: Cursor,
-        reply: oneshot::Sender<bool>
+        reply: oneshot::Sender<bool>,
     },
     /// Called when a player issues a command in a room
     OnCommand {
@@ -58,8 +58,13 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
             match job {
                 LuaJob::OnEnter { cursor, account, reply } => {
                     let _ = (|| -> AppResult<Option<String>> {
-                        let src = cursor.room_view.scripts.on_enter_lua
-                            .as_deref().unwrap_or("").to_owned();
+                        let src = cursor
+                            .room_view
+                            .scripts
+                            .on_enter_lua
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_owned();
                         if src.is_empty() {
                             return Ok(None);
                         }
@@ -67,18 +72,14 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                         let out = Arc::new(Mutex::new(String::new()));
 
                         let env = make_env(&lua)?;
-                        install_host_api(
-                            &lua,
-                            &env,
-                            &rt_handle,
-                            &registry,
-                            &cursor,
-                            &account,
-                            out.clone(),
-                        )?;
+                        install_host_api(&lua, &env, &rt_handle, &registry, &cursor, &account, out.clone())?;
 
-                        let chunk = lua.load(&src)
-                            .set_name(&format!("{}:{}:on_enter", cursor.zone_ctx.blueprint.key, cursor.room_view.room.key))
+                        let chunk = lua
+                            .load(&src)
+                            .set_name(&format!(
+                                "{}:{}:on_enter",
+                                cursor.zone_ctx.blueprint.key, cursor.room_view.room.key
+                            ))
                             .set_environment(env.clone());
                         chunk.exec()?;
 
@@ -94,10 +95,20 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                     let _ = reply.send(true);
                 }
 
-                LuaJob::OnCommand { cursor, account, intent, reply } => {
+                LuaJob::OnCommand {
+                    cursor,
+                    account,
+                    intent,
+                    reply,
+                } => {
                     let _ = (|| -> AppResult<Option<String>> {
-                        let src = cursor.room_view.scripts.on_command_lua
-                            .as_deref().unwrap_or("").to_owned();
+                        let src = cursor
+                            .room_view
+                            .scripts
+                            .on_command_lua
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_owned();
                         if src.is_empty() {
                             return Ok(None);
                         }
@@ -106,18 +117,15 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                         let out = Arc::new(Mutex::new(String::new()));
 
                         let env = make_env(&lua)?;
-                        install_host_api(
-                            &lua,
-                            &env,
-                            &rt_handle,
-                            &registry,
-                            &cursor,
-                            &account,
-                            out.clone(),
-                        )?;
+                        install_host_api(&lua, &env, &rt_handle, &registry, &cursor, &account, out.clone())?;
 
                         // ----- Load & run on_command(bp:room) -----
-                        lua.load(&src).set_name(&format!("{}:{}:on_command", cursor.zone_ctx.blueprint.key, cursor.room_view.room.key)).exec()?;
+                        lua.load(&src)
+                            .set_name(&format!(
+                                "{}:{}:on_command",
+                                cursor.zone_ctx.blueprint.key, cursor.room_view.room.key
+                            ))
+                            .exec()?;
 
                         if let Ok(func) = lua.globals().get::<_, Function>("on_command") {
                             let t: Table = lua.create_table()?;
@@ -143,7 +151,6 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
 
     tx
 }
-
 
 fn make_env(lua: &Lua) -> mlua::Result<Table<'_>> {
     let env = lua.create_table()?;
@@ -188,7 +195,6 @@ fn install_host_api(
         })?;
         env.set("send", send)?;
     }
-
 
     // broadcast_room(text)
     {

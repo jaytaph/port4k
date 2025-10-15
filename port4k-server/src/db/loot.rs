@@ -1,7 +1,7 @@
-use rand_core::OsRng;
+use super::{Db, DbResult};
 use crate::models::account::Account;
 use crate::models::types::RoomId;
-use super::{Db, DbResult};
+use rand_core::OsRng;
 
 impl Db {
     /// Spawn due coin piles (and other loot) up to max_instances per spawn.

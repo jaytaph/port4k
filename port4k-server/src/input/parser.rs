@@ -13,8 +13,8 @@
 //!   let intent = parse_command("open the door with key");
 //!   match intent.verb { Verb::Open => { /* inspect intent.direct/instrument */ }, _ => {} }
 
-use std::collections::{HashMap, HashSet};
 use crate::models::types::Direction;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verb {
@@ -183,9 +183,7 @@ pub fn parse_command(input: &str) -> Intent {
 
     // Movement form "go north"
     if verb == Verb::Go {
-        let dir = tokens
-            .get(consumed)
-            .and_then(|t| Direction::parse(t.lower.as_str()));
+        let dir = tokens.get(consumed).and_then(|t| Direction::parse(t.lower.as_str()));
 
         return Intent {
             verb,

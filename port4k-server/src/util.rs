@@ -1,12 +1,12 @@
+use crate::error::{AppResult, DomainError, InfraError};
 use crate::hardening::{ALLOW_SYMLINKS, MAX_FILE_BYTES, MAX_FILES_PER_IMPORT, MAX_TOTAL_BYTES};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use crate::error::{AppResult, DomainError, InfraError};
 
 pub mod args;
+pub mod handlers;
 pub mod telnet;
 pub mod visibility;
-pub mod handlers;
 
 pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
     let p = Path::new(subdir);
@@ -18,7 +18,8 @@ pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
             return Err(DomainError::Validation {
                 field: "subdir",
                 message: "must be a single path segment".into(),
-            }.into());
+            }
+            .into());
         }
     }
 
@@ -32,7 +33,8 @@ pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
             return Err(DomainError::Validation {
                 field: "subdir",
                 message: format!("symlink not allowed: {}", joined.display()).into(),
-            }.into());
+            }
+            .into());
         }
     }
 
@@ -42,13 +44,15 @@ pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
         return Err(DomainError::Validation {
             field: "subdir",
             message: "path escapes content base".into(),
-        }.into());
+        }
+        .into());
     }
     if !target_can.is_dir() {
         return Err(DomainError::Validation {
             field: "subdir",
             message: format!("not a directory: {}", target_can.display()).into(),
-        }.into());
+        }
+        .into());
     }
 
     Ok(target_can)
@@ -75,7 +79,12 @@ pub fn list_yaml_files_guarded(dir: &Path) -> AppResult<Vec<PathBuf>> {
             _ => continue,
         }
 
-        if !ALLOW_SYMLINKS && fs::symlink_metadata(&path).map_err(InfraError::from)?.file_type().is_symlink() {
+        if !ALLOW_SYMLINKS
+            && fs::symlink_metadata(&path)
+                .map_err(InfraError::from)?
+                .file_type()
+                .is_symlink()
+        {
             continue;
         }
 
@@ -85,7 +94,8 @@ pub fn list_yaml_files_guarded(dir: &Path) -> AppResult<Vec<PathBuf>> {
             return Err(DomainError::Validation {
                 field: "import",
                 message: format!("file too large: {} ({} bytes)", path.display(), len).into(),
-            }.into());
+            }
+            .into());
         }
 
         total = total.saturating_add(len);
@@ -93,7 +103,8 @@ pub fn list_yaml_files_guarded(dir: &Path) -> AppResult<Vec<PathBuf>> {
             return Err(DomainError::Validation {
                 field: "import",
                 message: "import exceeds total size limit".into(),
-            }.into());
+            }
+            .into());
         }
 
         files.push(path);
@@ -102,7 +113,8 @@ pub fn list_yaml_files_guarded(dir: &Path) -> AppResult<Vec<PathBuf>> {
             return Err(DomainError::Validation {
                 field: "import",
                 message: format!("too many files (> {})", MAX_FILES_PER_IMPORT).into(),
-            }.into());
+            }
+            .into());
         }
     }
 

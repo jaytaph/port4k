@@ -5,31 +5,24 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use std::sync::Arc;
 use parking_lot::RwLock;
+use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::lua::LuaJob;
-use crate::{Registry, Session, process_command};
-use tokio::sync::mpsc;
 use crate::banner::{BANNER, ENTRY};
 use crate::commands::CmdCtx;
 use crate::error::{AppResult, InfraError};
+use crate::lua::LuaJob;
 use crate::net::AppCtx;
 use crate::state::session::Protocol;
+use crate::{Registry, Session, process_command};
+use tokio::sync::mpsc;
 
 /// Run the HTTP server with WebSocket endpoint
-pub async fn serve(
-    addr: std::net::SocketAddr,
-    registry: Arc<Registry>,
-    lua_tx: mpsc::Sender<LuaJob>,
-) -> AppResult<()> {
+pub async fn serve(addr: std::net::SocketAddr, registry: Arc<Registry>, lua_tx: mpsc::Sender<LuaJob>) -> AppResult<()> {
     let app = Router::new()
         .route("/ws", get(ws_upgrade))
-        .with_state(AppCtx {
-            registry,
-            lua_tx,
-        })
+        .with_state(AppCtx { registry, lua_tx })
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any));
 
     let listener = tokio::net::TcpListener::bind(&addr).await.map_err(InfraError::from)?;
@@ -42,9 +35,7 @@ async fn ws_upgrade(ws: WebSocketUpgrade, State(state): State<AppCtx>) -> impl I
 }
 
 async fn ws_handler(mut socket: WebSocket, registry: Arc<Registry>, lua_tx: mpsc::Sender<LuaJob>) {
-    let _ = socket
-        .send(Message::Text(format!("{}{}> ", BANNER, ENTRY)))
-        .await;
+    let _ = socket.send(Message::Text(format!("{}{}> ", BANNER, ENTRY))).await;
 
     let sess = Arc::new(RwLock::new(Session::new(Protocol::WebSocket)));
 
@@ -74,14 +65,10 @@ async fn ws_handler(mut socket: WebSocket, registry: Arc<Registry>, lua_tx: mpsc
                 } else {
                     format!("{}\n", res.message())
                 };
-                let _ = socket
-                    .send(Message::Text(format!("{}> ", ensure_nl(resp))))
-                    .await;
+                let _ = socket.send(Message::Text(format!("{}> ", ensure_nl(resp)))).await;
             }
             Err(e) => {
-                let _ = socket
-                    .send(Message::Text(format!("error: {}\n> ", e)))
-                    .await;
+                let _ = socket.send(Message::Text(format!("error: {}\n> ", e))).await;
             }
         }
 

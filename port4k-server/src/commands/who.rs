@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use std::sync::Arc;
 
 pub async fn who(ctx: Arc<CmdCtx>) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();

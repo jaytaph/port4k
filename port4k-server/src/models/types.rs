@@ -1,13 +1,22 @@
-use serde::{Deserialize, Serialize};
 use crate::error::DomainError;
+use serde::{Deserialize, Serialize};
 
 #[macro_export]
 macro_rules! define_id {
     ($name:ident) => {
         #[derive(
-            Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord,
-            postgres_types::ToSql, postgres_types::FromSql,
-            serde::Serialize, serde::Deserialize
+            Copy,
+            Clone,
+            Debug,
+            PartialEq,
+            Eq,
+            Hash,
+            PartialOrd,
+            Ord,
+            postgres_types::ToSql,
+            postgres_types::FromSql,
+            serde::Serialize,
+            serde::Deserialize,
         )]
         #[repr(transparent)]
         #[postgres(transparent)]
@@ -15,9 +24,18 @@ macro_rules! define_id {
         pub struct $name(pub uuid::Uuid);
 
         impl $name {
-            #[inline] pub fn new() -> Self { Self(uuid::Uuid::new_v4()) }
-            #[inline] pub fn from_uuid(u: uuid::Uuid) -> Self { Self(u) }
-            #[inline] pub fn as_uuid(&self) -> &uuid::Uuid { &self.0 }
+            #[inline]
+            pub fn new() -> Self {
+                Self(uuid::Uuid::new_v4())
+            }
+            #[inline]
+            pub fn from_uuid(u: uuid::Uuid) -> Self {
+                Self(u)
+            }
+            #[inline]
+            pub fn as_uuid(&self) -> &uuid::Uuid {
+                &self.0
+            }
         }
 
         impl core::fmt::Display for $name {
@@ -40,9 +58,21 @@ macro_rules! define_id {
             }
         }
 
-        impl From<uuid::Uuid> for $name { fn from(v: uuid::Uuid) -> Self { Self(v) } }
-        impl From<$name> for uuid::Uuid { fn from(v: $name) -> uuid::Uuid { v.0 } }
-        impl AsRef<uuid::Uuid> for $name { fn as_ref(&self) -> &uuid::Uuid { &self.0 } }
+        impl From<uuid::Uuid> for $name {
+            fn from(v: uuid::Uuid) -> Self {
+                Self(v)
+            }
+        }
+        impl From<$name> for uuid::Uuid {
+            fn from(v: $name) -> uuid::Uuid {
+                v.0
+            }
+        }
+        impl AsRef<uuid::Uuid> for $name {
+            fn as_ref(&self) -> &uuid::Uuid {
+                &self.0
+            }
+        }
     };
 }
 
@@ -54,7 +84,6 @@ define_id!(RoomId);
 define_id!(ObjectId);
 define_id!(LootId);
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ScriptSource {
     Live,
@@ -64,8 +93,18 @@ pub enum ScriptSource {
 /// Directions as used in `bp_exits.dir`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Direction {
-    North, South, East, West, Up, Down, In, Out,
-    Northeast, Northwest, Southeast, Southwest,
+    North,
+    South,
+    East,
+    West,
+    Up,
+    Down,
+    In,
+    Out,
+    Northeast,
+    Northwest,
+    Southeast,
+    Southwest,
     Custom(String), // for user-defined directions
 }
 
@@ -75,12 +114,12 @@ impl Direction {
         match self {
             Direction::North => "north",
             Direction::South => "south",
-            Direction::East  => "east",
-            Direction::West  => "west",
-            Direction::Up    => "up",
-            Direction::Down  => "down",
-            Direction::In    => "in",
-            Direction::Out   => "out",
+            Direction::East => "east",
+            Direction::West => "west",
+            Direction::Up => "up",
+            Direction::Down => "down",
+            Direction::In => "in",
+            Direction::Out => "out",
             Direction::Northeast => "northeast",
             Direction::Northwest => "northwest",
             Direction::Southeast => "southeast",
@@ -93,10 +132,10 @@ impl Direction {
         match self {
             Direction::North => "n",
             Direction::South => "s",
-            Direction::East  => "e",
-            Direction::West  => "w",
-            Direction::Up    => "u",
-            Direction::Down  => "d",
+            Direction::East => "e",
+            Direction::West => "w",
+            Direction::Up => "u",
+            Direction::Down => "d",
             Direction::In => "i",
             Direction::Out => "o",
             Direction::Northeast => "ne",
@@ -115,12 +154,12 @@ impl core::str::FromStr for Direction {
         match s {
             "north" => Ok(Direction::North),
             "south" => Ok(Direction::South),
-            "east"  => Ok(Direction::East),
-            "west"  => Ok(Direction::West),
-            "up"    => Ok(Direction::Up),
-            "down"  => Ok(Direction::Down),
-            "in"    => Ok(Direction::In),
-            "out"   => Ok(Direction::Out),
+            "east" => Ok(Direction::East),
+            "west" => Ok(Direction::West),
+            "up" => Ok(Direction::Up),
+            "down" => Ok(Direction::Down),
+            "in" => Ok(Direction::In),
+            "out" => Ok(Direction::Out),
             "northeast" => Ok(Direction::Northeast),
             "northwest" => Ok(Direction::Northwest),
             "southeast" => Ok(Direction::Southeast),
@@ -140,27 +179,29 @@ impl core::fmt::Display for Direction {
 }
 
 impl From<Direction> for String {
-    fn from(d: Direction) -> Self { d.to_string() }
+    fn from(d: Direction) -> Self {
+        d.to_string()
+    }
 }
 
 impl Direction {
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_ascii_lowercase().as_str() {
             // cardinal + aliases
-            "n" | "north"        => Some(Direction::North),
-            "e" | "east"         => Some(Direction::East),
-            "s" | "south"        => Some(Direction::South),
-            "w" | "west"         => Some(Direction::West),
+            "n" | "north" => Some(Direction::North),
+            "e" | "east" => Some(Direction::East),
+            "s" | "south" => Some(Direction::South),
+            "w" | "west" => Some(Direction::West),
 
-            "ne" | "northeast"   => Some(Direction::Northeast),
-            "nw" | "northwest"   => Some(Direction::Northwest),
-            "se" | "southeast"   => Some(Direction::Southeast),
-            "sw" | "southwest"   => Some(Direction::Southwest),
+            "ne" | "northeast" => Some(Direction::Northeast),
+            "nw" | "northwest" => Some(Direction::Northwest),
+            "se" | "southeast" => Some(Direction::Southeast),
+            "sw" | "southwest" => Some(Direction::Southwest),
 
-            "u" | "up"           => Some(Direction::Up),
-            "d" | "down"         => Some(Direction::Down),
-            "in"                 => Some(Direction::In),
-            "out"                => Some(Direction::Out),
+            "u" | "up" => Some(Direction::Up),
+            "d" | "down" => Some(Direction::Down),
+            "in" => Some(Direction::In),
+            "out" => Some(Direction::Out),
             _ => None,
         }
     }

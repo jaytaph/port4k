@@ -6,14 +6,14 @@ pub enum Token {
     Text(String),
     /// Any {rv:...} variable; kept separate for possible special handling
     RoomVar {
-        raw: String,             // original token text for LeaveToken
+        raw: String, // original token text for LeaveToken
         name: String,
         default: Option<String>,
         fmt: Option<VarFmt>,
     },
     /// Any {v:...} variable
     Var {
-        raw: String,             // original token text for LeaveToken
+        raw: String, // original token text for LeaveToken
         name: String,
         default: Option<String>,
         fmt: Option<VarFmt>,
@@ -25,7 +25,7 @@ pub enum Token {
         attrs: Vec<String>,
     },
     ColorReset,
-    Unknown(String),             // pass-through
+    Unknown(String), // pass-through
 }
 
 #[derive(Clone, Debug)]
@@ -146,9 +146,19 @@ fn parse_var(raw: String, rest: &str, is_room_var: bool) -> Token {
     let default = parts.next().map(|s| s.to_string());
 
     if is_room_var {
-        return Token::RoomVar { raw, name, default, fmt };
+        return Token::RoomVar {
+            raw,
+            name,
+            default,
+            fmt,
+        };
     }
-    Token::Var { raw, name, default, fmt }
+    Token::Var {
+        raw,
+        name,
+        default,
+        fmt,
+    }
 }
 
 fn parse_color(_raw: String, rest: Option<&str>) -> Token {
@@ -200,16 +210,40 @@ fn parse_color(_raw: String, rest: Option<&str>) -> Token {
 }
 
 fn split_attrs(a: &str) -> Vec<String> {
-    a.split(',').map(|x| x.trim()).filter(|x| !x.is_empty()).map(|x| x.to_string()).collect()
+    a.split(',')
+        .map(|x| x.trim())
+        .filter(|x| !x.is_empty())
+        .map(|x| x.to_string())
+        .collect()
 }
 
 fn is_color_name(s: &str) -> bool {
     // keep in sync with ansi.rs names
     const NAMES: [&str; 24] = [
-        "black","red","green","yellow","blue","magenta","cyan","white","gray","grey",
-        "bright_black","bright_red","bright_green","bright_yellow","bright_blue","bright_magenta","bright_cyan","bright_white",
-        "default","reset",
-        "orange","purple","teal","pink", // optional extensions if you map them
+        "black",
+        "red",
+        "green",
+        "yellow",
+        "blue",
+        "magenta",
+        "cyan",
+        "white",
+        "gray",
+        "grey",
+        "bright_black",
+        "bright_red",
+        "bright_green",
+        "bright_yellow",
+        "bright_blue",
+        "bright_magenta",
+        "bright_cyan",
+        "bright_white",
+        "default",
+        "reset",
+        "orange",
+        "purple",
+        "teal",
+        "pink", // optional extensions if you map them
     ];
     let set: HashSet<&'static str> = HashSet::from(NAMES);
     set.contains(&s)
@@ -217,7 +251,9 @@ fn is_color_name(s: &str) -> bool {
 
 fn parse_format(spec: &str) -> Option<VarFmt> {
     // accepts: %s, %20s, %-20s, %d, %05d, %5d
-    if !spec.starts_with('%') { return None; }
+    if !spec.starts_with('%') {
+        return None;
+    }
     let bytes = spec.as_bytes();
     let mut i = 1;
 

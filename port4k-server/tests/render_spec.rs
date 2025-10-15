@@ -1,5 +1,5 @@
+use port4k_server::renderer::{MissingVarPolicy, RenderOptions, render_template, render_template_with_opts};
 use std::collections::HashMap;
-use port4k_server::renderer::{render_template, render_template_with_opts, RenderOptions, MissingVarPolicy};
 
 fn vars(pairs: &[(&str, &str)]) -> HashMap<String, String> {
     pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
@@ -18,10 +18,22 @@ fn var_missing_policy() {
     // default: LeaveToken
     assert_eq!(render_template("X{v:who}Y", &v), "X{v:who}Y");
 
-    let s = render_template_with_opts("X{v:who}Y", &v, &RenderOptions { missing_var: MissingVarPolicy::Empty });
+    let s = render_template_with_opts(
+        "X{v:who}Y",
+        &v,
+        &RenderOptions {
+            missing_var: MissingVarPolicy::Empty,
+        },
+    );
     assert_eq!(s, "XY");
 
-    let s = render_template_with_opts("X{v:who}Y", &v, &RenderOptions { missing_var: MissingVarPolicy::Undefined });
+    let s = render_template_with_opts(
+        "X{v:who}Y",
+        &v,
+        &RenderOptions {
+            missing_var: MissingVarPolicy::Undefined,
+        },
+    );
     assert_eq!(s, "XundefinedY");
 }
 
@@ -30,8 +42,8 @@ fn var_string_format_padding() {
     let v = vars(&[("name", "Ada")]);
     assert_eq!(render_template("-{v:name|%-6s}-", &v), "-Ada   -"); // left-align, pad right
     assert_eq!(render_template("-{v:name|%6s}-", &v), "-   Ada-"); // right-align, pad left
-    assert_eq!(render_template("-{v:name|%3s}-", &v), "-Ada-");    // equal width
-    assert_eq!(render_template("-{v:name|%2s}-", &v), "-Ada-");    // shorter than content
+    assert_eq!(render_template("-{v:name|%3s}-", &v), "-Ada-"); // equal width
+    assert_eq!(render_template("-{v:name|%2s}-", &v), "-Ada-"); // shorter than content
 }
 
 #[test]
@@ -74,9 +86,9 @@ fn color_fg_bg_attrs_any_order() {
     // yellow on red, bold+underline
     let s = render_template("{c:yellow:red:bold,underline}ALERT{c}", &v);
     // We don't enforce order; just assert presence
-    assert!(s.contains("\x1b["));     // SGR start
-    assert!(s.contains("33"));        // yellow fg
-    assert!(s.contains("41"));        // red bg
+    assert!(s.contains("\x1b[")); // SGR start
+    assert!(s.contains("33")); // yellow fg
+    assert!(s.contains("41")); // red bg
     assert!(s.contains("1") || s.contains(";1")); // bold
     assert!(s.contains("4") || s.contains(";4")); // underline
     assert!(s.ends_with("\x1b[0m")); // reset
@@ -110,17 +122,17 @@ fn unterminated_brace_is_literal() {
 
 #[test]
 fn multiple_tokens_sequence() {
-    let v = vars(&[("a","1"),("b","2"),("c","3")]);
+    let v = vars(&[("a", "1"), ("b", "2"), ("c", "3")]);
     let s = render_template("{v:a}{v:b}{v:c}", &v);
     assert_eq!(s, "123");
 }
 
 #[test]
 fn mixed_all_together() {
-    let v = vars(&[("pilot","Nova"),("coins","42")]);
+    let v = vars(&[("pilot", "Nova"), ("coins", "42")]);
     let s = render_template(
         "{c:white:blue:bold}Pilot{c}: {v:pilot|%-6s} Coins:{v:coins|%04d}{c}",
-        &v
+        &v,
     );
     assert!(s.contains("Pilot"));
     assert!(s.contains("Nova  ")); // left padded to width

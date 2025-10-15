@@ -3,11 +3,9 @@ use std::sync::Arc;
 use tokio::runtime::Handle;
 
 use port4k_server::{
-    config,
-    db,
+    Registry, config, db,
     lua::start_lua_worker,
-    net::{telnet, http},
-    Registry,
+    net::{http, telnet},
 };
 
 #[tokio::main]
@@ -71,7 +69,11 @@ fn init_tracing() {
 
     tracing_subscriber::registry()
         .with(EnvFilter::from_default_env().add_directive("port4k=debug".parse().unwrap()))
-        .with(tracing_subscriber::fmt::layer().with_target(false).with_timer(tracing_subscriber::fmt::time::uptime()))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_target(false)
+                .with_timer(tracing_subscriber::fmt::time::uptime()),
+        )
         .with(tracing_error::ErrorLayer::default())
         .init();
 }

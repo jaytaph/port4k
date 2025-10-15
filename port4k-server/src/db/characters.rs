@@ -1,5 +1,5 @@
-use crate::models::types::{AccountId, CharacterId, RoomId};
 use super::{Db, DbResult};
+use crate::models::types::{AccountId, CharacterId, RoomId};
 
 impl Db {
     /// Returns the room ID of the starting room ("start" zone, "entry" room).
@@ -20,7 +20,11 @@ impl Db {
         Ok(row.get(0))
     }
 
-    pub async fn get_or_create_character(&self, account_id: AccountId, username: &str) -> DbResult<(CharacterId, RoomId)> {
+    pub async fn get_or_create_character(
+        &self,
+        account_id: AccountId,
+        username: &str,
+    ) -> DbResult<(CharacterId, RoomId)> {
         let client = self.pool.get().await?;
 
         if let Some(row) = client
@@ -93,7 +97,10 @@ impl Db {
         let new_room: RoomId = to_row.get(0);
 
         client
-            .execute("UPDATE characters SET room_id=$1 WHERE id=$2", &[&new_room, &character_id])
+            .execute(
+                "UPDATE characters SET room_id=$1 WHERE id=$2",
+                &[&new_room, &character_id],
+            )
             .await?;
         Ok(Some(new_room))
     }

@@ -1,18 +1,18 @@
-mod auth;
 mod account;
+mod auth;
 mod blueprint;
-mod room;
 mod cursor;
-mod navigator;
 mod error;
+mod navigator;
+mod room;
 mod zone;
 
-pub use auth::AuthService;
 pub use account::AccountService;
+pub use auth::AuthService;
 pub use blueprint::BlueprintService;
-pub use room::RoomService;
 pub use cursor::CursorService;
 pub use navigator::NavigatorService;
+pub use room::RoomService;
 pub use zone::ZoneService;
 
 pub use error::ServiceError;

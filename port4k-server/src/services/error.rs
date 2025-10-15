@@ -1,6 +1,6 @@
-use thiserror::Error;
 use crate::db::error::DbError;
 use crate::error::DomainError;
+use thiserror::Error;
 
 /// ServiceError represents errors that can occur in the service layer of the application.
 /// It encapsulates various error scenarios including not found, invalid input, business rule violations,
@@ -29,7 +29,6 @@ pub enum ServiceError {
 
     // #[error(transparent)]
     // Io(#[from] std::io::Error),
-
     #[error("Internal error")]
     Internal(#[from] anyhow::Error),
 

@@ -1,9 +1,9 @@
-use serde::ser::SerializeStruct;
-use serde::Serialize;
 use crate::models::account::Account;
 use crate::models::room::RoomView;
 use crate::models::types::RoomId;
 use crate::models::zone::ZoneContext;
+use serde::Serialize;
+use serde::ser::SerializeStruct;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnState {

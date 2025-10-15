@@ -1,7 +1,7 @@
+use crate::Registry;
+use crate::lua::LuaJob;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use crate::lua::LuaJob;
-use crate::Registry;
 
 pub mod http;
 pub mod telnet;

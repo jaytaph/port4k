@@ -1,9 +1,9 @@
 //! @bp exit add <bp>:<from> <dir> <bp>:<to> [locked]
 
-use std::sync::Arc;
 use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use crate::util::args::{normalize_dir, parse_bp_room_key};
+use std::sync::Arc;
 
 pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();
@@ -27,14 +27,12 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
             };
 
             // parse & validate inputs (use `?` with precise errors)
-            let from_key = parse_bp_room_key(from_key)
-                .ok_or(CommandError::Custom("from must be <bp>:<room>".into()))?;
-            let dir = normalize_dir(dir_raw)
-                .ok_or(CommandError::Custom(
-                    "dir must be a valid direction (n, ne, e, se, s, sw, w, nw, up, down)".into()
-                ))?;
-            let to_key = parse_bp_room_key(to_key)
-                .ok_or(CommandError::Custom("to must be <bp>:<room>".into()))?;
+            let from_key =
+                parse_bp_room_key(from_key).ok_or(CommandError::Custom("from must be <bp>:<room>".into()))?;
+            let dir = normalize_dir(dir_raw).ok_or(CommandError::Custom(
+                "dir must be a valid direction (n, ne, e, se, s, sw, w, nw, up, down)".into(),
+            ))?;
+            let to_key = parse_bp_room_key(to_key).ok_or(CommandError::Custom("to must be <bp>:<room>".into()))?;
 
             if from_key.bp_key != to_key.bp_key {
                 out.append("[bp] exits must stay within the same blueprint.\n");
@@ -49,17 +47,37 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
             use std::fmt::Write as _;
             let mut msg = String::new();
 
-            if ctx.registry.services.blueprint.add_exit(&from_key, &dir, &to_key).await? {
-                let _ = writeln!(&mut msg, "[bp] exit {}:{} --{}--> {} added.", from_key.bp_key, from_key.room_key, dir, to_key.room_key);
+            if ctx
+                .registry
+                .services
+                .blueprint
+                .add_exit(&from_key, &dir, &to_key)
+                .await?
+            {
+                let _ = writeln!(
+                    &mut msg,
+                    "[bp] exit {}:{} --{}--> {} added.",
+                    from_key.bp_key, from_key.room_key, dir, to_key.room_key
+                );
             } else {
                 let _ = writeln!(&mut msg, "[bp] exit already exists.");
             }
 
             if want_locked {
                 match ctx.registry.services.blueprint.set_locked(&to_key, true).await {
-                    Ok(true)  => { let _ = writeln!(&mut msg, "[bp] room {}:{} set to LOCKED.", to_key.bp_key, to_key.room_key); },
-                    Ok(false) => { let _ = writeln!(&mut msg, "[bp] could not lock destination (room not found?)."); }
-                    Err(e)    => { let _ = writeln!(&mut msg, "[bp] failed to lock destination: {}", e); }
+                    Ok(true) => {
+                        let _ = writeln!(
+                            &mut msg,
+                            "[bp] room {}:{} set to LOCKED.",
+                            to_key.bp_key, to_key.room_key
+                        );
+                    }
+                    Ok(false) => {
+                        let _ = writeln!(&mut msg, "[bp] could not lock destination (room not found?).");
+                    }
+                    Err(e) => {
+                        let _ = writeln!(&mut msg, "[bp] failed to lock destination: {}", e);
+                    }
                 }
             }
 
@@ -72,6 +90,6 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
             out.append(USAGE);
             out.failure();
             Ok(out)
-        },
+        }
     }
 }
