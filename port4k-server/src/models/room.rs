@@ -421,6 +421,31 @@ fn parse_hints_value(hints: Option<Value>) -> DbResult<Vec<Hint>> {
     }
 }
 
+// --- Helpers you can reuse anywhere ----------------------------------------
+
+/// Normalize a JSON value into Vec<String>.
+/// - ["a","b"]      -> vec!["a","b"]
+/// - "a"            -> vec!["a"]
+/// - 123 / true     -> vec!["123"] / vec!["true"]
+/// - null / {} / [] -> vec![]
+fn json_to_string_vec(v: &Value) -> Vec<String> {
+    match v {
+        Value::Array(arr) => arr
+            .iter()
+            .filter_map(|x| x.as_str().map(|s| s.to_string()).or_else(|| {
+                // accept scalars inside the array (numbers/bools) by stringifying
+                match x {
+                    Value::Number(_) | Value::Bool(_) => Some(x.to_string()),
+                    _ => None
+                }
+            }))
+            .collect(),
+        Value::String(s) => vec![s.clone()],
+        Value::Number(_) | Value::Bool(_) => vec![v.to_string()],
+        _ => Vec::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -769,37 +794,3 @@ mod tests {
         );
     }
 }
-
-
-// --- Helpers you can reuse anywhere ----------------------------------------
-
-/// Normalize a JSON value into Vec<String>.
-/// - ["a","b"]      -> vec!["a","b"]
-/// - "a"            -> vec!["a"]
-/// - 123 / true     -> vec!["123"] / vec!["true"]
-/// - null / {} / [] -> vec![]
-fn json_to_string_vec(v: &Value) -> Vec<String> {
-    match v {
-        Value::Array(arr) => arr
-            .iter()
-            .filter_map(|x| x.as_str().map(|s| s.to_string()).or_else(|| {
-                // accept scalars inside the array (numbers/bools) by stringifying
-                match x {
-                    Value::Number(_) | Value::Bool(_) => Some(x.to_string()),
-                    _ => None
-                }
-            }))
-            .collect(),
-        Value::String(s) => vec![s.clone()],
-        Value::Number(_) | Value::Bool(_) => vec![v.to_string()],
-        _ => Vec::new(),
-    }
-}
-
-// /// If the value is a JSON object, return it (as Value::Object); otherwise None.
-// fn json_object_opt(v: &Value) -> Option<Value> {
-//     match v {
-//         Value::Object(_) => Some(v.clone()),
-//         _ => None,
-//     }
-// }
