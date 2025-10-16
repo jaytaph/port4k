@@ -11,12 +11,11 @@ use uuid::Uuid;
 
 static OBJ_REF_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"\{obj:([a-zA-Z0-9_\- ]+)}").unwrap());
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hint {
     pub once: Option<bool>, // default: false
     pub text: String,
-    pub when: String,        // first_look, enter, search, after_fail
+    pub when: String,          // first_look, enter, search, after_fail
     pub cooldown: Option<u32>, // seconds; null = no cooldown
 }
 
@@ -376,13 +375,17 @@ fn normalize_when<S: AsRef<str>>(s: S) -> String {
 }
 
 fn parse_hints_value(hints: Option<Value>) -> DbResult<Vec<Hint>> {
-    let Some(v) = hints else { return Ok(Vec::new()); };
+    let Some(v) = hints else {
+        return Ok(Vec::new());
+    };
 
     match v {
         Value::Array(arr) => {
             if arr.iter().all(|x| x.is_string()) {
                 // Legacy format: ["hint 1", "hint 2", ...]
-                let out = arr.into_iter().filter_map(|x| x.as_str().map(|s| s.to_string()))
+                let out = arr
+                    .into_iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
                     .map(|text| Hint {
                         once: None,
                         text,
@@ -408,7 +411,8 @@ fn parse_hints_value(hints: Option<Value>) -> DbResult<Vec<Hint>> {
         }
         Value::Object(_) => {
             // Accept a single object as shorthand
-            let mut h: Hint = serde_json::from_value(v).map_err(|e| DbError::Validation(format!("invalid hint object: {e}")))?;
+            let mut h: Hint =
+                serde_json::from_value(v).map_err(|e| DbError::Validation(format!("invalid hint object: {e}")))?;
             if h.when.trim().is_empty() {
                 h.when = "manual".to_string();
             } else {
@@ -417,7 +421,9 @@ fn parse_hints_value(hints: Option<Value>) -> DbResult<Vec<Hint>> {
             Ok(vec![h])
         }
         Value::Null => Ok(Vec::new()),
-        other => Err(DbError::Validation(format!("unexpected JSON type for hints: {other:?}"))),
+        other => Err(DbError::Validation(format!(
+            "unexpected JSON type for hints: {other:?}"
+        ))),
     }
 }
 
@@ -432,13 +438,15 @@ fn json_to_string_vec(v: &Value) -> Vec<String> {
     match v {
         Value::Array(arr) => arr
             .iter()
-            .filter_map(|x| x.as_str().map(|s| s.to_string()).or_else(|| {
-                // accept scalars inside the array (numbers/bools) by stringifying
-                match x {
-                    Value::Number(_) | Value::Bool(_) => Some(x.to_string()),
-                    _ => None
-                }
-            }))
+            .filter_map(|x| {
+                x.as_str().map(|s| s.to_string()).or_else(|| {
+                    // accept scalars inside the array (numbers/bools) by stringifying
+                    match x {
+                        Value::Number(_) | Value::Bool(_) => Some(x.to_string()),
+                        _ => None,
+                    }
+                })
+            })
             .collect(),
         Value::String(s) => vec![s.clone()],
         Value::Number(_) | Value::Bool(_) => vec![v.to_string()],

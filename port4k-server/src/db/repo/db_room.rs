@@ -160,8 +160,8 @@ impl RoomRepo for RoomRepository {
 
             let nouns_slice: &[String] = nouns_by_obj
                 .get(&row_obj.id)
-                .map(Vec::as_slice)      // &Vec<String> -> &[String]
-                .unwrap_or(&[]);         // empty slice of the right type
+                .map(Vec::as_slice) // &Vec<String> -> &[String]
+                .unwrap_or(&[]); // empty slice of the right type
 
             // Convert row object + nouns into a full object
             let obj = RoomObject::from_rows(&row_obj, nouns_slice);
@@ -234,7 +234,9 @@ impl RoomRepo for RoomRepository {
                     serde_json::Value::String(s) => vec![s],
                     serde_json::Value::Null => Vec::new(),
                     other => {
-                        return Err(DbError::Validation(format!("expected string or array of strings, got {other:?}")));
+                        return Err(DbError::Validation(format!(
+                            "expected string or array of strings, got {other:?}"
+                        )));
                     }
                 };
                 Ok::<(String, Vec<String>), DbError>((k, vec))

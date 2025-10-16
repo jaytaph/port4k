@@ -14,15 +14,15 @@ use tokio_postgres::Transaction;
 
 #[derive(Debug, Deserialize)]
 struct RoomYaml {
-    pub version: u8,                      // must be 2
-    pub id: String,                       // "entry"
-    pub name: String,                     // "Entry Hall"
+    pub version: u8,  // must be 2
+    pub id: String,   // "entry"
+    pub name: String, // "Entry Hall"
     #[serde(default)]
     pub short: Option<String>,
     #[serde(rename = "description")]
     pub full_desc: String,
     #[serde(default)]
-    pub o: Option<String>,                // inline object-mentions text
+    pub o: Option<String>, // inline object-mentions text
     #[serde(default)]
     pub kv: HashMap<String, serde_json::Value>,
     #[serde(default)]
@@ -40,7 +40,7 @@ struct RoomYaml {
 struct HintYaml {
     pub text: String,
     #[serde(default)]
-    pub when: Option<String>,             // "enter" | "first_look" | "manual" | ...
+    pub when: Option<String>, // "enter" | "first_look" | "manual" | ...
     #[serde(default)]
     pub cooldown: Option<i32>,
     #[serde(default)]
@@ -49,7 +49,7 @@ struct HintYaml {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ObjectYaml {
-    pub id: String,                       // object key (used as name)
+    pub id: String, // object key (used as name)
     #[serde(default)]
     pub nouns: Vec<String>,
     pub short: String,
@@ -58,22 +58,22 @@ struct ObjectYaml {
     pub examine: Option<String>,
 
     #[serde(default)]
-    pub flags: Vec<String>,               // ["overlay","non_stackable"]
+    pub flags: Vec<String>, // ["overlay","non_stackable"]
     #[serde(default)]
-    pub visible: Option<VisiblePolicy>,   // always|when_revealed|when_unlocked|script
+    pub visible: Option<VisiblePolicy>, // always|when_revealed|when_unlocked|script
 
     #[serde(default)]
-    pub state: serde_json::Value,         // arbitrary map (locked, revealed, etc)
+    pub state: serde_json::Value, // arbitrary map (locked, revealed, etc)
     #[serde(default)]
-    pub controls: Vec<String>,            // ["exit:north.locked","object:door.locked"]
+    pub controls: Vec<String>, // ["exit:north.locked","object:door.locked"]
 
     #[serde(default)]
-    pub loot: Option<serde_json::Value>,  // {"items":[...],"credits":0,"once":true}
+    pub loot: Option<serde_json::Value>, // {"items":[...],"credits":0,"once":true}
 
     #[serde(default)]
-    pub use_: Option<String>,             // Lua (key "use" in YAML)
+    pub use_: Option<String>, // Lua (key "use" in YAML)
     #[serde(rename = "use", default)]
-    pub _use_compat: Option<String>,      // compat alias
+    pub _use_compat: Option<String>, // compat alias
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy)]
@@ -87,8 +87,8 @@ enum VisiblePolicy {
 
 #[derive(Debug, Deserialize)]
 struct ExitYaml {
-    pub dir: String,                      // "north"
-    pub to: String,                       // "hallway_1"
+    pub dir: String, // "north"
+    pub to: String,  // "hallway_1"
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
@@ -100,9 +100,9 @@ struct ExitYaml {
 #[derive(Debug, Default, Deserialize)]
 struct ScriptsYaml {
     #[serde(default)]
-    pub on_enter: Option<String>,         // Lua
+    pub on_enter: Option<String>, // Lua
     #[serde(default)]
-    pub on_command: Option<String>,       // Lua
+    pub on_command: Option<String>, // Lua
 }
 
 // ====== Entry point ======
@@ -162,11 +162,7 @@ pub async fn import_blueprint_sub_dir(
 
 // ====== DB writers ======
 
-async fn upsert_room_header(
-    tx: &Transaction<'_>,
-    bp_id: BlueprintId,
-    r: &RoomYaml,
-) -> AppResult<uuid::Uuid> {
+async fn upsert_room_header(tx: &Transaction<'_>, bp_id: BlueprintId, r: &RoomYaml) -> AppResult<uuid::Uuid> {
     let title = &r.name;
     let short = r.short.as_deref().unwrap_or_default();
     let body = &r.full_desc;
@@ -214,17 +210,13 @@ async fn upsert_room_kv(
             "#,
             &[&room_id, k, v],
         )
-            .await
-            .map_err(DbError::from)?;
+        .await
+        .map_err(DbError::from)?;
     }
     Ok(())
 }
 
-async fn upsert_objects(
-    tx: &Transaction<'_>,
-    room_id: uuid::Uuid,
-    objects: &[ObjectYaml],
-) -> AppResult<()> {
+async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[ObjectYaml]) -> AppResult<()> {
     // Replace all (keeps code simple & deterministic ordering via position)
     tx.execute("DELETE FROM bp_object_nouns WHERE room_id = $1", &[&room_id])
         .await
@@ -287,19 +279,15 @@ async fn upsert_objects(
                 "#,
                 &[&room_id, &obj_id, n],
             )
-                .await
-                .map_err(DbError::from)?;
+            .await
+            .map_err(DbError::from)?;
         }
     }
 
     Ok(())
 }
 
-async fn upsert_room_scripts(
-    tx: &Transaction<'_>,
-    room_id: uuid::Uuid,
-    scripts: &ScriptsYaml,
-) -> AppResult<()> {
+async fn upsert_room_scripts(tx: &Transaction<'_>, room_id: uuid::Uuid, scripts: &ScriptsYaml) -> AppResult<()> {
     // single-row table keyed by room_id
     tx.execute(
         r#"
@@ -312,8 +300,8 @@ async fn upsert_room_scripts(
         "#,
         &[&room_id, &scripts.on_enter, &scripts.on_command],
     )
-        .await
-        .map_err(DbError::from)?;
+    .await
+    .map_err(DbError::from)?;
     Ok(())
 }
 
@@ -349,8 +337,8 @@ async fn upsert_exits(
                 &ex.visible_when_locked,
             ],
         )
-            .await
-            .map_err(DbError::from)?;
+        .await
+        .map_err(DbError::from)?;
     }
     Ok(())
 }
@@ -365,29 +353,50 @@ fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
         });
     }
     if room.id.trim().is_empty() {
-        return Err(DomainError::Validation { field: "room", message: "room id empty".into() });
+        return Err(DomainError::Validation {
+            field: "room",
+            message: "room id empty".into(),
+        });
     }
     if room.name.trim().is_empty() {
-        return Err(DomainError::Validation { field: "room", message: "room name empty".into() });
+        return Err(DomainError::Validation {
+            field: "room",
+            message: "room name empty".into(),
+        });
     }
     if room.full_desc.trim().is_empty() {
-        return Err(DomainError::Validation { field: "room", message: "room desc empty".into() });
+        return Err(DomainError::Validation {
+            field: "room",
+            message: "room desc empty".into(),
+        });
     }
     if room.id.len() > 64 {
-        return Err(DomainError::Validation { field: "room", message: "room id too long".into() });
+        return Err(DomainError::Validation {
+            field: "room",
+            message: "room id too long".into(),
+        });
     }
     if room.name.len() > 128 {
-        return Err(DomainError::Validation { field: "room", message: "room name too long".into() });
+        return Err(DomainError::Validation {
+            field: "room",
+            message: "room name too long".into(),
+        });
     }
 
     // object ids unique
     let mut ids = HashSet::new();
     for o in &room.objects {
         if o.id.trim().is_empty() {
-            return Err(DomainError::Validation { field: "object", message: "object with empty id".into() });
+            return Err(DomainError::Validation {
+                field: "object",
+                message: "object with empty id".into(),
+            });
         }
         if !ids.insert(&o.id) {
-            return Err(DomainError::Validation { field: "object", message: format!("duplicate object id: {}", o.id) });
+            return Err(DomainError::Validation {
+                field: "object",
+                message: format!("duplicate object id: {}", o.id),
+            });
         }
         // visible enum validated by serde; nothing to do here
         // controls format: "exit:<dir>.<field>" or "object:<id>.<path>"
@@ -421,10 +430,16 @@ fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
     for ex in &room.exits {
         let d = ex.dir.to_ascii_lowercase();
         if !ALLOWED_DIRS.contains(&d.as_str()) {
-            return Err(DomainError::Validation { field: "exit", message: format!("invalid exit dir '{}'", d) });
+            return Err(DomainError::Validation {
+                field: "exit",
+                message: format!("invalid exit dir '{}'", d),
+            });
         }
         if ex.to.trim().is_empty() || !slug.is_match(&ex.to) {
-            return Err(DomainError::Validation { field: "exit", message: format!("invalid exit target '{}'", ex.to) });
+            return Err(DomainError::Validation {
+                field: "exit",
+                message: format!("invalid exit target '{}'", ex.to),
+            });
         }
     }
 

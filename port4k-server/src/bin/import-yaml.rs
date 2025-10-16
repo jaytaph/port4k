@@ -1,11 +1,11 @@
-use std::path::PathBuf;
-use std::sync::Arc;
 use anyhow::Context;
 use clap::Parser;
-use uuid::Uuid;
 use port4k_server::config;
 use port4k_server::import::import_blueprint_sub_dir;
 use port4k_server::models::types::BlueprintId;
+use std::path::PathBuf;
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// Adjust this to however you construct your Db wrapper.
 use port4k_server::db::Db;
@@ -58,7 +58,8 @@ async fn main() -> anyhow::Result<()> {
     let sub_dir = args.subdir.unwrap_or_else(|| ".".to_string());
 
     // Run importer
-    import_blueprint_sub_dir(BlueprintId::from(bp_id), &sub_dir, content_base.as_path(), &db).await
+    import_blueprint_sub_dir(BlueprintId::from(bp_id), &sub_dir, content_base.as_path(), &db)
+        .await
         .map_err(|e| anyhow::anyhow!("import failed: {e}"))?;
 
     // Optionally set entry room
@@ -80,24 +81,17 @@ async fn main() -> anyhow::Result<()> {
 
 async fn ensure_blueprint(db: &Db, key: &str, owner_username: Option<&str>) -> anyhow::Result<Uuid> {
     // Try existing
-    if let Some(id) = query_opt_uuid(
-        db,
-        "SELECT id FROM blueprints WHERE key = $1",
-        &[&key],
-    ).await? {
+    if let Some(id) = query_opt_uuid(db, "SELECT id FROM blueprints WHERE key = $1", &[&key]).await? {
         return Ok(id);
     }
-    let owner = owner_username
-        .context("Blueprint not found; to create it, pass --owner <username>")?;
-    let owner_id = query_opt_uuid(
-        db,
-        "SELECT id FROM accounts WHERE username = $1",
-        &[&owner],
-    ).await?
+    let owner = owner_username.context("Blueprint not found; to create it, pass --owner <username>")?;
+    let owner_id = query_opt_uuid(db, "SELECT id FROM accounts WHERE username = $1", &[&owner])
+        .await?
         .context("Owner username not found in accounts")?;
 
     let client = db.get_client().await?;
-    let row = client.query_one(
+    let row = client
+        .query_one(
             "INSERT INTO blueprints (key, title, owner_id, status)
              VALUES ($1,$2,$3,'draft')
              ON CONFLICT (key) DO UPDATE SET title = EXCLUDED.title
@@ -116,9 +110,7 @@ async fn set_entry_room(db: &Db, bp_id: Uuid, room_key: &str) -> anyhow::Result<
             &[&bp_id, &room_key],
         )
         .await?;
-    let room_id: Uuid = row
-        .context("entry room key not found in blueprint")?
-        .get(0);
+    let room_id: Uuid = row.context("entry room key not found in blueprint")?.get(0);
     client
         .execute(
             "UPDATE blueprints SET entry_room_id = $1 WHERE id = $2",

@@ -36,8 +36,10 @@ help:
 # -----------------------------------------------------------------------------
 # Formatting
 # -----------------------------------------------------------------------------
+fmt: rust-fmt ## Format all code (Rust, JS)
+
 rust-fmt:
-	cd $(RUST_DIR) && $(CARGO) fmt --all
+	$(CARGO) fmt --all -- --check
 
 web-fmt:
 	cd $(WEB_DIR) && $(NPM) run format --if-present
