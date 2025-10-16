@@ -9,7 +9,7 @@ description: |
   Overhead, a {o:power_conduit} snakes along the ceiling, its casing cracked. On the eastern bulkhead,
   a recessed {o:access_panel} sits beside a hardened {o:east_door}. To the west, the passage opens
   toward dim observation ports. The way back {o:south_exit} leads to the Entry Hall.
-o: "Overhead {o:power_conduit}; east bulkhead {o:access_panel} and {o:east_door}; back {o:south_exit}."
+
 kv:
   ambience: "alarm_beacons"
   grid_section: "A-3"

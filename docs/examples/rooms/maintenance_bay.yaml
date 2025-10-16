@@ -7,7 +7,7 @@ description: |
   Overhead gantries hang quiet, their hooks swaying ever so slightly in the recycled air. A dented
   {o:workbench} sits beneath a flickering strip, littered with fasteners and cut wire. On the far wall,
   a {o:generator} hums feebly beside a rack-mounted {o:charger}. A narrow way {o:west_exit} returns to the hallway.
-o: "Workbench {o:workbench} under a flickering strip; {o:generator} and {o:charger} on the far wall; back {o:west_exit}."
+
 kv:
   ambience: "shop_hum"
   smell: "oil_metal"

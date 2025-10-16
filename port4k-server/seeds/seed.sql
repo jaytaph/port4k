@@ -12,4 +12,7 @@ VALUES
   ('carol',  'player', 'carol@port4k.com', '$argon2id$v=19$m=4096,t=3,p=1$c3NudWZsM3UycWgwMDAwMA$rmhw1AzK4zZtbAEJyzKWaAMV56I5H4fF5qDvOWSGYPM',  500, 100, 1000)
 ON CONFLICT (username) DO NOTHING;
 
+
+INSERT INTO public.zones (id, key, title, kind, created_at) VALUES ('16b896de-7ba8-4d90-bec5-ccf06ca9cc5d', 'hub', 'The Hub', 'live', '2025-10-10 12:00:00.000000 +00:00');
+
 COMMIT;

@@ -7,7 +7,7 @@ description: |
   a starfield drifts past, broken by the dark geometry of station struts. A patchy {o:wall_map} is
   bolted beside the bench, and a scuffed {o:storage_locker} sits half-tucked under it. A faint draft
   whispers through a {o:vent_grille} near the floor. The brighter corridor lies {o:east_exit}.
-o: "Viewports above; {o:wall_map} and {o:storage_locker} by the bench; draft through {o:vent_grille}; exit {o:east_exit}."
+
 kv:
   ambience: "quiet_hum"
   view: "starfield"
