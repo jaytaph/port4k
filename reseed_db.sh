@@ -29,4 +29,9 @@ echo "* Running migrations..."
 
 echo "* Seeding the database..."
 psql "$DATABASE_URL" -f ./port4k-server/seeds/seed.sql
-psql "$DATABASE_URL" -f ./port4k-server/seeds/seed-the-hub.sql
+
+
+echo "* Importing 'the hub' blueprint..."
+cd port4k-server
+cargo run --bin import-yaml -- --bp-key hub --owner system --subdir rooms --entry-room entry
+

@@ -1,6 +1,5 @@
 use crate::db::DbResult;
 use crate::db::error::DbError;
-use crate::models::json_string_vec_opt;
 use crate::models::types::{BlueprintId, Direction, ObjectId, RoomId, ZoneId};
 use crate::util::visibility::is_visible_to;
 use once_cell::sync::Lazy;
@@ -13,6 +12,14 @@ use uuid::Uuid;
 static OBJ_REF_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"\{obj:([a-zA-Z0-9_\- ]+)}").unwrap());
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Hint {
+    pub once: Option<bool>, // default: false
+    pub text: String,
+    pub when: String,          // first_look, enter, search, after_fail
+    pub cooldown: Option<u32>, // seconds; null = no cooldown
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlueprintRoom {
     pub id: RoomId,
     pub bp_id: BlueprintId,
@@ -21,14 +28,13 @@ pub struct BlueprintRoom {
     pub body: String,
     pub lockdown: bool,
     pub short: Option<String>,
-    pub hints: Vec<String>,
-    pub scripts_inline: Vec<String>,
+    pub hints: Vec<Hint>,
 }
 
 impl BlueprintRoom {
     pub fn try_from_row(row: &Row) -> DbResult<Self> {
-        let hints = json_string_vec_opt(row.try_get::<_, Option<Value>>("hints")?, "hints")?;
-        let scripts_inline = json_string_vec_opt(row.try_get::<_, Option<Value>>("scripts")?, "scripts")?;
+        let hints_val: Option<Value> = row.try_get::<_, Option<Value>>("hints")?;
+        let hints = parse_hints_value(hints_val)?;
 
         Ok(BlueprintRoom {
             id: RoomId(row.try_get::<_, Uuid>("id")?),
@@ -39,7 +45,6 @@ impl BlueprintRoom {
             lockdown: row.try_get("lockdown")?,
             short: row.try_get("short")?,
             hints,
-            scripts_inline,
         })
     }
 }
@@ -99,20 +104,29 @@ pub struct RoomObjectRow {
 }
 
 impl RoomObjectRow {
-    #[allow(unused)]
     pub fn try_from_row(row: &Row) -> DbResult<Self> {
-        let state = json_string_vec_opt(row.try_get::<_, Option<Value>>("state")?, "state")?;
+        // JSON state (NOT NULL in schema, default '{}')
+        let raw_state: Value = row.try_get("state")?;
+
+        // Policy:
+        // - If it's an OBJECT -> treat it as props, leave state Vec<String> empty.
+        // - Else (array/string/number/bool) -> normalize into Vec<String>, props None.
+        let (state, props) = match &raw_state {
+            Value::Object(_) => (Vec::new(), Some(raw_state.clone())),
+            _ => (json_to_string_vec(&raw_state), None),
+        };
+
         Ok(Self {
-            id: row.try_get("id")?,
-            room_id: row.try_get("room_id")?,
+            id: ObjectId(row.try_get::<_, Uuid>("id")?),
+            room_id: RoomId(row.try_get::<_, Uuid>("room_id")?),
             name: row.try_get("name")?,
             short: row.try_get("short")?,
             description: row.try_get("description")?,
             examine: row.try_get("examine")?,
-            state,
             use_lua: row.try_get("use_lua")?,
             position: row.try_get("position")?,
-            props: row.try_get("props")?, // stays JSON
+            state,
+            props,
         })
     }
 }
@@ -220,7 +234,7 @@ pub struct RoomObject {
     /// Position for ordering (optional)
     pub position: Option<i32>,
     /// State strings (arbitrary flags)
-    pub state: Vec<String>,
+    pub state: HashMap<String, String>,
     /// Synonyms / alternate nouns (terminal, console, computer, screen)
     pub nouns: Vec<String>,
     /// How is this object discovered in the room?
@@ -249,6 +263,29 @@ impl RoomObject {
     pub fn is_visible_to(&self, rv: &RoomView, zr: &ZoneRoomState) -> bool {
         let discovered = is_visible_to(self, rv, zr);
         discovered && self.is_visible()
+    }
+
+    pub fn from_rows(row_obj: &RoomObjectRow, nouns: &[String]) -> Self {
+        Self {
+            id: row_obj.id,
+            name: row_obj.name.clone(),
+            short: row_obj.short.clone(),
+            description: row_obj.description.clone(),
+            examine: row_obj.examine.clone(),
+            use_lua: row_obj.use_lua.clone(),
+            position: row_obj.position,
+            state: row_obj.state.iter().map(|s| (s.clone(), "true".to_string())).collect(),
+            nouns: nouns.as_ref().to_vec(),
+            discovery: Discovery::Visible,
+
+            initial_qty: None,
+            qty: None,
+            locked: false,
+            revealed: false,
+            takeable: false,
+            stackable: false,
+            is_coin: false,
+        }
     }
 }
 
@@ -324,6 +361,99 @@ impl RoomView {
     }
 }
 
+// Allowed 'when' values; tweak as you like
+const ALLOWED_WHEN: &[&str] = &["first_look", "enter", "search", "after_fail", "manual"];
+
+fn normalize_when<S: AsRef<str>>(s: S) -> String {
+    let lower = s.as_ref().trim().to_ascii_lowercase().replace([' ', '-'], "_");
+    if ALLOWED_WHEN.contains(&lower.as_str()) {
+        lower
+    } else {
+        // conservative default: only show when explicitly asked (prevents spam)
+        "manual".to_string()
+    }
+}
+
+fn parse_hints_value(hints: Option<Value>) -> DbResult<Vec<Hint>> {
+    let Some(v) = hints else {
+        return Ok(Vec::new());
+    };
+
+    match v {
+        Value::Array(arr) => {
+            if arr.iter().all(|x| x.is_string()) {
+                // Legacy format: ["hint 1", "hint 2", ...]
+                let out = arr
+                    .into_iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .map(|text| Hint {
+                        once: None,
+                        text,
+                        when: "manual".to_string(),
+                        cooldown: None,
+                    })
+                    .collect();
+                Ok(out)
+            } else {
+                // v2 format: array of objects
+                // Deserialize then normalize 'when'
+                let mut hints: Vec<Hint> = serde_json::from_value(Value::Array(arr))
+                    .map_err(|e| DbError::Validation(format!("invalid hints array: {e}")))?;
+                for h in &mut hints {
+                    if h.when.trim().is_empty() {
+                        h.when = "manual".to_string();
+                    } else {
+                        h.when = normalize_when(&h.when);
+                    }
+                }
+                Ok(hints)
+            }
+        }
+        Value::Object(_) => {
+            // Accept a single object as shorthand
+            let mut h: Hint =
+                serde_json::from_value(v).map_err(|e| DbError::Validation(format!("invalid hint object: {e}")))?;
+            if h.when.trim().is_empty() {
+                h.when = "manual".to_string();
+            } else {
+                h.when = normalize_when(&h.when);
+            }
+            Ok(vec![h])
+        }
+        Value::Null => Ok(Vec::new()),
+        other => Err(DbError::Validation(format!(
+            "unexpected JSON type for hints: {other:?}"
+        ))),
+    }
+}
+
+// --- Helpers you can reuse anywhere ----------------------------------------
+
+/// Normalize a JSON value into Vec<String>.
+/// - ["a","b"]      -> vec!["a","b"]
+/// - "a"            -> vec!["a"]
+/// - 123 / true     -> vec!["123"] / vec!["true"]
+/// - null / {} / [] -> vec![]
+fn json_to_string_vec(v: &Value) -> Vec<String> {
+    match v {
+        Value::Array(arr) => arr
+            .iter()
+            .filter_map(|x| {
+                x.as_str().map(|s| s.to_string()).or_else(|| {
+                    // accept scalars inside the array (numbers/bools) by stringifying
+                    match x {
+                        Value::Number(_) | Value::Bool(_) => Some(x.to_string()),
+                        _ => None,
+                    }
+                })
+            })
+            .collect(),
+        Value::String(s) => vec![s.clone()],
+        Value::Number(_) | Value::Bool(_) => vec![v.to_string()],
+        _ => Vec::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -352,7 +482,7 @@ mod tests {
             lockdown: false,
             short: Some("A dim corridor".into()),
             hints: vec![],
-            scripts_inline: vec![],
+            // scripts_inline: vec![],
         }
     }
 
@@ -389,7 +519,7 @@ mod tests {
             examine: None,
             use_lua: None,
             position: None,
-            state: vec![], // blueprint flags already reflected in the booleans below
+            state: HashMap::new(),
             nouns: nouns.iter().map(|s| s.to_string()).collect(),
             discovery: Discovery::Visible,
             initial_qty,

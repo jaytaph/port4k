@@ -2,12 +2,10 @@ use crate::db::error::DbError;
 use crate::db::repo::room::{BlueprintAndRoomKey, RoomRepo};
 use crate::db::{Db, DbResult};
 use crate::models::blueprint::Blueprint;
-use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts};
+use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomObjectRow, RoomScripts};
 use crate::models::types::{AccountId, BlueprintId, ObjectId, RoomId, ScriptSource};
-use postgres_types::Json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use uuid::Uuid;
 
 pub struct RoomRepository {
     pub db: Arc<Db>,
@@ -71,7 +69,7 @@ impl RoomRepo for RoomRepository {
         let row = client
             .query_one(
                 r#"
-            SELECT r.id, r.bp_id, r.key, r.title, r.body, r.lockdown, r.short, r.hints, r.scripts
+            SELECT r.id, r.bp_id, r.key, r.title, r.body, r.lockdown, r.short, r.hints
             FROM bp_rooms r
             WHERE r.id = $1 AND r.bp_id = $2
             "#,
@@ -84,11 +82,10 @@ impl RoomRepo for RoomRepository {
 
     async fn room_by_key(&self, key: &BlueprintAndRoomKey) -> DbResult<BlueprintRoom> {
         let client = self.db.get_client().await?;
-
         let row = client
             .query_one(
                 r#"
-            SELECT r.id, r.bp_id, r.key, r.title, r.body, r.lockdown, r.short, r.hints, r.scripts
+            SELECT r.id, r.bp_id, r.key, r.title, r.body, r.lockdown, r.short, r.hints
             FROM bp_rooms r
             JOIN blueprints bp ON bp.id = r.bp_id
             WHERE bp.key = $1 AND r.key = $2
@@ -99,21 +96,6 @@ impl RoomRepo for RoomRepository {
 
         BlueprintRoom::try_from_row(&row)
     }
-
-    // async fn room(&self, room_id: RoomId) -> DbResult<BlueprintRoom> {
-    //     let client = self.db.get_client().await?;
-    //
-    //     let row = client.query_one(
-    //         r#"
-    //         SELECT r.id, r.bp_id, r.key, r.title, r.body, r.lockdown, r.short, r.hints, r.scripts
-    //         FROM bp_rooms r
-    //         WHERE r.id = $1
-    //         "#,
-    //         &[&room_id.0],
-    //     ).await?;
-    //
-    //     BlueprintRoom::try_from_row(&row)
-    // }
 
     async fn room_exits(&self, room_id: RoomId) -> DbResult<Vec<RoomExitRow>> {
         let client = self.db.get_client().await?;
@@ -164,42 +146,27 @@ impl RoomRepo for RoomRepository {
             )
             .await?;
 
-        let mut nouns_by_obj: HashMap<Uuid, Vec<String>> = HashMap::new();
+        let mut nouns_by_obj: HashMap<ObjectId, Vec<String>> = HashMap::new();
         for r in noun_rows {
-            let obj_id: Uuid = r.get(1);
+            let obj_id: ObjectId = r.get(1);
             let noun: String = r.get(2);
             nouns_by_obj.entry(obj_id).or_default().push(noun);
         }
 
-        let objects = obj_rows
-            .into_iter()
-            .map(|r| {
-                let id: Uuid = r.get(0);
+        let mut objects = vec![];
+        for obj in obj_rows {
+            // Convert SQL row into an row object
+            let row_obj = RoomObjectRow::try_from_row(&obj)?;
 
-                let state_json: Option<Json<Vec<String>>> = r.get(6);
-                let state: Vec<String> = state_json.map(|j| j.0).unwrap_or_default();
+            let nouns_slice: &[String] = nouns_by_obj
+                .get(&row_obj.id)
+                .map(Vec::as_slice) // &Vec<String> -> &[String]
+                .unwrap_or(&[]); // empty slice of the right type
 
-                RoomObject {
-                    id: ObjectId::from_uuid(id),
-                    name: r.get(2),
-                    short: r.get(3),
-                    description: r.get(4),
-                    examine: r.get(5),
-                    state,
-                    use_lua: r.get(7),
-                    position: r.get(8),
-                    nouns: nouns_by_obj.remove(&id).unwrap_or_default(),
-                    initial_qty: None,
-                    qty: None,
-                    locked: false,
-                    revealed: false,
-                    takeable: false,
-                    stackable: false,
-                    is_coin: false,
-                    discovery: crate::models::room::Discovery::Visible,
-                }
-            })
-            .collect();
+            // Convert row object + nouns into a full object
+            let obj = RoomObject::from_rows(&row_obj, nouns_slice);
+            objects.push(obj);
+        }
 
         Ok(objects)
     }
@@ -257,7 +224,21 @@ impl RoomRepo for RoomRepository {
             .map(|r| {
                 let k: String = r.get(0);
                 let v: serde_json::Value = r.get(1);
-                let vec: Vec<String> = serde_json::from_value(v)?;
+
+                // normalize into Vec<String>
+                let vec: Vec<String> = match v {
+                    serde_json::Value::Array(arr) => arr
+                        .into_iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect(),
+                    serde_json::Value::String(s) => vec![s],
+                    serde_json::Value::Null => Vec::new(),
+                    other => {
+                        return Err(DbError::Validation(format!(
+                            "expected string or array of strings, got {other:?}"
+                        )));
+                    }
+                };
                 Ok::<(String, Vec<String>), DbError>((k, vec))
             })
             .collect::<DbResult<HashMap<_, _>>>()?;

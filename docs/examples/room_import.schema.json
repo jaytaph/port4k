@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://port4k.com/schema/room-v2.schema.json",
+  "title": "Port4k Room v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "id", "name", "short", "description", "objects", "exits"],
+  "properties": {
+    "version": { "const": 2 },
+    "id": { "$ref": "#/$defs/Id" },
+    "name": { "type": "string", "minLength": 1 },
+    "short": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "o": { "type": "string" },
+
+    "kv": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+
+    "hints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text"],
+        "properties": {
+          "text": { "type": "string", "minLength": 1 },
+          "when": {
+            "type": "string",
+            "enum": ["enter", "after_fail", "manual", "search", "first_look"]
+          },
+          "cooldown": { "type": "integer", "minimum": 0 },
+          "once": { "type": "boolean" }
+        }
+      }
+    },
+
+    "objects": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/Object" }
+    },
+
+    "exits": {
+      "type": "array",
+      "minItems": 0,
+      "items": { "$ref": "#/$defs/Exit" }
+    },
+
+    "scripts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "on_enter": { "$ref": "#/$defs/Lua" },
+        "on_command": { "$ref": "#/$defs/Lua" }
+      }
+    },
+
+    "items_catalog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "stackable"],
+        "properties": {
+          "id": { "$ref": "#/$defs/Id" },
+          "name": { "type": "string", "minLength": 1 },
+          "stackable": { "type": "boolean" }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_\\-]+$",
+      "minLength": 1
+    },
+
+    "Direction": {
+      "type": "string",
+      "enum": [
+        "north","south","east","west",
+        "northeast","northwest","southeast","southwest",
+        "up","down","in","out"
+      ]
+    },
+
+    "Lua": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Lua chunk; validated as plain string here."
+    },
+
+    "Object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "nouns", "short", "description"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Id" },
+        "nouns": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "short": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+
+        "flags": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+
+        "visible": {
+          "type": "string",
+          "enum": ["always", "when_revealed", "when_unlocked", "script"]
+        },
+
+        "state": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "locked": { "type": "boolean" },
+            "powered": { "type": "boolean" },
+            "revealed": { "type": "boolean" },
+            "code_required": { "type": "string" }
+          }
+        },
+
+        "controls": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(exit:[a-z]+\\.(locked|visible_when_locked)|object:[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-.]+)$",
+            "description": "Lightweight addressing; e.g., 'exit:north.locked'"
+          }
+        },
+
+        "examine": { "type": "string" },
+        "use": { "$ref": "#/$defs/Lua" },
+
+        "loot": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Id" }
+            },
+            "credits": { "type": "integer", "minimum": 0 },
+            "once": { "type": "boolean" }
+          }
+        }
+      }
+    },
+
+    "Exit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dir", "to"],
+      "properties": {
+        "dir": { "$ref": "#/$defs/Direction" },
+        "to": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "locked": { "type": "boolean" },
+        "visible_when_locked": { "type": "boolean" }
+      }
+    }
+  }
+}

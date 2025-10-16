@@ -6,6 +6,10 @@ license = { workspace = true }
 authors = { workspace = true }
 
 
+[[bin]]
+name = "import-yaml"
+path = "src/bin/import-yaml.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 thiserror = { workspace = true }
@@ -43,3 +47,4 @@ dashmap = "7.0.0-rc2"
 tracing-error = "0.2"
 color-eyre = "0.6"
 rand = "0.9.2"
+clap = { version = "4.5.49", features = ["derive"] }
