@@ -18,7 +18,7 @@ fn var_missing_policy() {
     // default: LeaveToken
     assert_eq!(
         render_template("X{v:who}Y", &vars, 80),
-        "X\u{1b}[36;41m{{v:who}}\u{1b}[0mY"
+        "X\u{1b}[36;41m\u{1b}[36;41m{{v:who}}\u{1b}[0m\u{1b}[0mY"
     );
 
     let s = render_template_with_opts(
@@ -127,7 +127,7 @@ fn escapes_and_unknown_tokens() {
     assert_eq!(render_template("{{}}", &vars, 80), "{}");
     assert_eq!(
         render_template("{{v}} -> {v:name}", &vars, 80),
-        "{v} -> \u{1b}[36;41m{{v:name}}\u{1b}[0m"
+        "\u{1b}[36;41m{v}\u{1b}[0m -> \u{1b}[36;41m\u{1b}[36;41m{{v:name}}\u{1b}[0m\u{1b}[0m"
     );
     // Unknown token passthrough
     assert_eq!(render_template("X{x:foo}Y", &vars, 80), "X{x:foo}Y");

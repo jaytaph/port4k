@@ -14,7 +14,7 @@ const MOTD: &str = r#"
 ==============  PORT4K INCOMING MESSAGE =================
 Welcome back, {c:yellow}{v:account.name}{c}!  (last login: {v:last_login})
 Server time: {c:white}{v:wall_time}{c}
-Location: {c:white:bold}{v:cursor.zone} - {v:cursor.room.title}{c}
+Location: {c:bright_white}{v:cursor.zone} - {v:cursor.room.title}{c}
 
 Account:  HP {c:green:bold}{v:account.health}/100{c}   XP {c:green:bold}{v:account.xp}{c}   Coins {c:green:bold}{v:account.coins}{c}
 

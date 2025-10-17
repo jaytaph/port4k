@@ -290,7 +290,7 @@ async fn repaint_prompt<W: AsyncWrite + Unpin>(
     if generate_new_prompt {
         let prompt = generate_prompt(
             sess.clone(),
-            "{v:account.name:Not logged in} [{v:room:Nowhere}] @ {c:yellow:bold}{v:wall_time}{c} > ",
+            "{c:yellow:red:bold} {v:account.name:Not logged in} [{rv:title:Nowhere}] @ {v:wall_time}{c} # ",
         );
         editor.set_prompt(&prompt);
     }
