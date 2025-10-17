@@ -4,7 +4,6 @@ use crate::error::DomainError;
 use crate::input::parser::Intent;
 use crate::models::account::Account;
 use crate::models::zone::{Persistence, ZoneContext, ZoneKind, ZonePolicy};
-use crate::renderer::room_view::render_room_view;
 use crate::renderer::{RenderVars, render_template};
 use crate::state::session::ConnState;
 use anyhow::anyhow;
@@ -21,14 +20,12 @@ Account:  HP {c:green:bold}{v:account.health}/100{c}   XP {c:green:bold}{v:accou
 News:
  - New vault area unlocked in The Hub.
  - Type 'help' or 'commands' to get started.
- - Use 'who' to see who’s online.
+ - Use 'who' to see who's online.
 
 Tips:
  - Most rooms have hidden nouns. Try: {c:blue}'examine terminal'{c}, {c:blue}'open crate'{c}.
  - Use cardinal directions or verbs like {c:blue}'in'{c}/{c:blue}'out'{c} to move.
  - Stuck? Try {c:blue}'look'{c}, {c:blue}'hint'{c}, or {c:blue}'scan'{c}.
-
-Exits from here: {c:blue:bold}{v:room.exits_line}{c}
 
 Enjoy your stay, {v:account.role} {v:account.name}.
 
@@ -116,10 +113,10 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOut
         return Ok(out);
     }
 
-    // Render the MOTD and the current room
+    // Render the MOTD  // and the current room
     let vars = RenderVars::new(ctx.sess.clone(), Some(&cursor.room_view));
     out.append(render_template(MOTD, &vars, width).as_str());
-    out.append(render_room_view(&vars, width).await.as_str());
+    // out.append(render_room_view(&vars, width).await.as_str());
     out.success();
     Ok(out)
 }

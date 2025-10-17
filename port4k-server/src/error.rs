@@ -66,6 +66,9 @@ pub enum DomainError {
 
     #[error("invalid data: {0}")]
     InvalidData(String),
+
+    #[error("internal error: {0}")]
+    InternalError(String),
 }
 
 #[derive(Debug, Error)]

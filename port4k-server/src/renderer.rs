@@ -26,6 +26,31 @@ pub struct RenderVars {
     pub room_view: HashMap<String, String>,
 }
 
+impl std::fmt::Debug for RenderVars {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn sorted_map_display<T: std::fmt::Debug>(
+            f: &mut std::fmt::Formatter<'_>,
+            name: &str,
+            map: &HashMap<String, T>,
+        ) -> std::fmt::Result {
+            let mut items: Vec<_> = map.iter().collect();
+            items.sort_by_key(|(k, _)| *k);
+
+            // Print like: name: { key1 = val1, key2 = val2, ... }
+            writeln!(f, "{}:", name)?;
+            for (k, v) in items {
+                writeln!(f, "  {:<25} = {:?}", k, v)?;
+            }
+            Ok(())
+        }
+
+        writeln!(f, "RenderVars {{")?;
+        sorted_map_display(f, "global", &self.global)?;
+        sorted_map_display(f, "room_view", &self.room_view)?;
+        writeln!(f, "}}")
+    }
+}
+
 impl RenderVars {
     pub fn new(sess: Arc<RwLock<Session>>, rv: Option<&RoomView>) -> Self {
         vars::generate_render_vars(sess, rv)
@@ -103,8 +128,6 @@ fn render_single_pass(template: &str, vars: &RenderVars, opts: &RenderOptions) -
                     }
                     Object => {
                         expand_inline_object_tokens(&out, vars);
-                        // leave {o:...} intact for the object-expander phase
-                        // out.push_str(&v.raw);
                     }
                 }
             }
@@ -133,16 +156,10 @@ static O_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{o:([A-Za-z0-9_\-]+)\}
 ///   - "obj:<id>"           (already a label)
 ///   - "obj.<id>"           (already a label)
 fn resolve_object_label(id: &str, vars: &RenderVars) -> Option<String> {
-    let k1 = format!("obj:{}.short", id);
-    // let k2 = format!("obj.{}.short", id);
-    let k3 = format!("obj:{}", id);
-    // let k4 = format!("obj.{}", id);
+    let k1 = format!("obj.{}.short", id);
+    let k2 = format!("obj.{}", id);
 
-    vars.room_view
-        .get(&k1).cloned()
-        // .or_else(|| vars.room_view.get(&k2).cloned())
-        .or_else(|| vars.room_view.get(&k3).cloned())
-        // .or_else(|| vars.room_view.get(&k4).cloned())
+    vars.room_view.get(&k1).cloned().or_else(|| vars.room_view.get(&k2).cloned())
 }
 
 /// Replace {o:id} with a nicely highlighted label.

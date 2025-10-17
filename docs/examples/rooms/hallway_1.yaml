@@ -3,12 +3,9 @@ id: hallway_1
 name: Reinforced Hallway
 short: "A narrow corridor with ribbed plating and emergency beacons."
 description: |
-  The corridor runs east–west with ribbed deck plating underfoot. Emergency beacons strobe a dull red,
-  throwing staccato shadows between support struts. The air smells faintly of burnt insulation.
+  The corridor runs east–west with ribbed deck plating underfoot. Emergency beacons strobe a dull red, throwing staccato shadows between support struts. The air smells faintly of burnt insulation.
 
-  Overhead, a {o:power_conduit} snakes along the ceiling, its casing cracked. On the eastern bulkhead,
-  a recessed {o:access_panel} sits beside a hardened {o:east_door}. To the west, the passage opens
-  toward dim observation ports. The way back {o:south_exit} leads to the Entry Hall.
+  Overhead, a {o:power_conduit} snakes along the ceiling, its casing cracked. On the eastern bulkhead, a recessed {o:access_panel} sits beside a hardened {o:east_door}. To the west, the passage opens toward dim observation ports. The way back {o:south_exit} leads to the Entry Hall.
 
 kv:
   ambience: "alarm_beacons"

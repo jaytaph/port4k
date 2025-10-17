@@ -11,6 +11,14 @@ use std::sync::Arc;
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot};
 
+#[derive(Debug)]
+pub struct LuaResult {
+    /// Was the command successful (true) or failed (false)
+    pub ok: bool,
+    /// Output messages from the script
+    pub data: Vec<String>,
+}
+
 //noinspection RsExternalLinter
 pub enum LuaJob {
     /// Called when a player enters a room.
@@ -24,8 +32,15 @@ pub enum LuaJob {
         account: Account,
         cursor: Box<Cursor>,
         intent: Box<Intent>,
-        reply: oneshot::Sender<bool>,
+        reply: oneshot::Sender<Option<LuaResult>>,
     },
+    OnObject {
+        account: Account,
+        cursor: Box<Cursor>,
+        intent: Box<Intent>,
+        reply: oneshot::Sender<Option<LuaResult>>,
+    },
+
     // // Called when a player issues a command in playtest mode (no DB state, just ephemeral)
     // OnCommandPlaytest {
     //     db: Arc<Db>,
@@ -95,14 +110,13 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
 
                     let _ = reply.send(true);
                 }
-
-                LuaJob::OnCommand {
+                LuaJob::OnObject {
                     cursor,
                     account,
                     intent,
                     reply,
                 } => {
-                    let _ = (|| -> AppResult<Option<String>> {
+                    let lua_result = (|| -> AppResult<Option<LuaResult>> {
                         let src = cursor
                             .room_view
                             .scripts
@@ -138,13 +152,105 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                             func.call::<()>((intent.verb.as_str(), t))?;
 
                             let text = out.lock().clone();
-                            return Ok(Some(text));
+                            return Ok(Some(LuaResult {
+                                ok: true,   // Always assume ok for now
+                                data: text.lines().map(|s| s.to_string()).collect(),
+                            }));
                         }
 
                         Ok(None)
                     })();
 
-                    let _ = reply.send(true);
+                    match lua_result {
+                        Err(e) => {
+                            eprintln!("Lua script error: {:?}", e);
+                            let _ = reply.send(Some(LuaResult {
+                                ok: false,
+                                data: vec!["The room doesn't react (script error)".to_string()],
+                            }));
+                            continue;
+                        }
+                        Ok(None) => {
+                            let _ = reply.send(None);
+                            continue;
+                        }
+                        Ok(Some(res)) => {
+                            let _ = reply.send(Some(res));
+                            continue;
+                        }
+                    }
+                }
+
+
+                LuaJob::OnCommand {
+                    cursor,
+                    account,
+                    intent,
+                    reply,
+                } => {
+                    let lua_result = (|| -> AppResult<Option<LuaResult>> {
+                        let src = cursor
+                            .room_view
+                            .scripts
+                            .on_command_lua
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_owned();
+                        if src.is_empty() {
+                            return Ok(None);
+                        }
+
+                        // Output buffer
+                        let out = Arc::new(Mutex::new(String::new()));
+
+                        let env = make_env(&lua)?;
+                        install_host_api(&lua, &env, &rt_handle, &registry, &cursor, &account, out.clone())?;
+
+                        // ----- Load & run on_command(bp:room) -----
+                        lua.load(&src)
+                            .set_name(format!(
+                                "{}:{}:on_command",
+                                cursor.zone_ctx.blueprint.key, cursor.room_view.room.key
+                            ))
+                            .exec()?;
+
+                        if let Ok(func) = lua.globals().get::<Function>("on_command") {
+                            let t: Table = lua.create_table()?;
+                            for (i, a) in intent.args.iter().enumerate() {
+                                t.set(i + 1, a.as_str())?;
+                            }
+
+                            // Synchronous call (keeps worker future Send)
+                            func.call::<()>((intent.verb.as_str(), t))?;
+
+                            let text = out.lock().clone();
+                            return Ok(Some(LuaResult {
+                                ok: true,   // Always assume ok for now
+                                data: text.lines().map(|s| s.to_string()).collect(),
+                            }));
+                        }
+
+                        Ok(None)
+                    })();
+
+                    match lua_result {
+                        Err(e) => {
+                            eprintln!("Lua script error: {:?}", e);
+                            let _ = reply.send(Some(LuaResult {
+                                ok: false,
+                                data: vec!["The room doesn't react (script error)".to_string()],
+                            }));
+                            continue;
+                        }
+                        Ok(None) => {
+                            let _ = reply.send(None);
+                            continue;
+                        }
+                        Ok(Some(res)) => {
+                            let _ = reply.send(Some(res));
+                            continue;
+                        }
+                    }
                 }
             }
         }

@@ -30,6 +30,7 @@ mod register;
 mod search;
 mod take;
 mod who;
+mod open;
 
 pub type CommandResult<T> = Result<T, CommandError>;
 
@@ -78,8 +79,6 @@ pub struct CmdCtx {
     pub lua_tx: mpsc::Sender<LuaJob>,
     /// Player session
     pub sess: Arc<RwLock<Session>>,
-    // /// Current zone context
-    // pub zone_ctx: Option<ZoneCtx>,
 }
 
 impl CmdCtx {
@@ -156,11 +155,7 @@ pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult<Comma
             out.failure();
             Ok(out)
         }
-        Verb::Open => {
-            out.append("Open command not implemented yet.\n");
-            out.failure();
-            Ok(out)
-        }
+        Verb::Open => open::open(ctx.clone(), intent).await,
         Verb::Unlock => {
             out.append("Unlock command not implemented yet.\n");
             out.failure();

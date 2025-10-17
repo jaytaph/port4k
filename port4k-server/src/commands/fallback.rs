@@ -40,9 +40,19 @@ pub async fn fallback(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Command
             out.append("The room doesn't react (script timed out)\n");
             out.failure();
         }
-        Ok(Ok(_)) => {
-            out.append("result from lua\n");
-            out.success();
+        Ok(Ok(None)) => {
+            // Not handled by lua
+        }
+        Ok(Ok(Some(result))) => {
+            // Handled by lua
+            for msg in result.data {
+                out.append(&msg);
+            }
+            if result.ok {
+                out.failure();
+            } else {
+                out.success();
+            }
         }
         Ok(Err(_)) => {
             out.append("The room doesn't react (script error)\n");
