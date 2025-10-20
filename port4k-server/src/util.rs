@@ -4,9 +4,8 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 pub mod args;
-pub mod handlers;
+pub mod helpers;
 pub mod telnet;
-pub mod visibility;
 
 pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
     dbg!(&base);

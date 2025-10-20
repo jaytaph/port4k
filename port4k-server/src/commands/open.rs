@@ -28,6 +28,7 @@ pub async fn open(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutp
                 account: ctx.account()?,
                 cursor: Box::new(ctx.cursor()?),
                 intent: Box::new(intent.clone()),
+                obj: Box::new(obj.clone()),
                 reply: tx,
             }).await.map_err(|_| DomainError::InternalError("Failed to send Lua job".into()))?;
 

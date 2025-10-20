@@ -1,11 +1,8 @@
 use crate::db::repo::kv::KvRepo;
 use crate::db::repo::room::RoomRepo;
-use crate::error::{AppResult, DomainError};
-use crate::models::room::RoomView;
-use crate::models::types::{AccountId, RoomId, ScriptSource};
-use crate::models::zone::{ZoneContext, ZoneRouter, ZoneState};
+use crate::error::AppResult;
+use crate::models::types::{AccountId, RoomId};
 use std::sync::Arc;
-use tokio::try_join;
 
 pub struct RoomService {
     kv_repo: Arc<dyn KvRepo>,
@@ -59,43 +56,54 @@ impl RoomService {
         Ok(())
     }
 
-    /// Creates a RoomView for the given cursor in the given zone context
-    pub async fn build_room_view(
-        &self,
-        router: Arc<ZoneRouter>,
-        zone_ctx: &ZoneContext,
-        account_id: AccountId,
-        room_id: RoomId,
-    ) -> AppResult<RoomView> {
-        let zone_state: Arc<dyn ZoneState> = router.state_for(zone_ctx);
+    // /// Creates a RoomView for the given cursor in the given zone context
+    // pub async fn build_room_view(
+    //     &self,
+    //     router: Arc<ZoneRouter>,
+    //     zone_ctx: &ZoneContext,
+    //     account_id: AccountId,
+    //     room_id: RoomId,
+    // ) -> AppResult<RoomView> {
+    //     let zone_storage: Arc<dyn StateStorage> = router.storage_for(zone_ctx);
+    //
+    //     let room_fut = async {
+    //         self.room_repo
+    //             .room_by_id(zone_ctx.blueprint.id, room_id)
+    //             .await
+    //             .map_err(DomainError::from)
+    //     };
+    //     let exits_fut = async { self.room_repo.room_exits(room_id).await.map_err(DomainError::from) };
+    //     let objects_fut = async { self.room_repo.room_objects(room_id).await.map_err(DomainError::from) };
+    //     let scripts_fut = async {
+    //         self.room_repo
+    //             .room_scripts(room_id, ScriptSource::Live)
+    //             .await
+    //             .map_err(DomainError::from)
+    //     };
+    //     let kv_fut = async { self.room_repo.room_kv(room_id).await.map_err(DomainError::from) };
+    //     let state_fut = async { zone_state.zone_room_state(zone_ctx, room_id, account_id).await };
+    //
+    //     let (room, exits, objects, scripts, room_kv, zone_state) =
+    //         try_join!(room_fut, exits_fut, objects_fut, scripts_fut, kv_fut, state_fut)?;
+    //
+    //     Ok(RoomView {
+    //         room,
+    //         objects,
+    //         scripts,
+    //         room_kv,
+    //         exits,
+    //         // zone_state: Some(zone_state),
+    //     })
+    // }
 
-        let room_fut = async {
-            self.room_repo
-                .room_by_id(zone_ctx.blueprint.id, room_id)
-                .await
-                .map_err(DomainError::from)
-        };
-        let exits_fut = async { self.room_repo.room_exits(room_id).await.map_err(DomainError::from) };
-        let objects_fut = async { self.room_repo.room_objects(room_id).await.map_err(DomainError::from) };
-        let scripts_fut = async {
-            self.room_repo
-                .room_scripts(room_id, ScriptSource::Live)
-                .await
-                .map_err(DomainError::from)
-        };
-        let kv_fut = async { self.room_repo.room_kv(room_id).await.map_err(DomainError::from) };
-        let state_fut = async { zone_state.zone_room_state(zone_ctx, room_id, account_id).await };
 
-        let (room, exits, objects, scripts, room_kv, zone_state) =
-            try_join!(room_fut, exits_fut, objects_fut, scripts_fut, kv_fut, state_fut)?;
-
-        Ok(RoomView {
-            room,
-            objects,
-            scripts,
-            room_kv,
-            exits,
-            zone_state: Some(zone_state),
-        })
+    pub async fn object_kv_get(&self, room_id: RoomId, obj_name: &str, key: &str) -> AppResult<serde_json::Value> {
+        println!("********** OBJEC_KV_KEY)");
+        dbg!(&obj_name, &key);
+        let full_key = format!("object:{}:{}", obj_name, key);
+        let v = self.kv_repo.room_kv_get(room_id, &full_key).await?;
+        Ok(v)
     }
+
+
 }

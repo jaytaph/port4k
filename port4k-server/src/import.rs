@@ -22,8 +22,6 @@ struct RoomYaml {
     #[serde(rename = "description")]
     pub full_desc: String,
     #[serde(default)]
-    pub o: Option<String>, // inline object-mentions text
-    #[serde(default)]
     pub kv: HashMap<String, serde_json::Value>,
     #[serde(default)]
     pub hints: Vec<HintYaml>,
@@ -166,7 +164,6 @@ async fn upsert_room_header(tx: &Transaction<'_>, bp_id: BlueprintId, r: &RoomYa
     let title = &r.name;
     let short = r.short.as_deref().unwrap_or_default();
     let body = &r.full_desc;
-    let o_text = &r.o;
 
     // Store hints as JSON (structured v2)
     let hints_json = serde_json::to_value(&r.hints)?;
@@ -175,17 +172,16 @@ async fn upsert_room_header(tx: &Transaction<'_>, bp_id: BlueprintId, r: &RoomYa
     let row = tx
         .query_one(
             r#"
-            INSERT INTO bp_rooms (bp_id, key, title, short, body, o, hints)
-            VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)
+            INSERT INTO bp_rooms (bp_id, key, title, short, body, hints)
+            VALUES ($1,$2,$3,$4,$5,$6::jsonb)
             ON CONFLICT (bp_id, key) DO UPDATE
             SET title = EXCLUDED.title,
                 short = EXCLUDED.short,
                 body  = EXCLUDED.body,
-                o     = EXCLUDED.o,
                 hints = EXCLUDED.hints
             RETURNING id
             "#,
-            &[&bp_id, &r.id, &title, &short, &body, &o_text, &hints_json],
+            &[&bp_id, &r.id, &title, &short, &body, &hints_json],
         )
         .await
         .map_err(DbError::from)?;
@@ -413,7 +409,7 @@ fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
 
     // {o:ID} placeholders must reference existing objects (check both description + optional 'o' field)
     let re = Regex::new(r"\{o:([a-zA-Z0-9_\-]+)}").unwrap();
-    for src in [room.full_desc.as_str(), room.o.as_deref().unwrap_or_default()].into_iter() {
+    for src in [room.full_desc.as_str()].into_iter() {
         for cap in re.captures_iter(src) {
             let id = cap[1].to_string();
             if !ids.contains(&id) {

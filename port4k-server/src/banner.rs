@@ -62,4 +62,5 @@ pub static ENTRY: &str = concat!(
     ".",
     "\x1b[0m",
     "\n",
+    "\n",
 );

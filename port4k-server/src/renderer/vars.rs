@@ -126,7 +126,7 @@ pub fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
     // --------------------
     // Exits (aggregate)
     // --------------------
-    let mut exit_dirs: Vec<String> = rv.exits.iter().map(|e| e.dir.to_string()).collect();
+    let mut exit_dirs: Vec<String> = rv.exits.iter().map(|e| e.direction.to_string()).collect();
     exit_dirs.sort(); // stable output for deterministic templates
 
     let exits_line = if exit_dirs.is_empty() { "none".to_string() } else { exit_dirs.join(", ") };
@@ -152,11 +152,10 @@ pub fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
     push(&mut vars, "item_count", all_objs.len());
     push(&mut vars, "has_items",  yesno(!all_objs.is_empty()));
 
-    // Visible objects (uses your earlier RoomObject::is_visible())
     let mut visible_objs: Vec<String> = rv
         .objects
         .iter()
-        .filter(|o| o.is_visible())
+        .filter(|o| o.visible)
         .map(|o| o.name.to_string())
         .collect();
     visible_objs.sort();
@@ -167,14 +166,6 @@ pub fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
     push(&mut vars, "visible_item_count", visible_objs.len());
     push(&mut vars, "has_visible_items",  yesno(!visible_objs.is_empty()));
 
-    // --------------------
-    // Objects (per-object detail)
-    // Keys like:
-    //   obj.wrench.visible=true
-    //   obj.wrench.locked=true
-    //   obj.wrench.revealed=false
-    //   obj.wrench.name=Wrench
-    // --------------------
     for o in &rv.objects {
         // let key = slug(&o.name);
         let key = o.name.to_string();
@@ -182,10 +173,9 @@ pub fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
         push(&mut vars, &format!("obj.{}.short", key), &o.short);
         push(&mut vars, &format!("obj.{}.description", key), &o.description);
         push(&mut vars, &format!("obj.{}.examine", key), o.examine.as_deref().unwrap_or("You see nothing special."));
-        push(&mut vars, &format!("obj.{}.visible", key), yesno(o.is_visible()));
-
-        push(&mut vars, &format!("obj.{}.quantity",   key), o.qty.map(|q| q.to_string()).unwrap_or_else(|| "1".to_string()));
-        push(&mut vars, &format!("obj.{}.locked",   key), yesno(o.locked));
+        push(&mut vars, &format!("obj.{}.visible", key), yesno(o.visible));
+        push(&mut vars, &format!("obj.{}.quantity", key), o.qty);
+        push(&mut vars, &format!("obj.{}.locked", key), yesno(o.locked));
         push(&mut vars, &format!("obj.{}.revealed", key), yesno(o.revealed));
         push(&mut vars, &format!("obj.{}.takeable", key), yesno(o.takeable));
         push(&mut vars, &format!("obj.{}.stackable", key), yesno(o.stackable));
@@ -195,19 +185,12 @@ pub fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
     // --------------------
     // room_kv passthrough (namespaced)
     // --------------------
-    for (k, vs) in &rv.room_kv {
-        emit_kv_list(&mut vars, "room.kv", k, vs);
-    }
+    // for (k, vs) in rv.room_kv.iter() {
+    //     emit_kv_list(&mut vars, "room.kv", k, vs.to_slice());
+    // }
 
-    // --------------------
-    // zone_state presence (don’t assume internal shape yet)
-    // --------------------
-    push(&mut vars, "state.present", yesno(rv.zone_state.is_some()));
-
-    // --------------------
-    // Convenience booleans (for simple {if} in your renderer)
-    // --------------------
-    push(&mut vars, "is_empty_room", yesno(exit_dirs.is_empty() && all_objs.is_empty()));
+    // push(&mut vars, "state.present", yesno(rv.zone_state.is_some()));
+    // push(&mut vars, "is_empty_room", yesno(exit_dirs.is_empty() && all_objs.is_empty()));
 
     vars
 }

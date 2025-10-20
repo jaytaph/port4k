@@ -1,15 +1,16 @@
 use crate::Registry;
-use crate::error::AppResult;
+use crate::error::{AppResult, DomainError};
 use crate::input::parser::Intent;
 use crate::models::account::Account;
 use crate::models::blueprint::Blueprint;
-use crate::models::room::RoomView;
+use crate::models::room::{ResolvedObject, RoomView};
 use crate::state::session::Cursor;
 use mlua::{Function, Integer, Lua, Table, Value};
 use parking_lot::Mutex;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot};
+use tracing::debug;
 
 #[derive(Debug)]
 pub struct LuaResult {
@@ -38,27 +39,9 @@ pub enum LuaJob {
         account: Account,
         cursor: Box<Cursor>,
         intent: Box<Intent>,
+        obj: Box<ResolvedObject>,
         reply: oneshot::Sender<Option<LuaResult>>,
     },
-
-    // // Called when a player issues a command in playtest mode (no DB state, just ephemeral)
-    // OnCommandPlaytest {
-    //     db: Arc<Db>,
-    //     bp: Blueprint,
-    //     room: RoomView,
-    //     account: Account,
-    //     verb: String,
-    //     args: Vec<String>,
-    //     reply: oneshot::Sender<AppResult<Option<String>>>,
-    // },
-    // // Called when we enter a room in playtest mode (no DB state, just ephemeral)
-    // OnEnterPlaytest {
-    //     db: Arc<Db>,
-    //     bp: Blueprint,
-    //     room: RoomView,
-    //     account: Account,
-    //     reply: oneshot::Sender<AppResult<Option<String>>>,
-    // },
 }
 
 /// Start a dedicated Lua worker thread with its own Lua state.
@@ -67,7 +50,7 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
     let (tx, mut rx) = mpsc::channel::<LuaJob>(64);
 
     std::thread::spawn(move || {
-        let lua = Lua::new();
+        let lua = init_lua().expect("cannot init lua");
         lua.sandbox(true).expect("cannot sandbox lua");
 
         while let Some(job) = rx.blocking_recv() {
@@ -88,6 +71,7 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                         let out = Arc::new(Mutex::new(String::new()));
 
                         let env = make_env(&lua)?;
+                        // Add ctx functions??
                         install_host_api(&lua, &env, &rt_handle, &registry, &cursor, &account, out.clone())?;
 
                         let chunk = lua
@@ -110,71 +94,79 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
 
                     let _ = reply.send(true);
                 }
-                LuaJob::OnObject {
-                    cursor,
-                    account,
-                    intent,
-                    reply,
-                } => {
+
+                LuaJob::OnObject { cursor, account, intent, obj, reply, } => {
+                    debug!("LuaJob::OnObject: obj={:?}, intent={:?}", &obj.short, intent);
                     let lua_result = (|| -> AppResult<Option<LuaResult>> {
-                        let src = cursor
-                            .room_view
-                            .scripts
-                            .on_command_lua
-                            .as_deref()
-                            .unwrap_or("")
-                            .to_owned();
+                        let Some(src) = &obj.use_lua else {
+                            debug!("LuaJob::OnObject: no use_lua script");
+                            return Ok(None);
+                        };
                         if src.is_empty() {
+                            debug!("LuaJob::OnObject: empty use_lua script");
                             return Ok(None);
                         }
 
                         // Output buffer
-                        let out = Arc::new(Mutex::new(String::new()));
+                        let output = Arc::new(Mutex::new(String::new()));
 
-                        let env = make_env(&lua)?;
-                        install_host_api(&lua, &env, &rt_handle, &registry, &cursor, &account, out.clone())?;
+                        let arg_ctx = LuaArgContext {
+                            output: output.clone(),
+                            cursor: cursor.clone(),
+                            rt_handle: rt_handle.clone(),
+                            registry: registry.clone(),
+                            obj: Some(obj.clone()),
+                        };
+                        let env = create_lua_env(&lua, arg_ctx)?;
 
-                        // ----- Load & run on_command(bp:room) -----
-                        lua.load(&src)
-                            .set_name(format!(
-                                "{}:{}:on_command",
-                                cursor.zone_ctx.blueprint.key, cursor.room_view.room.key
-                            ))
-                            .exec()?;
+                        install_host_api(&lua, &env, &rt_handle, &registry, &cursor, &account, output.clone())?;
 
-                        if let Ok(func) = lua.globals().get::<Function>("on_command") {
-                            let t: Table = lua.create_table()?;
-                            for (i, a) in intent.args.iter().enumerate() {
-                                t.set(i + 1, a.as_str())?;
-                            }
+                        debug!("LuaJob::OnObject: load eval");
+                        let func: Function = lua.load(src)
+                            .set_name(format!("{}:{}:{}:__entry", cursor.zone_ctx.blueprint.key, cursor.room_view.room.key, obj.name))
+                            .eval()?;
 
-                            // Synchronous call (keeps worker future Send)
-                            func.call::<()>((intent.verb.as_str(), t))?;
-
-                            let text = out.lock().clone();
-                            return Ok(Some(LuaResult {
-                                ok: true,   // Always assume ok for now
-                                data: text.lines().map(|s| s.to_string()).collect(),
-                            }));
+                        // Build args table (1-based)
+                        let t: Table = lua.create_table()?;
+                        for (i, a) in intent.args.iter().enumerate() {
+                            t.set(i + 1, a.as_str())?;
                         }
 
-                        Ok(None)
+                        debug!("LuaJob::OnObject: calling returned function verb='{}'", intent.verb.as_str());
+
+                        func.call::<()>((env.clone(), intent.verb.as_str(), t))?;
+
+                        debug!("LuaJob::OnObject: function call complete");
+                        let text = output.lock().clone();
+                        Ok(Some(LuaResult {
+                            ok: true,
+                            data: text.lines().map(|s| s.to_string()).collect(),
+                        }))
                     })();
 
+                    debug!("LuaJob::OnObject: lua_result={:?}", &lua_result);
                     match lua_result {
                         Err(e) => {
+                            debug!("LuaJob::OnObject: script error: {:?}", e);
                             eprintln!("Lua script error: {:?}", e);
+                            let data = match e {
+                                // DomainError::Lua(mlua::Error::RuntimeError(msg)) => msg.to_string(),
+                                DomainError::Lua(e) => e.to_string(),
+                                _ => "The room doesn't react (unknown script error)".to_string(),
+                            };
                             let _ = reply.send(Some(LuaResult {
                                 ok: false,
-                                data: vec!["The room doesn't react (script error)".to_string()],
+                                data: vec![data],
                             }));
                             continue;
                         }
                         Ok(None) => {
+                            debug!("LuaJob::OnObject: no result from script");
                             let _ = reply.send(None);
                             continue;
                         }
                         Ok(Some(res)) => {
+                            debug!("LuaJob::OnObject: sending result from script");
                             let _ = reply.send(Some(res));
                             continue;
                         }
@@ -207,30 +199,26 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                         install_host_api(&lua, &env, &rt_handle, &registry, &cursor, &account, out.clone())?;
 
                         // ----- Load & run on_command(bp:room) -----
-                        lua.load(&src)
-                            .set_name(format!(
-                                "{}:{}:on_command",
-                                cursor.zone_ctx.blueprint.key, cursor.room_view.room.key
-                            ))
-                            .exec()?;
+                        let func: Function = lua.load(&src)
+                            .set_name(format!("{}:{}:on_command", cursor.zone_ctx.blueprint.key, cursor.room_view.room.key))
+                            .eval()?;
 
-                        if let Ok(func) = lua.globals().get::<Function>("on_command") {
-                            let t: Table = lua.create_table()?;
-                            for (i, a) in intent.args.iter().enumerate() {
-                                t.set(i + 1, a.as_str())?;
-                            }
-
-                            // Synchronous call (keeps worker future Send)
-                            func.call::<()>((intent.verb.as_str(), t))?;
-
-                            let text = out.lock().clone();
-                            return Ok(Some(LuaResult {
-                                ok: true,   // Always assume ok for now
-                                data: text.lines().map(|s| s.to_string()).collect(),
-                            }));
+                        // Setup args table
+                        let t: Table = lua.create_table()?;
+                        for (i, a) in intent.args.iter().enumerate() {
+                            t.set(i + 1, a.as_str())?;
                         }
 
-                        Ok(None)
+                        debug!("LuaJob::OnObject: calling returned function verb='{}'", intent.verb.as_str());
+                        // Pass ctx/env as first arg (Lua expects (ctx, verb, args))
+                        func.call::<()>((env.clone(), intent.verb.as_str(), t))?;
+
+                        debug!("LuaJob::OnObject: function call complete");
+                        let text = out.lock().clone();
+                        Ok(Some(LuaResult {
+                            ok: true,
+                            data: text.lines().map(|s| s.to_string()).collect(),
+                        }))
                     })();
 
                     match lua_result {
@@ -257,6 +245,127 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
     });
 
     tx
+}
+
+struct LuaArgContext {
+    output: Arc<Mutex<String>>,
+    cursor: Box<Cursor>,
+    rt_handle: Handle,
+    registry: Arc<Registry>,
+    obj: Option<Box<ResolvedObject>>,
+}
+
+fn create_lua_env(lua: &Lua, arg_ctx: LuaArgContext) -> mlua::Result<Table> {
+    let env = make_env(&lua)?;
+
+    let output_clone = arg_ctx.output.clone();
+    env.set("say", lua.create_function(move |_, (_self, msg): (Table, String)| -> mlua::Result<()> {
+        output_clone.lock().push_str(&msg);
+        Ok(())
+    })?)?;
+
+    if let Some(obj) = arg_ctx.obj.as_ref() {
+        env.set("get_object_state", lua.create_function({
+            let cursor = arg_ctx.cursor.clone();
+            let obj_key = obj.name.clone();
+            let handle = arg_ctx.rt_handle.clone();
+            let registry = arg_ctx.registry.clone();
+            move |lua_ctx, (_self, key): (Table, String)| -> mlua::Result<Value> {
+                let room_id = cursor.room_view.room.id;
+                let fut = registry.services.room.object_kv_get(room_id, &obj_key, &key);
+                let v = handle.block_on(fut).map_err(mlua::Error::external)?;
+                serde_json_to_lua(lua_ctx, v)
+            }
+        })?)?;
+
+        // env.set("set_object_state", lua.create_function({)
+        //     let cursor = cursor.clone();
+        //     let obj_key = obj.name.clone();
+        //     let handle = rt_handle.clone();
+        //     let registry = registry.clone();
+        //     move |_, (key, value): (String, Value)| -> mlua::Result<()> {
+        //         let room_id = cursor.room_view.room.id;
+        //         let v = lua_to_serde_json(value)?;
+        //         let fut = registry.services.room.object_kv_set(room_id, &obj_key, &key, &v);
+        //         handle.block_on(fut).map_err(mlua::Error::external)?;
+        //         Ok(())
+        //     }
+        // })?)?;
+    }
+
+    // env.set("has_object", lua.create_function({
+    //     let cursor = cursor.clone();
+    //     let obj_key = obj.name.clone();
+    //     let handle = rt_handle.clone();
+    //     let registry = registry.clone();
+    //     move |_, key: String| -> mlua::Result<bool> {
+    //         let room_id = cursor.room_view.room.id;
+    //         let fut = registry.services.room.object_kv_get(room_id, &obj_key, &key);
+    //         let v = handle.block_on(fut).map_err(mlua::Error::external)?;
+    //         Ok(v.is_some())
+    //     }
+    // })?)?;
+    //
+    // env.set("reveal_object", lua.create_function({
+    //     let cursor = cursor.clone();
+    //     let obj_key = obj.name.clone();
+    //     let handle = rt_handle.clone();
+    //     let registry = registry.clone();
+    //     move |_, (): ()| -> mlua::Result<()> {
+    //         let room_id = cursor.room_view.room.id;
+    //         let fut = registry.services.room.reveal_object(room_id, &obj_key);
+    //         handle.block_on(fut).map_err(mlua::Error::external)?;
+    //         Ok(())
+    //     }
+    // })?)?;
+    //
+    // env.set("remove_object", lua.create_function({
+    //     let cursor = cursor.clone();
+    //     let obj_key = obj.name.clone();
+    //     let handle = rt_handle.clone();
+    //     let registry = registry.clone();
+    //     move |_, (): ()| -> mlua::Result<()> {
+    //         let room_id = cursor.room_view.room.id;
+    //         let fut = registry.services.room.remove_object(room_id, &obj_key);
+    //         handle.block_on(fut).map_err(mlua::Error::external)?;
+    //         Ok(())
+    //     }
+    // })?)?;
+
+    /*
+    env.set("set_exit_locked", lua.create_function({
+        let cursor = cursor.clone();
+        let handle = rt_handle.clone();
+        let registry = registry.clone();
+        move |_, (exit_key, locked): (String, bool)| -> mlua::Result<()> {
+            let room_id = cursor.room_view.room.id;
+            // let fut = registry.services.room.set_exit_locked(zone_id, room_id, &exit_key, locked);
+            // handle.block_on(fut).map_err(mlua::Error::external)?;
+            Ok(())
+        }
+    })?)?;
+    */
+    /*
+    env.set("set_exit_locked_player", lua.create_function({
+        let cursor = cursor.clone();
+        let handle = rt_handle.clone();
+        let registry = registry.clone();
+        let account = account.clone();
+        move |_, (exit_key, locked): (String, bool)| -> mlua::Result<()> {
+            let room_id = cursor.room_view.room.id;
+            // let fut = registry.services.room.set_exit_locked_player(zone_id, room_id, account.id, &exit_key, locked);
+            // handle.block_on(fut).map_err(mlua::Error::external)?;
+            Ok(())
+        }
+    })?)?;
+    */
+
+    Ok(env)
+}
+
+pub fn init_lua() -> anyhow::Result<Lua> {
+    let lua = Lua::new();
+    Ok(lua)
 }
 
 fn make_env(lua: &Lua) -> mlua::Result<Table> {

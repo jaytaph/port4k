@@ -2,9 +2,8 @@ use crate::db::error::DbError;
 use crate::db::repo::room::{BlueprintAndRoomKey, RoomRepo};
 use crate::db::{Db, DbResult};
 use crate::models::blueprint::Blueprint;
-use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomObjectRow, RoomScripts};
-use crate::models::types::{AccountId, BlueprintId, ObjectId, RoomId, ScriptSource};
-use std::collections::HashMap;
+use crate::models::room::{BlueprintExit, BlueprintObject, BlueprintRoom, Kv, RoomScripts};
+use crate::models::types::{AccountId, BlueprintId, RoomId, ScriptSource};
 use std::sync::Arc;
 
 pub struct RoomRepository {
@@ -14,33 +13,6 @@ pub struct RoomRepository {
 impl RoomRepository {
     pub fn new(db: Arc<Db>) -> Self {
         Self { db: db.clone() }
-    }
-
-    async fn get_draft_scripts(&self, room_id: RoomId) -> DbResult<RoomScripts> {
-        let client = self.db.get_client().await?;
-
-        let rows = client
-            .query(
-                r#"
-            SELECT event, source
-            FROM bp_scripts_draft
-            WHERE room_id = $1 AND event IN ('on_enter', 'on_command')
-            "#,
-                &[&room_id.0],
-            )
-            .await?;
-
-        let mut s = RoomScripts::default();
-        for r in rows {
-            let event: String = r.get(0);
-            let source: String = r.get(1);
-            match event.as_str() {
-                "on_enter" => s.on_enter_lua = Some(source),
-                "on_command" => s.on_command_lua = Some(source),
-                _ => {}
-            }
-        }
-        Ok(s)
     }
 }
 
@@ -97,7 +69,7 @@ impl RoomRepo for RoomRepository {
         BlueprintRoom::try_from_row(&row)
     }
 
-    async fn room_exits(&self, room_id: RoomId) -> DbResult<Vec<RoomExitRow>> {
+    async fn room_exits(&self, room_id: RoomId) -> DbResult<Vec<BlueprintExit>> {
         let client = self.db.get_client().await?;
 
         let rows = client
@@ -114,61 +86,100 @@ impl RoomRepo for RoomRepository {
 
         let exits = rows
             .iter()
-            .map(RoomExitRow::try_from_row)
+            .map(BlueprintExit::try_from_row)
             .collect::<DbResult<Vec<_>>>()?;
         Ok(exits)
     }
 
-    async fn room_objects(&self, room_id: RoomId) -> DbResult<Vec<RoomObject>> {
+    // async fn room_objects(&self, room_id: RoomId) -> DbResult<Vec<BlueprintObject>> {
+    //     let client = self.db.get_client().await?;
+    //
+    //     let obj_rows = client
+    //         .query(
+    //             r#"
+    //         SELECT id, room_id, name, short, description, examine, state, use_lua, position
+    //         FROM bp_objects
+    //         WHERE room_id = $1
+    //         ORDER BY COALESCE(position, 0), name
+    //         "#,
+    //             &[&room_id.0],
+    //         )
+    //         .await?;
+    //
+    //     // Gather nouns in one go
+    //     let noun_rows = client
+    //         .query(
+    //             r#"
+    //         SELECT room_id, obj_id, noun
+    //         FROM bp_object_nouns
+    //         WHERE room_id = $1
+    //         "#,
+    //             &[&room_id.0],
+    //         )
+    //         .await?;
+    //
+    //     let mut nouns_by_obj: HashMap<ObjectId, Vec<String>> = HashMap::new();
+    //     for r in noun_rows {
+    //         let obj_id: ObjectId = r.get(1);
+    //         let noun: String = r.get(2);
+    //         nouns_by_obj.entry(obj_id).or_default().push(noun);
+    //     }
+    //
+    //     let mut objects = vec![];
+    //     for obj in obj_rows {
+    //         // Convert SQL row into an row object
+    //         let row_obj = BlueprintObject::try_from_row(&obj)?;
+    //
+    //         let nouns_slice: &[String] = nouns_by_obj
+    //             .get(&row_obj.id)
+    //             .map(Vec::as_slice) // &Vec<String> -> &[String]
+    //             .unwrap_or(&[]); // empty slice of the right type
+    //
+    //         // Get room KVs
+    //         let kv = self.room_kv(room_id).await?;
+    //
+    //         // Convert row object + nouns into a full object
+    //         let obj = BlueprintObject::from_rows(&row_obj, nouns_slice, kv);
+    //         objects.push(obj);
+    //     }
+    //
+    //     Ok(objects)
+    // }
+
+    async fn room_objects(&self, room_id: RoomId) -> DbResult<Vec<BlueprintObject>> {
         let client = self.db.get_client().await?;
 
-        let obj_rows = client
-            .query(
-                r#"
-            SELECT id, room_id, name, short, description, examine, state, use_lua, position
-            FROM bp_objects
-            WHERE room_id = $1
-            ORDER BY COALESCE(position, 0), name
-            "#,
-                &[&room_id.0],
-            )
-            .await?;
+        let rows = client.query(
+            r#"
+        SELECT o.id, o.room_id, o.name, o.short, o.description, o.examine, o.state, o.use_lua, o.position,
+            COALESCE(n.nouns, ARRAY[]::text[]) AS nouns,
+            COALESCE(k.kv, '{}'::jsonb) AS kv
+        FROM bp_objects AS o
+        LEFT JOIN LATERAL (
+            SELECT ARRAY_AGG(n.noun ORDER BY n.noun) AS nouns
+            FROM bp_object_nouns AS n
+            WHERE n.object_id = o.id
+        ) AS n ON true
+        LEFT JOIN LATERAL (
+            SELECT JSONB_OBJECT_AGG(k.key, k.value) AS kv
+            FROM bp_objects_kv AS k
+            WHERE k.object_id = o.id
+        ) AS k ON true
+        WHERE o.room_id = $1
+        ORDER BY COALESCE(o.position, 0), o.name
+        "#,
+            &[&room_id.0],
+        ).await?;
 
-        // Gather nouns in one go
-        let noun_rows = client
-            .query(
-                r#"
-            SELECT room_id, obj_id, noun
-            FROM bp_object_nouns
-            WHERE room_id = $1
-            "#,
-                &[&room_id.0],
-            )
-            .await?;
-
-        let mut nouns_by_obj: HashMap<ObjectId, Vec<String>> = HashMap::new();
-        for r in noun_rows {
-            let obj_id: ObjectId = r.get(1);
-            let noun: String = r.get(2);
-            nouns_by_obj.entry(obj_id).or_default().push(noun);
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            // If your BlueprintObject::try_from_row expects only bp_objects columns,
+            // add a constructor that takes nouns + kv, or adapt here:
+            let nouns: Vec<String> = row.get("nouns");
+            let obj = BlueprintObject::try_from_row(&row, nouns, Kv::from(row.get("kv")))?;
+            out.push(obj);
         }
-
-        let mut objects = vec![];
-        for obj in obj_rows {
-            // Convert SQL row into an row object
-            let row_obj = RoomObjectRow::try_from_row(&obj)?;
-
-            let nouns_slice: &[String] = nouns_by_obj
-                .get(&row_obj.id)
-                .map(Vec::as_slice) // &Vec<String> -> &[String]
-                .unwrap_or(&[]); // empty slice of the right type
-
-            // Convert row object + nouns into a full object
-            let obj = RoomObject::from_rows(&row_obj, nouns_slice);
-            objects.push(obj);
-        }
-
-        Ok(objects)
+        Ok(out)
     }
 
     async fn room_scripts(&self, room_id: RoomId, src: ScriptSource) -> DbResult<RoomScripts> {
@@ -176,11 +187,7 @@ impl RoomRepo for RoomRepository {
 
         let (table, enter_col, cmd_col) = match src {
             ScriptSource::Live => ("bp_room_scripts", "on_enter_lua", "on_command_lua"),
-            ScriptSource::Draft => {
-                // Draft is per-event; fetch both rows and merge.
-                // We’ll do a small UNION query to return both in one pass.
-                return self.get_draft_scripts(room_id).await;
-            }
+            ScriptSource::Draft => ("bp_room_scripts", "on_enter_lua", "on_command_lua"),
         };
 
         let row_opt = client
@@ -205,46 +212,22 @@ impl RoomRepo for RoomRepository {
         }
     }
 
-    async fn room_kv(&self, room_id: RoomId) -> DbResult<RoomKv> {
-        let client = self.db.get_client().await?;
-
-        let rows = client
-            .query(
-                r#"
-            SELECT key, value
-            FROM bp_room_kv
-            WHERE room_id = $1
-            "#,
-                &[&room_id.0],
-            )
-            .await?;
-
-        let kv = rows
-            .into_iter()
-            .map(|r| {
-                let k: String = r.get(0);
-                let v: serde_json::Value = r.get(1);
-
-                // normalize into Vec<String>
-                let vec: Vec<String> = match v {
-                    serde_json::Value::Array(arr) => arr
-                        .into_iter()
-                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
-                        .collect(),
-                    serde_json::Value::String(s) => vec![s],
-                    serde_json::Value::Null => Vec::new(),
-                    other => {
-                        return Err(DbError::Validation(format!(
-                            "expected string or array of strings, got {other:?}"
-                        )));
-                    }
-                };
-                Ok::<(String, Vec<String>), DbError>((k, vec))
-            })
-            .collect::<DbResult<HashMap<_, _>>>()?;
-
-        Ok(kv)
-    }
+    // async fn room_kv(&self, room_id: RoomId) -> DbResult<Kv> {
+    //     let client = self.db.get_client().await?;
+    //
+    //     let rows = client
+    //         .query(
+    //             r#"
+    //         SELECT key, value
+    //         FROM bp_room_kv
+    //         WHERE room_id = $1
+    //         "#,
+    //             &[&room_id.0],
+    //         )
+    //         .await?;
+    //
+    //     Ok(rows_to_room_kv(rows).map_err(|_| DbError::Decode("Cannot decode row to kv".into()))?)
+    // }
 
     async fn set_entry(&self, key: &BlueprintAndRoomKey) -> DbResult<bool> {
         let c = self.db.get_client().await?;
@@ -266,12 +249,7 @@ impl RoomRepo for RoomRepository {
         Ok(n == 1)
     }
 
-    async fn add_exit(
-        &self,
-        from_key: &BlueprintAndRoomKey,
-        dir: &str,
-        to_key: &BlueprintAndRoomKey,
-    ) -> DbResult<bool> {
+    async fn add_exit(&self, from_key: &BlueprintAndRoomKey, dir: &str, to_key: &BlueprintAndRoomKey) -> DbResult<bool> {
         if from_key.bp_key != to_key.bp_key {
             return Err(DbError::Validation("from/to must be in the same blueprint".into()));
         }

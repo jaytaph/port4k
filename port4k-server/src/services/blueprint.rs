@@ -3,7 +3,7 @@
 use crate::db::repo::room::{BlueprintAndRoomKey, RoomRepo};
 use crate::error::AppResult;
 use crate::models::blueprint::Blueprint;
-use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts, RoomView};
+use crate::models::room::{BlueprintExit, BlueprintObject, BlueprintRoom, Kv, RoomScripts, RoomView};
 use crate::models::types::{AccountId, BlueprintId, RoomId, ScriptSource};
 use std::sync::Arc;
 
@@ -31,12 +31,12 @@ impl BlueprintService {
         Ok(bp_room)
     }
 
-    pub async fn room_exits(&self, _bp_id: BlueprintId, room_id: RoomId) -> AppResult<Vec<RoomExitRow>> {
+    pub async fn room_exits(&self, _bp_id: BlueprintId, room_id: RoomId) -> AppResult<Vec<BlueprintExit>> {
         let exits = self.repo.room_exits(room_id).await?;
         Ok(exits)
     }
 
-    pub async fn room_objects(&self, _bp_id: BlueprintId, room_id: RoomId) -> AppResult<Vec<RoomObject>> {
+    pub async fn room_objects(&self, _bp_id: BlueprintId, room_id: RoomId) -> AppResult<Vec<BlueprintObject>> {
         let objects = self.repo.room_objects(room_id).await?;
         Ok(objects)
     }
@@ -46,7 +46,7 @@ impl BlueprintService {
         Ok(scripts)
     }
 
-    pub async fn room_kv(&self, _bp_id: BlueprintId, room_id: RoomId) -> AppResult<RoomKv> {
+    pub async fn room_kv(&self, _bp_id: BlueprintId, room_id: RoomId) -> AppResult<Kv> {
         let kv_pairs = self.repo.room_kv(room_id).await?;
         Ok(kv_pairs)
     }

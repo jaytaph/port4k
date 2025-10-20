@@ -42,15 +42,36 @@ objects:
     examine: "The locking mechanism is intact; manual overrides are scarred but functional."
     use: |
       return function(ctx, verb, _)
-        if verb ~= "open" then return false end
-        local locked = ctx:get_object_state("blast_door","locked")
-        if locked then
-          ctx:say("The door is locked tight.")
-        else
-          ctx:say("Hydraulics hiss as the blast door slides open.")
-        end
-        return true
+          local exit = "north"
+          ctx:say("Well... it's time for a luau script!")
+      
+          if verb == "open" then
+              local locked = ctx:get_object_state("blast_door", "locked")
+              if locked then
+                  ctx:say("The door is locked tight.")
+                  return true
+              end
+              if ctx.is_exit_locked and ctx:is_exit_locked(exit) == false then
+                  ctx:say("It's already open.")
+                  return true
+              end
+              ctx:say("Hydraulics hiss as the blast door slides open.")
+              ctx:set_exit_locked(exit, false)
+              return true
+      
+          elseif verb == "close" then
+              if ctx.is_exit_locked and ctx:is_exit_locked(exit) == true then
+                  ctx:say("It's already closed.")
+                  return true
+              end
+              ctx:say("The blast door rumbles shut.")
+              ctx:set_exit_locked(exit, true)
+              return true
+          end
+      
+          return false
       end
+
 
   - id: wall_console
     nouns: ["console","terminal","panel"]
@@ -87,7 +108,6 @@ objects:
           local required = ctx:get_object_state("wall_console","code_required") or "4312"
           if code == required then
             ctx:say("Code accepted. Releasing blast door locks.")
-            ctx:set_exit_locked("north", false)
             ctx:set_object_state("blast_door","locked", false)
           else
             ctx:say("ACCESS DENIED.")

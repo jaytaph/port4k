@@ -134,6 +134,7 @@ async fn handle_data_byte<W: AsyncWrite + Unpin>(
         EditEvent::Line(line) => {
             // Move to a fresh line before emitting any output
             w.write_all(b"\r\n").await?;
+            w.write_all(b"\r\n").await?;
             let raw = line.trim();
             tracing::debug!(%raw, "received line");
 
@@ -145,6 +146,8 @@ async fn handle_data_byte<W: AsyncWrite + Unpin>(
 
             // Otherwise, dispatch as a normal command
             dispatch_command(raw, w, ctx.clone(), sess.clone()).await?;
+
+            w.write_all(b"\r\n").await?;
 
             // Always repaint prompt after server output
             repaint_prompt(sess.clone(), w, editor, true).await?;
@@ -188,14 +191,16 @@ async fn dispatch_command<W: AsyncWrite + Unpin>(
 }
 
 async fn output_error<W: AsyncWrite + Unpin>(w: &mut W, out: CommandOutput) {
-    let _ = write_with_newline(w, b"\n").await;
-    let _ = write_with_newline(w, b"An error occurred while processing your command.").await;
-    let _ = write_with_newline(w, b"\n").await;
-    for msg in out.messages() {
-        let _ = write_with_newline(w, msg.as_bytes()).await;
-        let _ = write_with_newline(w, b"\n").await;
-    }
-    let _ = write_with_newline(w, b"\n").await;
+    let error_tempalte = r#"
+{c:bright_yellow:bright_red} An error occurred while processing your command.{c}
+
+{v:messages}
+    "#;
+
+    let vars = RenderVars::default().with("messages", out.messages().join("\n").as_str());
+    let rendered_out = render_template(error_tempalte, &vars, 80);
+
+    let _ = write_with_newline(w, rendered_out.as_bytes()).await;
 }
 
 async fn output_success<W: AsyncWrite + Unpin>(w: &mut W, out: CommandOutput) {
@@ -290,7 +295,7 @@ async fn repaint_prompt<W: AsyncWrite + Unpin>(
     if generate_new_prompt {
         let prompt = generate_prompt(
             sess.clone(),
-            "{c:yellow:red:bold} {v:account.name:Not logged in} [{rv:title:Nowhere}] @ {v:wall_time}{c} # ",
+            "{c:bright_yellow:blue} {v:account.name:Not logged in} [{rv:title:Nowhere}] @ {v:wall_time} {c} # ",
         );
         editor.set_prompt(&prompt);
     }

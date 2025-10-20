@@ -1,6 +1,6 @@
 use crate::db::DbResult;
 use crate::models::blueprint::Blueprint;
-use crate::models::room::{BlueprintRoom, RoomExitRow, RoomKv, RoomObject, RoomScripts};
+use crate::models::room::{BlueprintExit, BlueprintObject, BlueprintRoom, Kv, RoomScripts};
 use crate::models::types::{AccountId, BlueprintId, RoomId, ScriptSource};
 
 /// Even though room_ids are globally unique, we still use a combination of
@@ -35,10 +35,10 @@ pub trait RoomRepo: Send + Sync {
     async fn room_by_id(&self, bp_id: BlueprintId, room_id: RoomId) -> DbResult<BlueprintRoom>;
     async fn room_by_key(&self, key: &BlueprintAndRoomKey) -> DbResult<BlueprintRoom>;
 
-    async fn room_exits(&self, room_id: RoomId) -> DbResult<Vec<RoomExitRow>>;
-    async fn room_objects(&self, room_id: RoomId) -> DbResult<Vec<RoomObject>>;
+    async fn room_exits(&self, room_id: RoomId) -> DbResult<Vec<BlueprintExit>>;
+    async fn room_objects(&self, room_id: RoomId) -> DbResult<Vec<BlueprintObject>>;
     async fn room_scripts(&self, room_id: RoomId, src: ScriptSource) -> DbResult<RoomScripts>;
-    async fn room_kv(&self, room_id: RoomId) -> DbResult<RoomKv>;
+    async fn room_kv(&self, room_id: RoomId) -> DbResult<Kv>;
 
     async fn set_entry(&self, key: &BlueprintAndRoomKey) -> DbResult<bool>;
     async fn add_exit(&self, from_key: &BlueprintAndRoomKey, dir: &str, to_key: &BlueprintAndRoomKey)

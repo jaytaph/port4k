@@ -26,6 +26,18 @@ pub struct RenderVars {
     pub room_view: HashMap<String, String>,
 }
 
+impl RenderVars {
+    pub fn with(mut self, key: &str, val: &str) -> Self {
+        self.global.insert(key.to_string(), val.to_string());
+        self
+    }
+
+    pub fn without(mut self, key: &str) -> Self {
+        self.global.remove(key);
+        self
+    }
+}
+
 impl std::fmt::Debug for RenderVars {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         fn sorted_map_display<T: std::fmt::Debug>(

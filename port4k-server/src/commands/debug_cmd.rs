@@ -1,12 +1,15 @@
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
 use crate::input::parser::Intent;
 use std::sync::Arc;
+use crate::renderer::{render_template, RenderVars};
+
+const USAGE: &'static str = "Usage: debug <where|col>\n";
 
 pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
     let mut out = CommandOutput::new();
 
     if intent.args.len() < 2 {
-        out.append("Usage: debug where\n");
+        out.append(USAGE);
         out.failure();
         return Ok(out);
     }
@@ -14,6 +17,27 @@ pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Comman
     let sub_cmd = intent.args[1].as_str();
 
     match sub_cmd {
+        "col" => {
+            out.append("Color codes:\n");
+            let colors = vec![
+                "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+                "bright_black", "bright_red", "bright_green", "bright_yellow",
+                "bright_blue", "bright_magenta", "bright_cyan", "bright_white",
+            ];
+            let mut i = 0;
+            let mut line = String::new();
+            for fg in &colors {
+                for bg in &colors {
+                    let s = render_template(&format!("{{c:{}:{}}}{:02X}{{c}} ", fg, bg, i), &RenderVars::default(), 80);
+                    line.push_str(&s);
+                    i += 1;
+                }
+                line.push('\n');
+            }
+
+            out.append(line.as_str());
+            out.success();
+        }
         "where" => {
             let account = ctx.account()?;
             let username = account.username;

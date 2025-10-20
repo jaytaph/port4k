@@ -22,19 +22,19 @@ impl NavigatorService {
     }
 
     pub async fn go(&self, cursor: &Cursor, account_id: AccountId, dir: Direction) -> AppResult<(RoomId, RoomId)> {
+        let zone_id = cursor.zone_ctx.zone.id;
         let from_id = cursor.room_view.room.id;
+
         let (_exit, to_id) = self.resolve_exit_checked(cursor, account_id, from_id, dir).await?;
 
-        let state = self.zone_router.state_for(&cursor.zone_ctx);
-
-        let mut uow = state.begin(&cursor.zone_ctx).await?;
-        uow.set_current_room(account_id, to_id).await?;
-        uow.record_travel(account_id, from_id, to_id).await?;
+        let state = self.zone_router.storage_for(&cursor.zone_ctx);
+        state.set_current_room(zone_id, account_id, to_id).await?;
+        // state.record_travel(account_id, from_id, to_id).await?;
         // If you have tolls, deduct coins here:
         // uow.update_coins(account_id, -toll_amount).await?;
         // If you want to award travel XP:
-        // uow.update_xp(account_id, 5).await?;
-        uow.commit().await?;
+        // state.update_xp(account_id, 5).await?;
+        // uow.commit().await?;
 
         Ok((from_id, to_id))
     }
@@ -52,7 +52,7 @@ impl NavigatorService {
             .room_view
             .exits
             .iter()
-            .find(|e| e.dir.to_short() == want && e.from_room_id == from)
+            .find(|e| e.direction.to_short() == want && e.from_room_id == from)
             .cloned();
         // .map_e(|| DomainError::InvalidDirection);
 
