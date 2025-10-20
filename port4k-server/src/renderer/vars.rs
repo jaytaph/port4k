@@ -155,7 +155,7 @@ pub fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
     let mut visible_objs: Vec<String> = rv
         .objects
         .iter()
-        .filter(|o| o.visible)
+        .filter(|o| o.flags.is_visible())
         .map(|o| o.name.to_string())
         .collect();
     visible_objs.sort();
@@ -173,12 +173,12 @@ pub fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
         push(&mut vars, &format!("obj.{}.short", key), &o.short);
         push(&mut vars, &format!("obj.{}.description", key), &o.description);
         push(&mut vars, &format!("obj.{}.examine", key), o.examine.as_deref().unwrap_or("You see nothing special."));
-        push(&mut vars, &format!("obj.{}.visible", key), yesno(o.visible));
+        push(&mut vars, &format!("obj.{}.visible", key), yesno(o.flags.is_visible()));
         push(&mut vars, &format!("obj.{}.quantity", key), o.qty);
-        push(&mut vars, &format!("obj.{}.locked", key), yesno(o.locked));
-        push(&mut vars, &format!("obj.{}.revealed", key), yesno(o.revealed));
-        push(&mut vars, &format!("obj.{}.takeable", key), yesno(o.takeable));
-        push(&mut vars, &format!("obj.{}.stackable", key), yesno(o.stackable));
+        push(&mut vars, &format!("obj.{}.locked", key), yesno(o.flags.locked));
+        push(&mut vars, &format!("obj.{}.revealed", key), yesno(o.flags.revealed));
+        push(&mut vars, &format!("obj.{}.takeable", key), yesno(o.flags.takeable));
+        push(&mut vars, &format!("obj.{}.stackable", key), yesno(o.flags.stackable));
         push(&mut vars, &format!("obj.{}.is_coin", key), yesno(o.is_coin));
     }
 

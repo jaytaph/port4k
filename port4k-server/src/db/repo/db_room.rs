@@ -212,22 +212,22 @@ impl RoomRepo for RoomRepository {
         }
     }
 
-    // async fn room_kv(&self, room_id: RoomId) -> DbResult<Kv> {
-    //     let client = self.db.get_client().await?;
-    //
-    //     let rows = client
-    //         .query(
-    //             r#"
-    //         SELECT key, value
-    //         FROM bp_room_kv
-    //         WHERE room_id = $1
-    //         "#,
-    //             &[&room_id.0],
-    //         )
-    //         .await?;
-    //
-    //     Ok(rows_to_room_kv(rows).map_err(|_| DbError::Decode("Cannot decode row to kv".into()))?)
-    // }
+    async fn room_kv(&self, room_id: RoomId) -> DbResult<Kv> {
+        let client = self.db.get_client().await?;
+
+        let rows = client
+            .query(
+                r#"
+            SELECT key, value
+            FROM bp_room_kv
+            WHERE room_id = $1
+            "#,
+                &[&room_id.0],
+            )
+            .await?;
+
+        Ok(Kv::try_from_rows(&rows).map_err(|_| DbError::Decode("Cannot decode row to kv".into()))?)
+    }
 
     async fn set_entry(&self, key: &BlueprintAndRoomKey) -> DbResult<bool> {
         let c = self.db.get_client().await?;

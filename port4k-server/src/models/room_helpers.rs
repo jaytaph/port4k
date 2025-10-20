@@ -1,8 +1,7 @@
 use serde_json::Value;
 use crate::db::DbResult;
 use crate::db::error::DbError;
-use crate::error::AppResult;
-use crate::models::room::{Kv, KvResolved, StrOrVec};
+use crate::models::room::{Kv, KvResolved};
 
 pub fn json_string_vec_opt(v: Option<Value>, field: &'static str) -> DbResult<Vec<String>> {
     match v {
@@ -13,18 +12,18 @@ pub fn json_string_vec_opt(v: Option<Value>, field: &'static str) -> DbResult<Ve
         }
     }
 }
-
-pub fn json_to_vec_strings(v: Value) -> AppResult<Vec<String>> {
-    // This enforces: string  OR  array-of-strings. Nothing else.
-    let parsed: StrOrVec = serde_json::from_value(v)?;
-    match parsed {
-        StrOrVec::Str(s) => Ok(vec![s]),
-        StrOrVec::Vec(vecs) => {
-            // (Optional) validate no nulls inside (serde already guarantees String)
-            Ok(vecs)
-        }
-    }
-}
+//
+// pub fn json_to_vec_strings(v: Value) -> AppResult<Vec<String>> {
+//     // This enforces: string  OR  array-of-strings. Nothing else.
+//     let parsed: StrOrVec = serde_json::from_value(v)?;
+//     match parsed {
+//         StrOrVec::Str(s) => Ok(vec![s]),
+//         StrOrVec::Vec(v) => {
+//             // (Optional) validate no nulls inside (serde already guarantees String)
+//             Ok(v)
+//         }
+//     }
+// }
 
 /// Normalize a JSON value into Vec<String>.
 /// - ["a","b"]      -> vec!["a","b"]
@@ -37,7 +36,7 @@ pub fn json_to_string_vec(v: &Value) -> Vec<String> {
             .iter()
             .filter_map(|x| {
                 x.as_str().map(|s| s.to_string()).or_else(|| {
-                    // accept scalars inside the array (numbers/bools) by stringifying
+                    // accept scalars inside the array (numbers/bools) by stringify
                     match x {
                         Value::Number(_) | Value::Bool(_) => Some(x.to_string()),
                         _ => None,
@@ -53,64 +52,49 @@ pub fn json_to_string_vec(v: &Value) -> Vec<String> {
 
 
 #[inline]
-pub fn resolve_qty(user_override: Option<i32>, zone_override: Option<i32>, bp_default: i32) -> i32 {
+pub fn resolve_qty(bp_default: i32, zone_override: Option<i32>, user_override: Option<i32>) -> i32 {
     let v = user_override.or(zone_override).unwrap_or(bp_default);
     v.max(0)
 }
 
 #[inline]
-pub fn resolve_bool(user: Option<bool>, zone: Option<bool>, bp_default: Option<bool>) -> bool {
-    user.or(zone).or(bp_default).unwrap_or(false)
+pub fn resolve_bool(bp_default: bool, zone: Option<bool>, user: Option<bool>) -> bool {
+    user.or(zone).unwrap_or(bp_default)
 }
 
 #[inline]
 pub fn kv_get_bool(kv: &KvResolved, key: &str, default: bool) -> bool {
-    match kv.get(key).and_then(|v| v.first()) {
-        Some(s) => str_is_truthy(s).unwrap_or(default),
+    match kv.get(key) {
+        Some(s) => str_is_truthy(s),
         None => default,
     }
 }
 
 #[inline]
-pub fn str_is_truthy(s: &str) -> Option<bool> {
-    match s.trim().to_ascii_lowercase().as_str() {
-        "true" | "1" | "yes" | "y" | "on" => Some(true),
-        "false" | "0" | "no"  | "n" | "off" => Some(false),
-        _ => None,
-    }
+pub fn str_is_truthy(s: &str) -> bool {
+    matches!(s.to_ascii_lowercase().as_str(), "true" | "yes" | "1" | "on")
 }
 
-#[inline]
-pub fn str_or_vec_to_vec(sv: &StrOrVec) -> Vec<String> {
-    match sv {
-        StrOrVec::Str(s) => vec![s.clone()],
-        StrOrVec::Vec(v) => v.clone(),
-    }
-}
+// #[inline]
+// pub fn kv_to_resolved(kv: &Kv) -> KvResolved {
+//     let mut out = KvResolved::with_capacity(kv.inner.len());
+//     for (k, v) in &kv.inner {
+//         out.insert(k.clone(), str_or_vec_to_vec(v));
+//     }
+//     out
+// }
 
 #[inline]
-pub fn kv_to_resolved(kv: &Kv) -> KvResolved {
-    let mut out = KvResolved::with_capacity(kv.inner.len());
-    for (k, v) in &kv.inner {
-        out.insert(k.clone(), str_or_vec_to_vec(v));
+pub fn merge_kv(bp: &Kv, zone: &Kv, user: &Kv) -> KvResolved {
+    let mut out = KvResolved::new();
+    for (k, v) in &bp.inner {
+        out.insert(k.clone(), v.clone());
     }
-    out
-}
-
-/// Merge KVs with precedence: user ➜ zone ➜ blueprint.
-/// Later layers overwrite whole keys from earlier ones.
-#[inline]
-pub fn merge_kv(bp: &Kv, zone: Option<&Kv>, user: Option<&Kv>) -> KvResolved {
-    let mut out = kv_to_resolved(bp);
-    if let Some(z) = zone {
-        for (k, v) in &z.inner {
-            out.insert(k.clone(), str_or_vec_to_vec(v));
-        }
+    for (k, v) in &zone.inner {
+        out.insert(k.clone(), v.clone());
     }
-    if let Some(u) = user {
-        for (k, v) in &u.inner {
-            out.insert(k.clone(), str_or_vec_to_vec(v));
-        }
+    for (k, v) in &user.inner {
+        out.insert(k.clone(), v.clone());
     }
     out
 }
@@ -125,39 +109,36 @@ pub fn compute_object_visible(kv: &KvResolved, revealed: bool) -> bool {
     revealed || discovered
 }
 
-use crate::models::room::{Discovery, RoomView};
-use crate::models::types::ObjectId;
+// pub fn passive_discovery(
+//     rv: &RoomView,
+//     zr: &mut ZoneRoomState,
+//     perception: u8, // from character sheet; fall back to default
+// ) -> Vec<ObjectId> {
+//     let mut revealed = vec![];
+//     for obj in &rv.objects {
+//         if let Discovery::Obscured { dc } = obj.discovery
+//             && perception >= dc
+//             && zr.discovered_objects.insert(obj.id)
+//         {
+//             revealed.push(obj.id);
+//         }
+//     }
+//     revealed
+// }
 
-pub fn passive_discovery(
-    rv: &RoomView,
-    zr: &mut ZoneRoomState,
-    perception: u8, // from character sheet; fall back to default
-) -> Vec<ObjectId> {
-    let mut revealed = vec![];
-    for obj in &rv.objects {
-        if let Discovery::Obscured { dc } = obj.discovery
-            && perception >= dc
-            && zr.discovered_objects.insert(obj.id)
-        {
-            revealed.push(obj.id);
-        }
-    }
-    revealed
-}
-
-pub fn is_visible_to(obj: &RoomObject, rv: &RoomView, zr: &ZoneRoomState) -> bool {
-    if zr.discovered_objects.contains(&obj.id) {
-        return true;
-    }
-    match &obj.discovery {
-        Discovery::Visible => true,
-        Discovery::Hidden => false,
-        Discovery::Obscured { .. } => false, // until discovered via checks
-        Discovery::Conditional { key, value } => rv
-            .room_kv
-            .get(key)
-            .map(|vals| vals.iter().any(|v| v == value))
-            .unwrap_or(false),
-        Discovery::Scripted => false, // let Lua flip discovery when ready
-    }
-}
+// pub fn is_visible_to(obj: &RoomObject, rv: &RoomView, zr: &ZoneRoomState) -> bool {
+//     if zr.discovered_objects.contains(&obj.id) {
+//         return true;
+//     }
+//     match &obj.discovery {
+//         Discovery::Visible => true,
+//         Discovery::Hidden => false,
+//         Discovery::Obscured { .. } => false, // until discovered via checks
+//         Discovery::Conditional { key, value } => rv
+//             .room_kv
+//             .get(key)
+//             .map(|vals| vals.iter().any(|v| v == value))
+//             .unwrap_or(false),
+//         Discovery::Scripted => false, // let Lua flip discovery when ready
+//     }
+// }

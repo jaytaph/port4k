@@ -69,7 +69,7 @@ impl NavigatorService {
 
         // // 3) Parse constraints/flags from the exit. Adjust field access to your model.
         // // Here we assume ExitRow has an optional `state: serde_json::Value`.
-        let (locked, locked_msg) = (exit_row.locked, "The way is locked.".to_string());
+        let (locked, locked_msg) = (exit_row.flags.locked, "The way is locked.".to_string());
         // parse_exit_state(&exit_row.state);
 
         if locked {
