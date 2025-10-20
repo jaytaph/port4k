@@ -139,7 +139,10 @@ fn render_single_pass(template: &str, vars: &RenderVars, opts: &RenderOptions) -
                         do_variable_substitution(chosen, &v.raw, &v.fmt, opts, &mut out);
                     }
                     Object => {
-                        expand_inline_object_tokens(&out, vars);
+                        dbg!(&v);
+                        let tmp = expand_inline_object_tokens(&v.raw, vars);
+                        dbg!(&tmp);
+                        out.push_str(&tmp);
                     }
                 }
             }
@@ -159,13 +162,13 @@ fn render_single_pass(template: &str, vars: &RenderVars, opts: &RenderOptions) -
 }
 
 /// Regex for {o:<id>} tokens. <id> allows [A-Za-z0-9_-]
-static O_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{o:([A-Za-z0-9_\-]+)\}").unwrap());
+static O_TAG_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\{(?:o|obj):([A-Za-z0-9_\-]+)\}").unwrap()
+});
 
 /// Resolve object labels for {o:id}. We try a few common key shapes so you
 /// don't have to change your `RenderVars` right away:
-///   - "obj:<id>.short"
 ///   - "obj.<id>.short"
-///   - "obj:<id>"           (already a label)
 ///   - "obj.<id>"           (already a label)
 fn resolve_object_label(id: &str, vars: &RenderVars) -> Option<String> {
     let k1 = format!("obj.{}.short", id);
@@ -415,7 +418,7 @@ mod tests {
     fn colors() {
         let vars = RenderVars::default();
         let s = render_template("{c:bright_yellow}warn{c}", &vars, 80);
-        assert!(s.contains("\x1b[33") || s.contains("\x1b[33;1")); // depending on mapping
+        assert!(s.contains("\x1b[93"));
         assert!(s.ends_with("\x1b[0m"));
     }
 
@@ -451,7 +454,7 @@ mod tests {
     #[test]
     fn expands_object_token_basic() {
         let mut vars = RenderVars::default();
-        vars.room_view.insert("obj:toolkit.short".into(), "discarded toolkit".into());
+        vars.room_view.insert("obj.toolkit.short".into(), "discarded toolkit".into());
 
         let tpl = "You notice a {o:toolkit} here.";
         let out = super::render_template_with_opts(
@@ -459,6 +462,8 @@ mod tests {
             &vars,
             &RenderOptions { missing_var: MissingVarPolicy::Color, max_width: 80 },
         );
+
+        dbg!(&out);
 
         assert!(!out.contains("{o:toolkit}"));
         assert!(out.contains("discarded toolkit"));
@@ -483,7 +488,7 @@ mod tests {
     #[test]
     fn multipass_resolves_colors_inside_object_label() {
         let mut vars = RenderVars::default();
-        vars.room_view.insert("obj:map.short".into(), "{c:magenta}patched wall map{c}".into());
+        vars.room_view.insert("obj.map.short".into(), "{c:magenta}patched wall map{c}".into());
 
         let tpl = "On the bulkhead: {o:map}.";
         let out = super::render_template_with_opts(
@@ -513,7 +518,7 @@ mod tests {
     #[test]
     fn recursion_is_bounded_by_max_passes() {
         let mut vars = RenderVars::default();
-        vars.room_view.insert("obj:loop.short".into(), "see {o:loop}".into());
+        vars.room_view.insert("obj.loop.short".into(), "see {o:loop}".into());
 
         let tpl = "Loop? {o:loop}";
         let out = super::render_template_with_opts(

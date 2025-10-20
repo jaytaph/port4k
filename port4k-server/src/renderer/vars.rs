@@ -2,7 +2,7 @@ use crate::Session;
 use crate::models::room::RoomView;
 use crate::renderer::RenderVars;
 use parking_lot::RwLock;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Returns a list of variables available for rendering templates.
@@ -34,9 +34,9 @@ fn get_global_vars(sess: Arc<RwLock<Session>>) -> HashMap<String, String> {
     if let Some(account) = sess.read().account.as_ref() {
         vars.insert("account.name".to_string(), account.username.to_string());
         vars.insert("account.role".to_string(), account.role.to_string());
-        vars.insert("account.xp".to_string(), format!("{}", account.xp));
-        vars.insert("account.health".to_string(), format!("{}", account.health));
-        vars.insert("account.coins".to_string(), format!("{}", account.coins));
+        // vars.insert("account.xp".to_string(), format!("{}", account.xp));
+        // vars.insert("account.health".to_string(), format!("{}", account.health));
+        // vars.insert("account.coins".to_string(), format!("{}", account.coins));
     }
     if let Some(cursor) = sess.read().cursor.as_ref() {
         vars.insert("cursor.zone".to_string(), cursor.zone_ctx.zone.title.to_string());
@@ -54,35 +54,35 @@ fn get_global_vars(sess: Arc<RwLock<Session>>) -> HashMap<String, String> {
 //   <prefix>.<key>.<i>        -> ith value
 //   <prefix>.<key>.has.<val>  -> "1" for presence (val is slugged)
 // (from: get_roomview_vars)
-fn emit_kv_list(
-    vars: &mut HashMap<String, String>,
-    prefix: &str,
-    key: &str,
-    values: &[String],
-) {
-    let sk = slug(key);
-    let base = format!("{prefix}.{sk}");
-    push(vars, &format!("{base}.count"), values.len());
-
-    if let Some(first) = values.get(0) {
-        push(vars, &base, first);
-    }
-
-    push(vars, &format!("{base}.all"), join_list(values));
-
-    for (i, v) in values.iter().enumerate() {
-        push(vars, &format!("{base}.{i}"), v);
-    }
-
-    // Set-style presence flags (unique)
-    let mut uniq = HashSet::new();
-    for v in values {
-        let vv = slug(v);
-        if uniq.insert(vv.clone()) {
-            push(vars, &format!("{base}.has.{vv}"), "1");
-        }
-    }
-}
+// fn emit_kv_list(
+//     vars: &mut HashMap<String, String>,
+//     prefix: &str,
+//     key: &str,
+//     values: &[String],
+// ) {
+//     let sk = slug(key);
+//     let base = format!("{prefix}.{sk}");
+//     push(vars, &format!("{base}.count"), values.len());
+//
+//     if let Some(first) = values.get(0) {
+//         push(vars, &base, first);
+//     }
+//
+//     push(vars, &format!("{base}.all"), join_list(values));
+//
+//     for (i, v) in values.iter().enumerate() {
+//         push(vars, &format!("{base}.{i}"), v);
+//     }
+//
+//     // Set-style presence flags (unique)
+//     let mut uniq = HashSet::new();
+//     for v in values {
+//         let vv = slug(v);
+//         if uniq.insert(vv.clone()) {
+//             push(vars, &format!("{base}.has.{vv}"), "1");
+//         }
+//     }
+// }
 
 #[inline] // (from: get_roomview_vars)
 fn push(vars: &mut HashMap<String, String>, key: &str, val: impl ToString) {
@@ -92,27 +92,27 @@ fn push(vars: &mut HashMap<String, String>, key: &str, val: impl ToString) {
 #[inline] // (from: get_roomview_vars)
 fn yesno(b: bool) -> &'static str { if b { "true" } else { "false" } }
 
-#[inline]
-fn join_list(vs: &[String]) -> String {
-    if vs.is_empty() { "none".to_string() } else { vs.join(", ") }
-}
+// #[inline]
+// fn join_list(vs: &[String]) -> String {
+//     if vs.is_empty() { "none".to_string() } else { vs.join(", ") }
+// }
 
 /// Turn names into safe, stable keys: "Blast Door" -> "blast_door"
 /// (from: get_roomview_vars)
-fn slug(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        if ch.is_ascii_alphanumeric() {
-            out.push(ch.to_ascii_lowercase());
-        } else if ch.is_whitespace() || ch == '-' {
-            if !out.ends_with('_') { out.push('_'); }
-        }
-        // skip other punctuation entirely
-    }
-    // trim any trailing underscores
-    while out.ends_with('_') { out.pop(); }
-    if out.is_empty() { "obj".to_string() } else { out }
-}
+// fn slug(s: &str) -> String {
+//     let mut out = String::with_capacity(s.len());
+//     for ch in s.chars() {
+//         if ch.is_ascii_alphanumeric() {
+//             out.push(ch.to_ascii_lowercase());
+//         } else if ch.is_whitespace() || ch == '-' {
+//             if !out.ends_with('_') { out.push('_'); }
+//         }
+//         // skip other punctuation entirely
+//     }
+//     // trim any trailing underscores
+//     while out.ends_with('_') { out.pop(); }
+//     if out.is_empty() { "obj".to_string() } else { out }
+// }
 
 // --- main (from: get_roomview_vars) ------------------------------------------
 

@@ -1,4 +1,4 @@
-use crate::db::repo::room::BlueprintAndRoomKey;
+use crate::db::repo::BlueprintAndRoomKey;
 
 /// Utility functions for argument parsing
 pub fn parse_bp_room_key(s: &str) -> Option<BlueprintAndRoomKey> {

@@ -1,8 +1,7 @@
 #![allow(unused)]
 
 use crate::commands::CmdCtx;
-use crate::db::repo::room::RoomRepo;
-use crate::db::repo::zone::ZoneRepo;
+use crate::db::repo::{RoomRepo, ZoneRepo};
 use crate::error::{AppResult, DomainError};
 use crate::models::account::Account;
 use crate::models::blueprint::Blueprint;
@@ -42,7 +41,7 @@ impl ZoneService {
             .registry
             .services
             .room
-            .build_room_view(ctx.registry.zone_router.clone(), &zone_ctx, account.id, room_id)
+            .build_room_view(&zone_ctx, account.id, room_id)
             .await?;
 
         Ok(Cursor {

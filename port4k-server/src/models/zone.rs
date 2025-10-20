@@ -1,6 +1,6 @@
 use crate::db::error::DbError;
 use crate::db::{Db, DbResult};
-use crate::error::{AppResult, DomainError};
+use crate::error::AppResult;
 use crate::models::blueprint::Blueprint;
 use crate::models::types::{AccountId, ObjectId, RoomId, ZoneId};
 use async_trait::async_trait;
@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use serde_json::Value;
 use tokio_postgres::Row;
+use crate::util::serde::serde_to_str;
 
 /// Type of zone defines what is allowed and how it is persisted.
 #[derive(Clone, Debug)]
@@ -278,40 +279,40 @@ impl MemoryBackend {
     }
 }
 
-enum StringOrVec {
-    Str(String),
-    Vec(Vec<String>),
-}
+// enum StringOrVec {
+//     Str(String),
+//     Vec(Vec<String>),
+// }
 
-impl TryFrom<Value> for StringOrVec {
-    type Error = DomainError;
-
-    fn try_from(v: Value) -> Result<Self, Self::Error> {
-        match v {
-            Value::String(s) => Ok(StringOrVec::Str(s)),
-            Value::Array(arr) => {
-                let mut out = Vec::with_capacity(arr.len());
-                for item in arr {
-                    match item {
-                        Value::String(s) => out.push(s),
-                        _ => {},
-                    }
-                }
-                Ok(StringOrVec::Vec(out))
-            }
-            _ => Ok(StringOrVec::Str("".into()))
-        }
-    }
-}
+// impl TryFrom<Value> for StringOrVec {
+//     type Error = DomainError;
+//
+//     fn try_from(v: Value) -> Result<Self, Self::Error> {
+//         match v {
+//             Value::String(s) => Ok(StringOrVec::Str(s)),
+//             Value::Array(arr) => {
+//                 let mut out = Vec::with_capacity(arr.len());
+//                 for item in arr {
+//                     match item {
+//                         Value::String(s) => out.push(s),
+//                         _ => {},
+//                     }
+//                 }
+//                 Ok(StringOrVec::Vec(out))
+//             }
+//             _ => Ok(StringOrVec::Str("".into()))
+//         }
+//     }
+// }
 
 
 #[derive(Default)]
 struct MemZone {
-    zone_room_kv: DashMap<RoomId, HashMap<String, StringOrVec>>,
-    user_room_kv: DashMap<(RoomId, AccountId), HashMap<String, StringOrVec>>,
+    zone_room_kv: DashMap<RoomId, HashMap<String, String>>,
+    user_room_kv: DashMap<(RoomId, AccountId), HashMap<String, String>>,
 
-    zone_object_kv: DashMap<ObjectId, HashMap<String, StringOrVec>>,
-    user_object_kv: DashMap<(ObjectId, AccountId), HashMap<String, StringOrVec>>,
+    zone_object_kv: DashMap<ObjectId, HashMap<String, String>>,
+    user_object_kv: DashMap<(ObjectId, AccountId), HashMap<String, String>>,
 
     // room_qty: DashMap<(RoomId, ObjectId), i32>,
     // coins: DashMap<AccountId, i32>,
@@ -327,13 +328,11 @@ impl StateStorage for MemoryBackend {
     async fn update_zone_room_kv(&self, zone_id: ZoneId, room_id: RoomId, key: &str, value: Value) -> AppResult<bool> {
         let zone = self.zone(zone_id);
 
-        let sv = StringOrVec::try_from(value)?;
-
         let mut inner = zone
             .zone_room_kv
             .entry(room_id)
             .or_insert_with(HashMap::new);
-        inner.insert(key.to_string(), sv);
+        inner.insert(key.to_string(), serde_to_str(value));
 
         Ok(true)
     }
@@ -341,13 +340,11 @@ impl StateStorage for MemoryBackend {
     async fn update_user_room_kv(&self, zone_id: ZoneId, room_id: RoomId, account_id: AccountId, key: &str, value: Value) -> AppResult<bool> {
         let zone = self.zone(zone_id);
 
-        let sv = StringOrVec::try_from(value)?;
-
         let mut inner = zone
             .user_room_kv
             .entry((room_id, account_id))
             .or_insert_with(HashMap::new);
-        inner.insert(key.to_string(), sv);
+        inner.insert(key.to_string(), serde_to_str(value));
 
         Ok(true)
     }
@@ -355,13 +352,11 @@ impl StateStorage for MemoryBackend {
     async fn update_zone_object_kv(&self, zone_id: ZoneId, object_id: ObjectId, key: &str, value: Value) -> AppResult<bool> {
         let zone = self.zone(zone_id);
 
-        let sv = StringOrVec::try_from(value)?;
-
         let mut inner = zone
             .zone_object_kv
             .entry(object_id)
             .or_insert_with(HashMap::new);
-        inner.insert(key.to_string(), sv);
+        inner.insert(key.to_string(), serde_to_str(value));
 
         Ok(true)
     }
@@ -369,13 +364,11 @@ impl StateStorage for MemoryBackend {
     async fn update_user_object_kv(&self, zone_id: ZoneId, account_id: AccountId, object_id: ObjectId, key: &str, value: Value) -> AppResult<bool>{
         let zone = self.zone(zone_id);
 
-        let sv = StringOrVec::try_from(value)?;
-
         let mut inner = zone
             .user_object_kv
             .entry((object_id, account_id))
             .or_insert_with(HashMap::new);
-        inner.insert(key.to_string(), sv);
+        inner.insert(key.to_string(), serde_to_str(value));
 
         Ok(true)
     }

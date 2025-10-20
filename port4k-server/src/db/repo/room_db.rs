@@ -1,5 +1,5 @@
 use crate::db::error::DbError;
-use crate::db::repo::room::{BlueprintAndRoomKey, RoomRepo};
+use crate::db::repo::{BlueprintAndRoomKey, RoomRepo};
 use crate::db::{Db, DbResult};
 use crate::models::blueprint::Blueprint;
 use crate::models::room::{BlueprintExit, BlueprintObject, BlueprintRoom, Kv, RoomScripts};
@@ -45,7 +45,7 @@ impl RoomRepo for RoomRepository {
             FROM bp_rooms r
             WHERE r.id = $1 AND r.bp_id = $2
             "#,
-                &[&room_id.0, &bp_id.0],
+                &[&room_id, &bp_id],
             )
             .await?;
 
@@ -75,12 +75,22 @@ impl RoomRepo for RoomRepository {
         let rows = client
             .query(
                 r#"
-            SELECT from_room_id, dir, to_room_id, locked, description, visible_when_locked
-            FROM bp_exits
-            WHERE from_room_id = $1
-            ORDER BY dir
-            "#,
-                &[&room_id.0],
+                SELECT
+                    e.from_room_id,
+                    fr.key AS from_room_key,
+                    e.dir,
+                    e.to_room_id,
+                    tr.key AS to_room_key,
+                    e.locked,
+                    e.description,
+                    e.visible_when_locked
+                FROM bp_exits e
+                JOIN bp_rooms fr ON e.from_room_id = fr.id
+                JOIN bp_rooms tr ON e.to_room_id = tr.id
+                WHERE e.from_room_id = $1
+                ORDER BY e.dir;
+                "#,
+                &[&room_id],
             )
             .await?;
 
@@ -102,7 +112,7 @@ impl RoomRepo for RoomRepository {
     //         WHERE room_id = $1
     //         ORDER BY COALESCE(position, 0), name
     //         "#,
-    //             &[&room_id.0],
+    //             &[&room_id],
     //         )
     //         .await?;
     //
@@ -114,7 +124,7 @@ impl RoomRepo for RoomRepository {
     //         FROM bp_object_nouns
     //         WHERE room_id = $1
     //         "#,
-    //             &[&room_id.0],
+    //             &[&room_id],
     //         )
     //         .await?;
     //
@@ -168,7 +178,7 @@ impl RoomRepo for RoomRepository {
         WHERE o.room_id = $1
         ORDER BY COALESCE(o.position, 0), o.name
         "#,
-            &[&room_id.0],
+            &[&room_id],
         ).await?;
 
         let mut out = Vec::with_capacity(rows.len());
@@ -198,7 +208,7 @@ impl RoomRepo for RoomRepository {
                     cmd = cmd_col,
                     table = table
                 ),
-                &[&room_id.0],
+                &[&room_id],
             )
             .await?;
 
@@ -222,7 +232,7 @@ impl RoomRepo for RoomRepository {
             FROM bp_room_kv
             WHERE room_id = $1
             "#,
-                &[&room_id.0],
+                &[&room_id],
             )
             .await?;
 

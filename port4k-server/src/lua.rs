@@ -3,9 +3,9 @@ use crate::error::{AppResult, DomainError};
 use crate::input::parser::Intent;
 use crate::models::account::Account;
 use crate::models::blueprint::Blueprint;
-use crate::models::room::{ResolvedObject, RoomView};
+use crate::models::room::{ResolvedExit, ResolvedObject, RoomView};
 use crate::state::session::Cursor;
-use mlua::{Function, Integer, Lua, Table, Value};
+use mlua::{Function, Lua, Table};
 use parking_lot::Mutex;
 use std::sync::Arc;
 use tokio::runtime::Handle;
@@ -112,10 +112,10 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
 
                         let arg_ctx = LuaArgContext {
                             output: output.clone(),
-                            cursor: cursor.clone(),
-                            rt_handle: rt_handle.clone(),
-                            registry: registry.clone(),
-                            obj: Some(obj.clone()),
+                            // cursor: cursor.clone(),
+                            // rt_handle: rt_handle.clone(),
+                            // registry: registry.clone(),
+                            // obj: Some(obj.clone()),
                         };
                         let env = create_lua_env(&lua, arg_ctx)?;
 
@@ -172,7 +172,6 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                         }
                     }
                 }
-
 
                 LuaJob::OnCommand {
                     cursor,
@@ -249,10 +248,10 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
 
 struct LuaArgContext {
     output: Arc<Mutex<String>>,
-    cursor: Box<Cursor>,
-    rt_handle: Handle,
-    registry: Arc<Registry>,
-    obj: Option<Box<ResolvedObject>>,
+    // _cursor: Box<Cursor>,
+    // _rt_handle: Handle,
+    // _registry: Arc<Registry>,
+    // _obj: Option<Box<ResolvedObject>>,
 }
 
 fn create_lua_env(lua: &Lua, arg_ctx: LuaArgContext) -> mlua::Result<Table> {
@@ -264,76 +263,20 @@ fn create_lua_env(lua: &Lua, arg_ctx: LuaArgContext) -> mlua::Result<Table> {
         Ok(())
     })?)?;
 
-    if let Some(obj) = arg_ctx.obj.as_ref() {
-        env.set("get_object_state", lua.create_function({
-            let cursor = arg_ctx.cursor.clone();
-            let obj_key = obj.name.clone();
-            let handle = arg_ctx.rt_handle.clone();
-            let registry = arg_ctx.registry.clone();
-            move |lua_ctx, (_self, key): (Table, String)| -> mlua::Result<Value> {
-                let room_id = cursor.room_view.room.id;
-                let fut = registry.services.room.object_kv_get(room_id, &obj_key, &key);
-                let v = handle.block_on(fut).map_err(mlua::Error::external)?;
-                serde_json_to_lua(lua_ctx, v)
-            }
-        })?)?;
-
-        // env.set("set_object_state", lua.create_function({)
-        //     let cursor = cursor.clone();
-        //     let obj_key = obj.name.clone();
-        //     let handle = rt_handle.clone();
-        //     let registry = registry.clone();
-        //     move |_, (key, value): (String, Value)| -> mlua::Result<()> {
-        //         let room_id = cursor.room_view.room.id;
-        //         let v = lua_to_serde_json(value)?;
-        //         let fut = registry.services.room.object_kv_set(room_id, &obj_key, &key, &v);
-        //         handle.block_on(fut).map_err(mlua::Error::external)?;
-        //         Ok(())
-        //     }
-        // })?)?;
-    }
+    // if let Some(obj) = arg_ctx.obj.as_ref() {
+    // }
 
     // env.set("has_object", lua.create_function({
-    //     let cursor = cursor.clone();
-    //     let obj_key = obj.name.clone();
-    //     let handle = rt_handle.clone();
-    //     let registry = registry.clone();
-    //     move |_, key: String| -> mlua::Result<bool> {
-    //         let room_id = cursor.room_view.room.id;
-    //         let fut = registry.services.room.object_kv_get(room_id, &obj_key, &key);
-    //         let v = handle.block_on(fut).map_err(mlua::Error::external)?;
-    //         Ok(v.is_some())
-    //     }
     // })?)?;
     //
     // env.set("reveal_object", lua.create_function({
-    //     let cursor = cursor.clone();
-    //     let obj_key = obj.name.clone();
-    //     let handle = rt_handle.clone();
-    //     let registry = registry.clone();
-    //     move |_, (): ()| -> mlua::Result<()> {
-    //         let room_id = cursor.room_view.room.id;
-    //         let fut = registry.services.room.reveal_object(room_id, &obj_key);
-    //         handle.block_on(fut).map_err(mlua::Error::external)?;
-    //         Ok(())
-    //     }
     // })?)?;
     //
     // env.set("remove_object", lua.create_function({
-    //     let cursor = cursor.clone();
-    //     let obj_key = obj.name.clone();
-    //     let handle = rt_handle.clone();
-    //     let registry = registry.clone();
-    //     move |_, (): ()| -> mlua::Result<()> {
-    //         let room_id = cursor.room_view.room.id;
-    //         let fut = registry.services.room.remove_object(room_id, &obj_key);
-    //         handle.block_on(fut).map_err(mlua::Error::external)?;
-    //         Ok(())
-    //     }
     // })?)?;
 
     /*
-    env.set("set_exit_locked", lua.create_function({
+    env.set("set_exit_locked_shared", lua.create_function({
         let cursor = cursor.clone();
         let handle = rt_handle.clone();
         let registry = registry.clone();
@@ -346,7 +289,7 @@ fn create_lua_env(lua: &Lua, arg_ctx: LuaArgContext) -> mlua::Result<Table> {
     })?)?;
     */
     /*
-    env.set("set_exit_locked_player", lua.create_function({
+    env.set("set_exit_locked", lua.create_function({
         let cursor = cursor.clone();
         let handle = rt_handle.clone();
         let registry = registry.clone();
@@ -394,13 +337,13 @@ fn make_enter_ctx<'lua>(
 fn install_host_api(
     lua: &Lua,
     env: &Table,
-    handle: &Handle,
-    registry: &Arc<Registry>,
+    _handle: &Handle,
+    _registry: &Arc<Registry>,
     cursor: &Cursor,
     account: &Account,
     out: Arc<Mutex<String>>,
 ) -> mlua::Result<()> {
-    // send(text)
+    // ctx:send(text)
     {
         let out = out.clone();
         let send = lua.create_function(move |_, (text,): (String,)| {
@@ -412,7 +355,7 @@ fn install_host_api(
         env.set("send", send)?;
     }
 
-    // broadcast_room(text)
+    // ctx:broadcast_room(text)
     {
         let out = out.clone();
         let f = lua.create_function(move |_, (text,): (String,)| {
@@ -424,139 +367,210 @@ fn install_host_api(
         env.set("broadcast_room", f)?;
     }
 
-    // get_state(key) -> any (JSON)
+    // ctx:get_account()
     {
-        let room_id = cursor.room_view.room.id;
-        let handle = handle.clone();
-        let registry = registry.clone();
-        let f = lua.create_function(move |lua_ctx, (key,): (String,)| {
-            let v = handle
-                .block_on(registry.services.room.room_kv_get(room_id, &key))
-                .map_err(mlua::Error::external)?;
-
-            serde_json_to_lua(lua_ctx, v)
-        })?;
-        env.set("get_state", f)?;
+        let t = create_lua_account_table(lua, account)?;
+        env.set("get_account", t)?;
     }
 
-    // set_state(key, value)
-    {
-        let room_id = cursor.room_view.room.id;
-        let handle = handle.clone();
-        let registry = registry.clone();
-        let f = lua.create_function(move |_lua_ctx, (key, value): (String, Value)| {
-            let v = lua_to_serde_json(value)?;
-            handle
-                .block_on(registry.services.room.room_kv_set(room_id, &key, &v))
-                .map_err(mlua::Error::external)?;
-            Ok(())
-        })?;
-        env.set("set_state", f)?;
-    }
+    // ctx:get_room() -> table
+    let cursor_clone = cursor.clone();
+    let get_room_fn = lua.create_function(move |lua, ()| -> mlua::Result<Table> {
+        let t = lua.create_table()?;
 
-    // get_player(key) -> any (JSON)
-    {
-        let room_id = cursor.room_view.room.id;
-        let account_id = account.id;
-        let registry = registry.clone();
-        let handle = handle.clone();
-        let f = lua.create_function(move |lua_ctx, (key,): (String,)| {
-            let v = handle
-                .block_on(registry.services.room.player_kv_get(room_id, account_id, &key))
-                .map_err(mlua::Error::external)?;
+        let rt = create_lua_roomview_table(lua, &cursor_clone.room_view)?;
+        t.set("room", rt)?;
 
-            match v {
-                None => Ok(Value::Nil),
-                Some(v) => serde_json_to_lua(lua_ctx, v),
+        // ----- exits (1-based array) -----
+        let exits_tbl = lua.create_table()?;
+        for (i, e) in cursor_clone.room_view.exits.iter().enumerate() {
+            let et = create_lua_exit_table(lua, e)?;
+            exits_tbl.raw_set(i + 1, et)?;
+        }
+        t.set("exits", exits_tbl)?;
+
+        // ----- objects (1-based array) -----
+        let objs_tbl = lua.create_table()?;
+        for (i, o) in cursor_clone.room_view.objects.iter().enumerate() {
+            let ot = create_lua_object_table(lua, o)?;
+            objs_tbl.raw_set(i + 1, ot)?;
+        }
+        t.set("objects", objs_tbl)?;
+
+        Ok(t)
+    })?;
+    env.set("get_room", get_room_fn)?;
+
+    // ctx:get_object(key) -> table
+    let cursor_clone = cursor.clone();
+    let get_object_fn = lua.create_function(move |lua, (obj_key,): (String,)| -> mlua::Result<Option<Table>> {
+        for o in cursor_clone.room_view.objects.iter() {
+            if o.key == obj_key {
+                let ot = create_lua_object_table(lua, o)?;
+                return Ok(Some(ot));
             }
-        })?;
-        env.set("get_player", f)?;
-    }
+        }
+        Ok(None)
+    })?;
+    env.set("get_object", get_object_fn)?;
 
-    // set_player(key, value)
-    {
-        let room_id = cursor.room_view.room.id;
-        let account_id = account.id;
-        let registry = registry.clone();
-        let handle = handle.clone();
-        let f = lua.create_function(move |_lua_ctx, (key, value): (String, Value)| {
-            let v = lua_to_serde_json(value)?;
-            handle
-                .block_on(registry.services.room.player_kv_set(room_id, account_id, &key, &v))
-                .map_err(mlua::Error::external)?;
-            Ok(())
-        })?;
-        env.set("set_player", f)?;
-    }
+    // ctx:get_object_state(obj_key, key) -> table
+    {}
+
+    // ctx:set_object_state(obj_key, key, value)    (player state)
+    {}
+
+    // ctx:set_object_state_shared(obj_key, key, value) (zone state)
+    {}
+
+    // ctx:get_room_state(key) -> table
+    {}
+
+    // ctx:set_room_state(key, value)       (player state)
+    {}
+
+    // ctx:set_room_state_shared(key, value)  (zone state)
+    {}
+
+    // ctx:get_exit_state(dir, key) -> table
+    {}
+
+    // ctx:set_exit_state(dir, key, value)   (player state)
+    {}
+
+    // ctx:set_exit_state_shared(dir, key, value)  (zone state)
+    {}
 
     Ok(())
 }
 
-fn serde_json_to_lua(lua: &Lua, v: serde_json::Value) -> mlua::Result<Value> {
-    use serde_json::Value as J;
-    Ok(match v {
-        J::Null => Value::Nil,
-        J::Bool(b) => Value::Boolean(b),
-        J::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                Value::Integer(i as Integer)
-            } else if let Some(u) = n.as_u64() {
-                // note: Lua integers are i64; clamp large u64s if needed
-                Value::Integer(u as Integer)
-            } else {
-                Value::Number(n.as_f64().unwrap_or(0.0))
-            }
-        }
-        J::String(s) => Value::String(lua.create_string(&s)?),
-        J::Array(arr) => {
-            let t = lua.create_table()?;
-            for (i, el) in arr.into_iter().enumerate() {
-                t.set(i + 1, serde_json_to_lua(lua, el)?)?;
-            }
-            Value::Table(t)
-        }
-        J::Object(map) => {
-            let t = lua.create_table()?;
-            for (k, el) in map.into_iter() {
-                t.set(k, serde_json_to_lua(lua, el)?)?;
-            }
-            Value::Table(t)
-        }
-    })
+fn create_lua_exit_table(lua: &Lua, exit: &ResolvedExit) -> mlua::Result<Table> {
+    let et = lua.create_table()?;
+    et.set("dir", exit.direction.to_string().as_str())?;
+    et.set("from_room_key", exit.from_room_key.as_str())?;
+    et.set("to_room_key", exit.to_room_key.as_str())?;
+    et.set("locked", exit.flags.locked)?;
+    et.set("exit", exit.flags.visible_when_locked)?;
+    et.set("hidden", exit.flags.hidden)?;
+    et.set("visible", exit.flags.is_visible())?;
+
+    Ok(et)
 }
 
-fn lua_to_serde_json(v: Value) -> mlua::Result<serde_json::Value> {
-    use serde_json::{Number, Value as J};
-    Ok(match v {
-        Value::Nil => J::Null,
-        Value::Boolean(b) => J::Bool(b),
-        Value::Integer(i) => J::Number(Number::from(i)),
-        Value::Number(n) => {
-            if n.is_finite() {
-                J::Number(Number::from_f64(n).unwrap_or_else(|| Number::from(0)))
-            } else {
-                J::Null
-            }
-        }
-        Value::String(s) => J::String(s.to_str()?.to_string()),
-        Value::Table(t) => {
-            // Prefer sequence if it looks like an array (1..N keys present)
-            if t.raw_len() > 0 && t.contains_key(1)? {
-                let mut vec = Vec::with_capacity(t.raw_len());
-                for val in t.sequence_values::<Value>() {
-                    vec.push(lua_to_serde_json(val?)?);
-                }
-                J::Array(vec)
-            } else {
-                let mut map = serde_json::Map::new();
-                for pair in t.pairs::<String, Value>() {
-                    let (k, vv) = pair?;
-                    map.insert(k, lua_to_serde_json(vv)?);
-                }
-                J::Object(map)
-            }
-        }
-        // functions, userdata, threads → represent as null for now
-        _ => J::Null,
-    })
+fn create_lua_account_table(lua: &Lua, account: &Account) -> mlua::Result<Table> {
+    let t = lua.create_table()?;
+    t.set("id", account.id.to_string())?;
+    t.set("username", account.username.as_str())?;
+    t.set("email", account.email.as_str())?;
+    t.set("role", account.role.to_string().as_str())?;
+    t.set("created_at", account.created_at.to_rfc3339())?;
+    t.set("last_login", account.last_login.map(|dt| dt.to_rfc3339()).unwrap_or_default().as_str())?;
+
+    Ok(t)
 }
+
+fn create_lua_roomview_table(lua: &Lua, rv: &RoomView) -> mlua::Result<Table> {
+    let rt = lua.create_table()?;
+    rt.set("id", rv.room.id.to_string())?;
+    rt.set("key", rv.room.key.as_str())?;
+    rt.set("title", rv.room.title.as_str())?;
+    rt.set("description", rv.room.body.as_str())?;
+    rt.set("short", rv.room.short.as_deref().unwrap_or(""))?;
+
+    let hints = lua.create_table()?;
+    for (i, h) in rv.room.hints.iter().enumerate() {
+        let ht = lua.create_table()?;
+        ht.set("text", h.text.as_str())?;
+        ht.set("once", h.once.unwrap_or(false))?;
+        ht.set("when", h.when.as_str())?;
+        hints.raw_set(i + 1, ht)?;
+    }
+    rt.set("hints", hints)?;
+
+    Ok(rt)
+}
+
+fn create_lua_object_table(lua: &Lua, obj: &ResolvedObject) -> mlua::Result<Table> {
+    let ot = lua.create_table()?;
+    ot.set("key", obj.key.as_str())?;
+    ot.set("name", obj.name.as_str())?;
+    ot.set("short", obj.short.as_str())?;
+    ot.set("body", obj.description.as_str())?;
+    ot.set("visible", obj.flags.is_visible())?;
+    ot.set("takeable", obj.flags.takeable)?;
+    ot.set("hidden", obj.flags.hidden)?;
+    ot.set("revealed", obj.flags.revealed)?;
+    ot.set("locked", obj.flags.locked)?;
+    ot.set("stackable", obj.flags.stackable)?;
+
+    Ok(ot)
+}
+
+// fn serde_json_to_lua(lua: &Lua, v: serde_json::Value) -> mlua::Result<Value> {
+//     use serde_json::Value as J;
+//     Ok(match v {
+//         J::Null => Value::Nil,
+//         J::Bool(b) => Value::Boolean(b),
+//         J::Number(n) => {
+//             if let Some(i) = n.as_i64() {
+//                 Value::Integer(i as Integer)
+//             } else if let Some(u) = n.as_u64() {
+//                 // note: Lua integers are i64; clamp large u64s if needed
+//                 Value::Integer(u as Integer)
+//             } else {
+//                 Value::Number(n.as_f64().unwrap_or(0.0))
+//             }
+//         }
+//         J::String(s) => Value::String(lua.create_string(&s)?),
+//         J::Array(arr) => {
+//             let t = lua.create_table()?;
+//             for (i, el) in arr.into_iter().enumerate() {
+//                 t.set(i + 1, serde_json_to_lua(lua, el)?)?;
+//             }
+//             Value::Table(t)
+//         }
+//         J::Object(map) => {
+//             let t = lua.create_table()?;
+//             for (k, el) in map.into_iter() {
+//                 t.set(k, serde_json_to_lua(lua, el)?)?;
+//             }
+//             Value::Table(t)
+//         }
+//     })
+// }
+
+// fn lua_to_serde_json(v: Value) -> mlua::Result<serde_json::Value> {
+//     use serde_json::{Number, Value as J};
+//     Ok(match v {
+//         Value::Nil => J::Null,
+//         Value::Boolean(b) => J::Bool(b),
+//         Value::Integer(i) => J::Number(Number::from(i)),
+//         Value::Number(n) => {
+//             if n.is_finite() {
+//                 J::Number(Number::from_f64(n).unwrap_or_else(|| Number::from(0)))
+//             } else {
+//                 J::Null
+//             }
+//         }
+//         Value::String(s) => J::String(s.to_str()?.to_string()),
+//         Value::Table(t) => {
+//             // Prefer sequence if it looks like an array (1..N keys present)
+//             if t.raw_len() > 0 && t.contains_key(1)? {
+//                 let mut vec = Vec::with_capacity(t.raw_len());
+//                 for val in t.sequence_values::<Value>() {
+//                     vec.push(lua_to_serde_json(val?)?);
+//                 }
+//                 J::Array(vec)
+//             } else {
+//                 let mut map = serde_json::Map::new();
+//                 for pair in t.pairs::<String, Value>() {
+//                     let (k, vv) = pair?;
+//                     map.insert(k, lua_to_serde_json(vv)?);
+//                 }
+//                 J::Object(map)
+//             }
+//         }
+//         // functions, userdata, threads → represent as null for now
+//         _ => J::Null,
+//     })
+// }

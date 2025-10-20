@@ -88,7 +88,6 @@ pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str, out: &mut CommandOut
             .services
             .room
             .build_room_view(
-                ctx.registry.zone_router.clone(),
                 &zone_ctx,
                 account_id,
                 blueprint.entry_room_id,

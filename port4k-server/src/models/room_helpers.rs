@@ -1,18 +1,15 @@
-use serde_json::Value;
-use crate::db::DbResult;
-use crate::db::error::DbError;
 use crate::models::room::{Kv, KvResolved};
 
-pub fn json_string_vec_opt(v: Option<Value>, field: &'static str) -> DbResult<Vec<String>> {
-    match v {
-        None => Ok(Vec::new()),
-        Some(val) => {
-            let out: Vec<String> = serde_json::from_value(val).map_err(|_| DbError::Decode(field.into()))?;
-            Ok(out)
-        }
-    }
-}
-//
+// pub fn json_string_vec_opt(v: Option<Value>, field: &'static str) -> DbResult<Vec<String>> {
+//     match v {
+//         None => Ok(Vec::new()),
+//         Some(val) => {
+//             let out: Vec<String> = serde_json::from_value(val).map_err(|_| DbError::Decode(field.into()))?;
+//             Ok(out)
+//         }
+//     }
+// }
+
 // pub fn json_to_vec_strings(v: Value) -> AppResult<Vec<String>> {
 //     // This enforces: string  OR  array-of-strings. Nothing else.
 //     let parsed: StrOrVec = serde_json::from_value(v)?;
@@ -30,25 +27,25 @@ pub fn json_string_vec_opt(v: Option<Value>, field: &'static str) -> DbResult<Ve
 /// - "a"            -> vec!["a"]
 /// - 123 / true     -> vec!["123"] / vec!["true"]
 /// - null / {} / [] -> vec![]
-pub fn json_to_string_vec(v: &Value) -> Vec<String> {
-    match v {
-        Value::Array(arr) => arr
-            .iter()
-            .filter_map(|x| {
-                x.as_str().map(|s| s.to_string()).or_else(|| {
-                    // accept scalars inside the array (numbers/bools) by stringify
-                    match x {
-                        Value::Number(_) | Value::Bool(_) => Some(x.to_string()),
-                        _ => None,
-                    }
-                })
-            })
-            .collect(),
-        Value::String(s) => vec![s.clone()],
-        Value::Number(_) | Value::Bool(_) => vec![v.to_string()],
-        _ => Vec::new(),
-    }
-}
+// pub fn json_to_string_vec(v: &Value) -> Vec<String> {
+//     match v {
+//         Value::Array(arr) => arr
+//             .iter()
+//             .filter_map(|x| {
+//                 x.as_str().map(|s| s.to_string()).or_else(|| {
+//                     // accept scalars inside the array (numbers/bools) by stringify
+//                     match x {
+//                         Value::Number(_) | Value::Bool(_) => Some(x.to_string()),
+//                         _ => None,
+//                     }
+//                 })
+//             })
+//             .collect(),
+//         Value::String(s) => vec![s.clone()],
+//         Value::Number(_) | Value::Bool(_) => vec![v.to_string()],
+//         _ => Vec::new(),
+//     }
+// }
 
 
 #[inline]

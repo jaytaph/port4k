@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use crate::db::repo::room::{BlueprintAndRoomKey, RoomRepo};
+use crate::db::repo::{BlueprintAndRoomKey, RoomRepo};
 use crate::error::AppResult;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::{BlueprintExit, BlueprintObject, BlueprintRoom, Kv, RoomScripts, RoomView};

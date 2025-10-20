@@ -6,6 +6,7 @@ use std::path::{Component, Path, PathBuf};
 pub mod args;
 pub mod helpers;
 pub mod telnet;
+pub mod serde;
 
 pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
     dbg!(&base);

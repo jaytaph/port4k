@@ -10,11 +10,13 @@ CREATE TABLE zone_room_kv (
 
 CREATE TABLE user_room_kv (
     account_id UUID NOT NULL,
+    zone_id UUID NOT NULL,
     room_id UUID NOT NULL,
     key TEXT NOT NULL,
     value JSONB NOT NULL,
-    PRIMARY KEY (account_id, room_id, key),
+    PRIMARY KEY (account_id, zone_id, room_id, key),
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+    FOREIGN KEY (zone_id) REFERENCES zones(id) ON DELETE CASCADE,
     FOREIGN KEY (room_id) REFERENCES bp_rooms(id) ON DELETE CASCADE
 );
 

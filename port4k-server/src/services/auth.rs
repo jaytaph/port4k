@@ -1,6 +1,6 @@
-use crate::db::repo::account::AccountRepo;
+use crate::db::repo::AccountRepo;
 use crate::error::{AppResult, DomainError};
-use crate::models::account::Account;
+use crate::models::account::{Account, AccountRole};
 use crate::models::types::AccountId;
 use argon2::Argon2;
 use password_hash::rand_core::OsRng;
@@ -34,17 +34,10 @@ impl AuthService {
             id: AccountId::new(),
             email: email.to_string(),
             username: username.to_string(),
-            role: "player".to_string(),
+            role: AccountRole::User,
             password_hash: hash,
             last_login: None,
-            zone_id: None,
-            current_room_id: None,
-            xp: 0,
-            health: 0,
-            coins: 0,
-            inventory: vec![],
             created_at: Default::default(),
-            flags: vec![],
         };
 
         match self.repo.insert_account(account).await {

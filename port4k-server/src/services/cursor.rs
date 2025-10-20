@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use crate::db::repo::room::RoomRepo;
+use crate::db::repo::RoomRepo;
 use crate::error::AppResult;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::RoomView;
@@ -26,7 +26,7 @@ impl CursorService {
         let zone_ctx = ZoneContext::ephemeral(account_id, bp.clone());
         let room_view = self
             .room_service
-            .build_room_view(self.router.clone(), &zone_ctx, account_id, bp.entry_room_id)
+            .build_room_view(&zone_ctx, account_id, bp.entry_room_id)
             .await?;
 
         Ok(Cursor {

@@ -1,5 +1,5 @@
 use crate::commands::{CmdCtx, CommandOutput, CommandResult};
-use crate::db::repo::room::BlueprintAndRoomKey;
+use crate::db::repo::BlueprintAndRoomKey;
 use crate::error::DomainError;
 use crate::input::parser::Intent;
 use crate::models::account::Account;
