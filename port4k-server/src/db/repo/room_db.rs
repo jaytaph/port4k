@@ -3,8 +3,9 @@ use crate::db::repo::{BlueprintAndRoomKey, RoomRepo};
 use crate::db::{Db, DbResult};
 use crate::models::blueprint::Blueprint;
 use crate::models::room::{BlueprintExit, BlueprintObject, BlueprintRoom, Kv, RoomScripts};
-use crate::models::types::{AccountId, BlueprintId, RoomId, ScriptSource};
+use crate::models::types::{AccountId, BlueprintId, RoomId};
 use std::sync::Arc;
+use crate::lua::ScriptHook;
 
 pub struct RoomRepository {
     pub db: Arc<Db>,
@@ -76,6 +77,7 @@ impl RoomRepo for RoomRepository {
             .query(
                 r#"
                 SELECT
+                    e.id,
                     e.from_room_id,
                     fr.key AS from_room_key,
                     e.dir,
@@ -168,7 +170,7 @@ impl RoomRepo for RoomRepository {
         LEFT JOIN LATERAL (
             SELECT ARRAY_AGG(n.noun ORDER BY n.noun) AS nouns
             FROM bp_object_nouns AS n
-            WHERE n.object_id = o.id
+            WHERE n.obj_id = o.id
         ) AS n ON true
         LEFT JOIN LATERAL (
             SELECT JSONB_OBJECT_AGG(k.key, k.value) AS kv
@@ -192,34 +194,26 @@ impl RoomRepo for RoomRepository {
         Ok(out)
     }
 
-    async fn room_scripts(&self, room_id: RoomId, src: ScriptSource) -> DbResult<RoomScripts> {
+    async fn room_scripts(&self, room_id: RoomId) -> DbResult<RoomScripts> {
         let client = self.db.get_client().await?;
 
-        let (table, enter_col, cmd_col) = match src {
-            ScriptSource::Live => ("bp_room_scripts", "on_enter_lua", "on_command_lua"),
-            ScriptSource::Draft => ("bp_room_scripts", "on_enter_lua", "on_command_lua"),
-        };
+        let rows = client.query(
+            &format!("SELECT hook, script FROM bp_room_scripts WHERE room_id = $1"),
+            &[&room_id],
+        ).await?;
 
-        let row_opt = client
-            .query_opt(
-                &format!(
-                    "SELECT {enter}, {cmd} FROM {table} WHERE room_id = $1",
-                    enter = enter_col,
-                    cmd = cmd_col,
-                    table = table
-                ),
-                &[&room_id],
-            )
-            .await?;
+        let mut scripts = RoomScripts::new();
+        for row in &rows {
+            let hook_str = row.get::<_, String>(0);
+            let hook = ScriptHook::from_str(&hook_str).map_err(|_| DbError::Decode(format!("Invalid script hook: {}", hook_str)))?;
 
-        if let Some(r) = row_opt {
-            Ok(RoomScripts {
-                on_enter_lua: r.get::<_, Option<String>>(0),
-                on_command_lua: r.get::<_, Option<String>>(1),
-            })
-        } else {
-            Ok(RoomScripts::default())
+            scripts.insert(
+                hook,
+                row.get::<_, String>(1),
+            );
         }
+
+        Ok(scripts)
     }
 
     async fn room_kv(&self, room_id: RoomId) -> DbResult<Kv> {

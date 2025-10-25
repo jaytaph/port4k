@@ -2,7 +2,7 @@ use crate::db::DbResult;
 use crate::db::repo::BlueprintAndRoomKey;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::{BlueprintExit, BlueprintObject, BlueprintRoom, Kv, RoomScripts};
-use crate::models::types::{AccountId, BlueprintId, RoomId, ScriptSource};
+use crate::models::types::{AccountId, BlueprintId, RoomId};
 
 // Since room_id's are globally unique, we don't really need the bp_key here, but we do it
 // anyway to ensure that the room belongs to the given blueprint.
@@ -15,7 +15,7 @@ pub trait RoomRepo: Send + Sync {
 
     async fn room_exits(&self, room_id: RoomId) -> DbResult<Vec<BlueprintExit>>;
     async fn room_objects(&self, room_id: RoomId) -> DbResult<Vec<BlueprintObject>>;
-    async fn room_scripts(&self, room_id: RoomId, src: ScriptSource) -> DbResult<RoomScripts>;
+    async fn room_scripts(&self, room_id: RoomId) -> DbResult<RoomScripts>;
     async fn room_kv(&self, room_id: RoomId) -> DbResult<Kv>;
 
     async fn set_entry(&self, key: &BlueprintAndRoomKey) -> DbResult<bool>;

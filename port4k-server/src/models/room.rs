@@ -1,11 +1,12 @@
 use crate::db::DbResult;
 use crate::db::error::DbError;
-use crate::models::types::{BlueprintId, Direction, ObjectId, RoomId};
+use crate::models::types::{BlueprintId, Direction, ExitId, ObjectId, RoomId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use tokio_postgres::Row;
 use uuid::Uuid;
+use crate::lua::ScriptHook;
 use crate::models::room_helpers::{compute_object_visible, merge_kv, resolve_bool, resolve_qty, str_is_truthy};
 use crate::util::serde::serde_to_str;
 
@@ -52,6 +53,8 @@ impl BlueprintRoom {
 /// Blueprint exit model. Note these are not reciprocal; each exit is one-way.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlueprintExit {
+    /// The ID of the exit
+    pub id: ExitId,
     /// From Room ID
     pub from_room_id: RoomId,
     /// From Room Key
@@ -77,6 +80,7 @@ impl BlueprintExit {
             .ok_or_else(|| DbError::Decode(format!("invalid direction in bp_exits: {}", dir_s)))?;
 
         Ok(Self {
+            id: ExitId(row.try_get::<_, Uuid>("id")?),
             from_room_id: row.try_get("from_room_id")?,
             from_room_key: row.try_get("from_room_key")?,
             dir,
@@ -154,9 +158,20 @@ impl BlueprintObject {
 
 /// Blueprint LUA room scripts
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct RoomScripts {
-    pub on_enter_lua: Option<String>,
-    pub on_command_lua: Option<String>,
+pub struct RoomScripts(HashMap<ScriptHook, String>);
+
+impl RoomScripts {
+    pub(crate) fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn insert(&mut self, hook: ScriptHook, script: String) {
+        self.0.insert(hook, script);
+    }
+
+    pub fn get(&self, hook: &ScriptHook) -> Option<&String> {
+        self.0.get(hook)
+    }
 }
 
 /// Resolved KV values. They are basically the same as the Kv type, but we know this type is
@@ -169,12 +184,21 @@ pub struct Kv {
 }
 
 impl Kv {
+    pub(crate) fn get_int(&self, key: &str, default: i32) -> i32 {
+        self.inner
+            .get(key)
+            .and_then(|v| v.parse::<i32>().ok())
+            .unwrap_or(default)
+    }
+}
+
+impl Kv {
     pub fn try_from_rows(rows: &[Row]) -> DbResult<Self> {
         let mut kv = Kv::default();
         for row in rows {
             let key: String = row.try_get("key")?;
-            let value: String = row.try_get("value")?;
-            kv.inner.insert(key, value);
+            let value = row.try_get("value")?;
+            kv.inner.insert(key, serde_to_str(value));
         }
         Ok(kv)
     }
@@ -238,6 +262,12 @@ impl RoomView {
     //         }
     //     })
     // }
+
+    pub fn object_by_key(&self, obj_key: &str) -> Option<&ResolvedObject> {
+        self.objects_by_key
+            .get(obj_key)
+            .and_then(|&idx| self.objects.get(idx))
+    }
 
     pub fn object_by_noun(&self, noun: &str) -> Option<&ResolvedObject> {
         self.objects
@@ -453,6 +483,10 @@ pub struct ExitFlags {
 
 impl ExitFlags {
     pub fn is_visible(&self) -> bool {
+        if self.locked && !self.visible_when_locked {
+            return false;
+        }
+
         !self.hidden
     }
 }
@@ -482,6 +516,16 @@ pub struct ResolvedExit {
     pub to_room_id: RoomId,         // To Room ID
     pub to_room_key: String,
     pub flags: ExitFlags,
+}
+
+impl ResolvedExit {
+    pub fn is_visible_to(&self, _account: &crate::models::account::Account) -> bool {
+        self.flags.is_visible()
+    }
+
+    pub fn is_locked(&self) -> bool {
+        self.flags.locked
+    }
 }
 
 /// Resolved object that takes into account the zone and the player's overlays
@@ -534,6 +578,7 @@ mod tests {
     // Helper: construct a northbound exit
     fn mk_exit_north(to: RoomId, visible_when_locked: bool, default_locked: bool) -> BlueprintExit {
         BlueprintExit {
+            id: ExitId::new(),
             from_room_id: rid(),
             from_room_key: "entry_hall".into(),
             dir: Direction::North,
@@ -641,7 +686,7 @@ mod tests {
         assert_eq!(kv.get("a"), Some(&"1".to_string()));
         assert_eq!(kv.get("b"), Some(&"2".to_string()));
         assert_eq!(kv.get("c"), Some(&"true".to_string()));
-        assert!(kv.get("d").is_none());
+        assert_eq!(kv.get("d"), Some(&"".to_string()));
         assert_eq!(kv.get("e"), Some(&"ok".to_string()));
     }
 
@@ -818,12 +863,15 @@ mod tests {
         }
 
         // Mark revealed via user overlay; even if hidden, revealed should make it visible
-        let user_obj_kv: HashMap<String, Kv> = HashMap::new(); // kv input to compute may vary
-        let user_room_kv = kv(&[("revealed", "true")]); // resolves revealed flag
+        let user_obj_kv = {
+            let mut m = HashMap::new();
+            m.insert("wrench".to_string(), kv(&[("revealed", "true")]));
+            m
+        };
         let view = build_room_view_impl(
             &room, &[], &bp_objs, &Kv::default(),
             &Kv::default(), &HashMap::new(), &HashMap::new(),
-            &user_room_kv, &user_obj_kv, &HashMap::new(),
+            &Kv::default(), &user_obj_kv, &HashMap::new(),
         );
         let f = view.objects[0].flags;
         assert!(f.revealed, "revealed overlay applied");
@@ -838,6 +886,7 @@ mod tests {
         let exits = vec![
             mk_exit_north(rid_b(), true, false),
             BlueprintExit {
+                id: ExitId::new(),
                 from_room_id: rid(),
                 from_room_key: "entry_hall".into(),
                 dir: Direction::East,

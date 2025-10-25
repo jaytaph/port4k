@@ -1,45 +1,37 @@
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use std::sync::Arc;
 
-pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
-
+pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.is_empty() {
-        out.append("Usage: take coin [N]\n");
-        out.failure();
-        return Ok(out);
+        ctx.output.system("Usage: take coin [N]").await;
+        return Ok(());
     }
 
     let what = intent.args[0].to_ascii_lowercase();
     if what != "coin" && what != "coins" {
-        out.append("You can only take coins\n");
-        out.failure();
-        return Ok(out);
+        ctx.output.system("You can only take coins").await;
+        return Ok(());
     }
 
     let want: i32 = intent.args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
 
     let Ok(account) = ctx.account() else {
-        out.append("Login required.\n");
-        out.failure();
-        return Ok(out);
+        ctx.output.system("Login required.").await;
+        return Ok(());
     };
 
     let Ok(room_view) = ctx.room_view() else {
-        out.append("You are not in a world\n");
-        out.failure();
-        return Ok(out);
+        ctx.output.system("You are not in a world.").await;
+        return Ok(());
     };
 
     let got = ctx.registry.db.pickup_coins(&account, room_view.room.id, want).await?;
     if got == 0 {
-        out.append("No coins to pick up\n");
-        out.failure();
-        return Ok(out);
+        ctx.output.line("No coins to pick up.").await;
+        return Ok(());
     }
 
-    out.append(format!("You pick up {got} coin(s).\n").as_str());
-    out.success();
-    Ok(out)
+    ctx.output.line(format!("You pick up {got} coin(s).")).await;
+    Ok(())
 }

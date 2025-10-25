@@ -4,7 +4,7 @@ use crate::db::repo::{BlueprintAndRoomKey, RoomRepo};
 use crate::error::AppResult;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::{BlueprintExit, BlueprintObject, BlueprintRoom, Kv, RoomScripts, RoomView};
-use crate::models::types::{AccountId, BlueprintId, RoomId, ScriptSource};
+use crate::models::types::{AccountId, BlueprintId, RoomId};
 use std::sync::Arc;
 
 pub struct BlueprintService {
@@ -42,7 +42,7 @@ impl BlueprintService {
     }
 
     pub async fn room_scripts(&self, _bp_id: BlueprintId, room_id: RoomId) -> AppResult<RoomScripts> {
-        let scripts = self.repo.room_scripts(room_id, ScriptSource::Live).await?;
+        let scripts = self.repo.room_scripts(room_id).await?;
         Ok(scripts)
     }
 

@@ -1,29 +1,25 @@
 //! @bp exit add <bp>:<from> <dir> <bp>:<to> [locked]
 
-use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandError, CommandResult};
 use crate::input::parser::Intent;
 use crate::util::args::{normalize_dir, parse_bp_room_key};
 use std::sync::Arc;
 
-pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
+const USAGE: &str = "Usage:\n  @bp exit add <bp>:<from> <dir> <bp>:<to> [locked]\n";
 
-    const USAGE: &str = "Usage:\n  @bp exit add <bp>:<from> <dir> <bp>:<to> [locked]\n";
-
+pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     // args layout: [ "@bp", "exit", <sub_cmd>, ... ]
     let [_, _, sub_cmd, rest @ ..] = &*intent.args else {
-        out.append(USAGE);
-        out.failure();
-        return Ok(out);
+        ctx.output.system(USAGE).await;
+        return Ok(());
     };
 
     match sub_cmd.as_str() {
         "add" => {
             // expect: <from_key> <dir> <to_key> [locked]
             let [from_key, dir_raw, to_key, tail @ ..] = rest else {
-                out.append(USAGE);
-                out.failure();
-                return Ok(out);
+                ctx.output.system(USAGE).await;
+                return Ok(());
             };
 
             // parse & validate inputs (use `?` with precise errors)
@@ -35,9 +31,8 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
             let to_key = parse_bp_room_key(to_key).ok_or(CommandError::Custom("to must be <bp>:<room>".into()))?;
 
             if from_key.bp_key != to_key.bp_key {
-                out.append("[bp] exits must stay within the same blueprint.\n");
-                out.failure();
-                return Ok(out);
+                ctx.output.system("[bp] exits must stay within the same blueprint.").await;
+                return Ok(());
             }
 
             // optional trailing "locked"
@@ -81,15 +76,13 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
                 }
             }
 
-            out.append(&msg);
-            out.success();
-            Ok(out)
+            ctx.output.system(&msg).await;
+            Ok(())
         }
 
         _ => {
-            out.append(USAGE);
-            out.failure();
-            Ok(out)
+            ctx.output.system(USAGE).await;
+            Ok(())
         }
     }
 }

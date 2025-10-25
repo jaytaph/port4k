@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use crate::db::{Db, DbResult};
 use std::sync::Arc;
+use serde_json::Value;
 use crate::db::error::DbError;
 use crate::db::repo::UserRepo;
 use crate::models::room::Kv;
-use crate::models::types::{AccountId, RoomId, ZoneId};
+use crate::models::types::{AccountId, ExitId, RoomId, ZoneId};
 use crate::util::serde::serde_to_str;
 
 pub struct UserRepository {
@@ -41,8 +42,9 @@ impl UserRepo for UserRepository {
         let rows = client
             .query(
                 r#"
-                SELECT object_key, key, value FROM user_object_kv
-                WHERE zone_id = $1 AND room_id = $2 AND account_id = $3
+                SELECT o.name AS object_key, u.key, u.value FROM user_object_kv AS u
+                JOIN bp_objects o ON o.id = u.object_id
+                WHERE o.room_id = $2 AND u.zone_id = $1 AND u.account_id = $3
                 "#,
                 &[&zone_id, &room_id, &account_id],
             )
@@ -62,6 +64,42 @@ impl UserRepo for UserRepository {
         }
 
         Ok(map)
+    }
+
+    async fn set_room_kv(&self, zone_id: ZoneId, room_id: RoomId, account_id: AccountId, key: &str, value: &Value) -> DbResult<()> {
+        let client = self.db.get_client().await?;
+
+        client
+            .execute(
+                r#"
+                INSERT INTO user_room_kv (zone_id, room_id, account_id, key, value)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (zone_id, room_id, account_id, key)
+                DO UPDATE SET value = EXCLUDED.value
+                "#,
+                &[&zone_id, &room_id, &account_id, &key, &value],
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    async fn set_exit_locked(&self, zone_id: ZoneId, room_id: RoomId, account_id: AccountId, exit_id: ExitId, locked: bool) -> DbResult<()> {
+        let client = self.db.get_client().await?;
+
+        client
+            .execute(
+                r#"
+                INSERT INTO user_exits (zone_id, room_id, account_id, exit_id, locked)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (zone_id, room_id, account_id, exit_id)
+                DO UPDATE SET value = EXCLUDED.value
+                "#,
+                &[&zone_id, &room_id, &account_id, &exit_id, &locked],
+            )
+            .await?;
+
+        Ok(())
     }
 }
 

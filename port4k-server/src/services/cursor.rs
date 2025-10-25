@@ -4,7 +4,7 @@ use crate::db::repo::RoomRepo;
 use crate::error::AppResult;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::RoomView;
-use crate::models::types::{AccountId, ScriptSource};
+use crate::models::types::AccountId;
 use crate::models::zone::{DbBackend, ZoneContext, ZoneRouter};
 use crate::services::RoomService;
 use crate::state::session::Cursor;

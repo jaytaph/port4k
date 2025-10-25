@@ -1,30 +1,27 @@
 //! @bp entry <bp>:<room>
 
 use crate::commands::blueprint::USAGE;
-use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use crate::util::args::parse_bp_room_key;
 use std::sync::Arc;
 
-pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
-
+pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.len() < 2 {
-        out.append(USAGE);
-        out.failure();
-        return Ok(out);
+        ctx.output.system(USAGE).await;
+        return Ok(());
     }
 
-    let key = parse_bp_room_key(intent.args[1].as_str())
-        .ok_or(CommandError::Custom("invalid room key. use <bp>:<room>".into()))?;
+    let Some(key) = parse_bp_room_key(intent.args[1].as_str()) else {
+        ctx.output.system("invalid room key. use <bp>:<room>").await;
+        return Ok(());
+    };
 
     if !ctx.registry.services.blueprint.set_entry(&key).await? {
-        out.append("Blueprint or room not found.\n");
-        out.failure();
-        return Ok(out);
+        ctx.output.system("Blueprint or room not found.").await;
+        return Ok(());
     }
 
-    out.append("Blueprint entry set.\n");
-    out.success();
-    Ok(out)
+    ctx.output.system("Blueprint entry set.").await;
+    Ok(())
 }

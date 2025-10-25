@@ -1,4 +1,4 @@
-use crate::commands::{CmdCtx, CommandError, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandError, CommandResult};
 use crate::input::parser::Intent;
 use crate::util::args::parse_bp_room_key;
 use std::sync::Arc;
@@ -8,13 +8,10 @@ const USAGE: &str = "Usage:
   @bp room lock <bp>:<room>
   @bp room unlock <bp>:<room>\n";
 
-pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
-
+pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.len() < 2 {
-        out.append(USAGE);
-        out.failure();
-        return Ok(out);
+        ctx.output.system(USAGE).await;
+        return Ok(());
     }
 
     let sub_cmd = &intent.args[1];
@@ -24,9 +21,8 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
         // @bp room add <bp>:<room> "Title" "Body"
         "add" => {
             if sub_args.len() < 3 {
-                out.append(USAGE);
-                out.failure();
-                return Ok(out);
+                ctx.output.system(USAGE).await;
+                return Ok(());
             }
 
             let key = parse_bp_room_key(&sub_args[0]).ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
@@ -35,66 +31,56 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
             let body = &sub_args[2];
 
             if title.is_empty() || body.is_empty() {
-                out.append("[bp] title and body cannot be empty.\n");
-                out.failure();
-                return Ok(out);
+                ctx.output.system("[bp] title and body cannot be empty.").await;
+                return Ok(());
             }
 
             if ctx.registry.services.blueprint.new_room(&key, title, body).await? {
-                out.append(format!("[bp] room {}:{} added.\n", key.bp_key, key.room_key).as_str());
-                out.success();
+                ctx.output.system(format!("[bp] room {}:{} added.\n", key.bp_key, key.room_key)).await;
             } else {
-                out.append("[bp] room already exists.\n");
-                out.failure();
+                ctx.output.system("[bp] room already exists").await;
             }
 
-            Ok(out)
+            Ok(())
         }
 
         // @bp room lock <bp>:<room>
         "lock" => {
             if sub_args.is_empty() {
-                out.append(USAGE);
-                out.failure();
-                return Ok(out);
+                ctx.output.system(USAGE).await;
+                return Ok(());
             }
 
             let key = parse_bp_room_key(&sub_args[0]).ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
 
             if ctx.registry.services.blueprint.set_locked(&key, true).await? {
-                out.append("[bp] blueprint/room set to LOCKED.\n");
-                out.success();
+                ctx.output.system("[bp] blueprint/room set to LOCKED.").await;
             } else {
-                out.append("[bp] blueprint/room not found.\n");
-                out.failure();
+                ctx.output.system("[bp] blueprint/room not found.").await;
             }
-            Ok(out)
+            Ok(())
         }
 
         // @bp room unlock <bp>:<room>
         "unlock" => {
             if sub_args.is_empty() {
-                out.append(USAGE);
-                out.failure();
-                return Ok(out);
+                ctx.output.system(USAGE).await;
+                return Ok(());
             }
 
             let key = parse_bp_room_key(&sub_args[0]).ok_or_else(|| CommandError::Custom("use <bp>:<room>".into()))?;
 
             if ctx.registry.services.blueprint.set_locked(&key, false).await? {
-                out.append("[bp] blueprint/room set to UNLOCKED.\n");
-                out.success();
+                ctx.output.system("[bp] blueprint/room set to UNLOCKED.").await;
             } else {
-                out.append("[bp] blueprint/room not found.\n");
-                out.failure();
+                ctx.output.system("[bp] blueprint/room not found.").await;
             }
-            Ok(out)
+            Ok(())
         }
 
         _ => {
-            out.append(super::USAGE);
-            out.failure();
-            Ok(out)
+            ctx.output.system(super::USAGE).await;
+            Ok(())
         }
     }
 }

@@ -88,13 +88,8 @@ define_id!(ZoneId);
 define_id!(BlueprintId);
 define_id!(RoomId);
 define_id!(ObjectId);
+define_id!(ExitId);
 define_id!(LootId);
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ScriptSource {
-    Live,
-    Draft,
-}
 
 /// Directions as used in `bp_exits.dir`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -115,6 +110,13 @@ pub enum Direction {
 }
 
 impl Direction {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Direction::Custom(s) => s.as_str(),
+            _ => self.canonical(),
+        }
+    }
+
     #[inline]
     pub fn canonical(&self) -> &'static str {
         match self {

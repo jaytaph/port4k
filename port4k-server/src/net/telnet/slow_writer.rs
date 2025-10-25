@@ -35,6 +35,7 @@ impl<W> SlowWriter<W> {
     }
 
     /// Enable/disable pacing globally.
+    #[allow(unused)]
     pub fn set_pacing(&mut self, enabled: bool) {
         self.pacing_enabled = enabled;
         if !enabled {

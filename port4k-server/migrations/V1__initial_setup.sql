@@ -115,12 +115,14 @@ ALTER TABLE public.bp_exits OWNER TO port4k;
 -- =============================================================================
 CREATE TABLE public.bp_room_scripts
 (
-    room_id       uuid PRIMARY KEY REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
-    on_enter_lua   text,
-    on_command_lua text,
-    updated_at     timestamptz NOT NULL DEFAULT now()
+    room_id       uuid REFERENCES public.bp_rooms(id) ON DELETE CASCADE,
+    hook          VARCHAR(50),
+    script        text,
+    updated_at    timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (room_id, hook)
 );
 ALTER TABLE public.bp_room_scripts OWNER TO port4k;
+
 
 -- Per-event script sources (draft/live)
 CREATE TABLE public.bp_scripts_draft

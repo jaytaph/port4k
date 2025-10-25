@@ -1,24 +1,21 @@
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use std::sync::Arc;
 use crate::renderer::{render_template, RenderVars};
 
 const USAGE: &'static str = "Usage: debug <where|col>\n";
 
-pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
-
+pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.len() < 2 {
-        out.append(USAGE);
-        out.failure();
-        return Ok(out);
+        ctx.output.system(USAGE).await;
+        return Ok(());
     }
 
     let sub_cmd = intent.args[1].as_str();
 
     match sub_cmd {
         "col" => {
-            out.append("Color codes:\n");
+            ctx.output.system("Color codes:").await;
             let colors = vec![
                 "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
                 "bright_black", "bright_red", "bright_green", "bright_yellow",
@@ -35,34 +32,26 @@ pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Comman
                 line.push('\n');
             }
 
-            out.append(line.as_str());
-            out.success();
+            ctx.output.system(line).await;
         }
         "where" => {
             let account = ctx.account()?;
             let username = account.username;
 
             if !ctx.has_cursor() {
-                out.append("You have no cursor. Use 'go <zone>' to set one.\n");
-                out.failure();
+                ctx.output.system("You have no cursor. Use 'go <zone>' to set one.").await;
             }
 
             let cursor = ctx.cursor()?;
-            out.append(
-                format!(
-                    "[debug] user={username} zone={} zone_kind: {:?} room: {}\n",
-                    cursor.zone_ctx.zone.title, cursor.zone_ctx.kind, cursor.room_view.room.title
-                )
-                .as_str(),
-            );
-            out.success();
+            ctx.output.system(format!(
+                "[debug] user={username} zone={} zone_kind: {:?} room: {}",
+                cursor.zone_ctx.zone.title, cursor.zone_ctx.kind, cursor.room_view.room.title
+            )).await;
         }
         _ => {
-            out.append("Unknown debug command.\n");
-            out.append("Available commands: where\n");
-            out.failure();
+            ctx.output.system("Unknown debug command.").await;
         }
     }
 
-    Ok(out)
+    Ok(())
 }

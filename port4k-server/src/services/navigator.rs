@@ -21,24 +21,25 @@ impl NavigatorService {
         Self { zone_router }
     }
 
-    pub async fn go(&self, cursor: &Cursor, account_id: AccountId, dir: Direction) -> AppResult<(RoomId, RoomId)> {
-        let zone_id = cursor.zone_ctx.zone.id;
-        let from_id = cursor.room_view.room.id;
+    // pub async fn go(&self, cursor: &Cursor, account_id: AccountId, dir: Direction) -> AppResult<(RoomId, RoomId)> {
+    //     let zone_id = cursor.zone_ctx.zone.id;
+    //     let from_id = cursor.room_view.room.id;
+    //
+    //     let (_exit, to_id) = self.resolve_exit_checked(cursor, account_id, from_id, dir).await?;
+    //
+    //     let state = self.zone_router.storage_for(&cursor.zone_ctx);
+    //     state.set_current_room(zone_id, account_id, to_id).await?;
+    //     // state.record_travel(account_id, from_id, to_id).await?;
+    //     // If you have tolls, deduct coins here:
+    //     // uow.update_coins(account_id, -toll_amount).await?;
+    //     // If you want to award travel XP:
+    //     // state.update_xp(account_id, 5).await?;
+    //     // uow.commit().await?;
+    //
+    //     Ok((from_id, to_id))
+    // }
 
-        let (_exit, to_id) = self.resolve_exit_checked(cursor, account_id, from_id, dir).await?;
-
-        let state = self.zone_router.storage_for(&cursor.zone_ctx);
-        state.set_current_room(zone_id, account_id, to_id).await?;
-        // state.record_travel(account_id, from_id, to_id).await?;
-        // If you have tolls, deduct coins here:
-        // uow.update_coins(account_id, -toll_amount).await?;
-        // If you want to award travel XP:
-        // state.update_xp(account_id, 5).await?;
-        // uow.commit().await?;
-
-        Ok((from_id, to_id))
-    }
-
+    #[allow(unused)]
     async fn resolve_exit_checked(
         &self,
         cursor: &Cursor,

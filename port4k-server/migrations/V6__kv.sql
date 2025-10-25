@@ -40,10 +40,11 @@ CREATE TABLE zone_object_kv (
 
 CREATE TABLE user_object_kv (
     account_id UUID NOT NULL,
+    zone_id UUID NOT NULL,
     object_id UUID NOT NULL,
     key TEXT NOT NULL,
     value JSONB NOT NULL,
-    PRIMARY KEY (account_id, object_id, key),
+    PRIMARY KEY (zone_id, account_id, object_id, key),
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
     FOREIGN KEY (object_id) REFERENCES bp_objects(id) ON DELETE CASCADE
 );

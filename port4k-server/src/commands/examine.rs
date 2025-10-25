@@ -1,45 +1,36 @@
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::{Intent, NounPhrase};
 use std::sync::Arc;
 
-pub async fn examine(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
-
+pub async fn examine(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if let Some(noun) = intent.direct {
         // examine object
-        match handle_examine_object(ctx, noun, &mut out).await {
+        match handle_examine_object(ctx.clone(), &noun).await {
             Ok(_) => {}
-            Err(e) => {
-                out.append(format!("Error examining object: {}", e).as_str());
-                out.failure();
-            }
+            Err(e) => ctx.output.system(format!("Error examining object: {}", e.to_string())).await,
         }
     } else {
-        out.append("You must specify what you want to examine.");
-        out.failure();
+        ctx.output.system("You must specify what you want to examine.").await;
     }
 
-    Ok(out)
+    Ok(())
 }
 
-async fn handle_examine_object(ctx: Arc<CmdCtx>, noun: NounPhrase, out: &mut CommandOutput) -> anyhow::Result<()> {
+async fn handle_examine_object(ctx: Arc<CmdCtx>, noun: &NounPhrase) -> anyhow::Result<()> {
     let rv = ctx.room_view()?;
     if let Some(obj) = rv.object_by_noun(&noun.head) {
         match obj.examine.clone() {
             None => {
-                out.append(format!("You examine {}, but you find nothing special.", noun.head).as_str());
-                out.success();
+                ctx.output.line(format!("You examine {}, but you find nothing special.", noun.head).as_str()).await;
             }
             Some(message) => {
-                out.append(message.as_str());
-                out.success();
+                ctx.output.line(message).await;
             }
         }
         return Ok(());
     }
 
-    out.append(format!("You see no {} here to examine.", noun.head).as_str());
-    out.failure();
+    ctx.output.line(format!("You see no {} here to examine.", noun.head)).await;
 
     Ok(())
 }

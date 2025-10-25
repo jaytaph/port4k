@@ -6,6 +6,7 @@ use argon2::Argon2;
 use password_hash::rand_core::OsRng;
 use password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use std::sync::Arc;
+use tracing::log::warn;
 
 pub struct AuthService {
     repo: Arc<dyn AccountRepo>,
@@ -48,11 +49,19 @@ impl AuthService {
 
     pub async fn authenticate(&self, username: &str, password: &str) -> AppResult<Account> {
         let Some(account) = self.repo.get_by_username(username).await? else {
-            return Err(DomainError::NotFound);
+            warn!("[AuthService] Authentication failed for username '{}': not found", username);
+            return Err(DomainError::NotFound("Account not found".into()));
         };
 
+        println!("********************************************************");
+        dbg!(&account);
+        println!("********************************************************");
+
         let parsed = PasswordHash::new(&account.password_hash).map_err(DomainError::Password)?;
-        self.argon.verify_password(password.as_bytes(), &parsed)?;
+        if self.argon.verify_password(password.as_bytes(), &parsed).is_err() {
+            warn!("[AuthService] Authentication failed for username '{}': invalid password", username);
+            return Err(DomainError::NotFound("Account not found".into()));
+        }
 
         Ok(account)
     }

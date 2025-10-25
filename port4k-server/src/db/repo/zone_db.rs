@@ -5,7 +5,7 @@ use crate::models::zone::Zone;
 use std::sync::Arc;
 use crate::db::error::DbError;
 use crate::models::room::Kv;
-use crate::models::types::{RoomId, ZoneId};
+use crate::models::types::{ExitId, RoomId, ZoneId};
 use crate::util::serde::serde_to_str;
 
 pub struct ZoneRepository {
@@ -59,7 +59,8 @@ impl ZoneRepo for ZoneRepository {
         let rows = client
             .query(
                 r#"
-                SELECT object_key, key, value FROM user_object_kv
+                SELECT o.name AS object_key, key, value FROM zone_object_kv
+                JOIN bp_objects o ON o.id = zone_object_kv.object_id
                 WHERE zone_id = $1 AND room_id = $2
                 "#,
                 &[&zone_id, &room_id],
@@ -80,5 +81,23 @@ impl ZoneRepo for ZoneRepository {
         }
 
         Ok(map)
+    }
+
+    async fn set_exit_locked(&self, zone_id: ZoneId, room_id: RoomId, exit_id: ExitId, locked: bool) -> DbResult<()> {
+        let client = self.db.get_client().await?;
+
+        client
+            .execute(
+                r#"
+                INSERT INTO zone_exits (zone_id, room_id, exit_id, locked)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (zone_id, room_id, exit_id)
+                DO UPDATE SET value = EXCLUDED.value
+                "#,
+                &[&zone_id, &room_id, &exit_id, &locked],
+            )
+            .await?;
+
+        Ok(())
     }
 }

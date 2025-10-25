@@ -1,19 +1,16 @@
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 use crate::error::DomainError;
-use crate::lua::LuaJob;
+use crate::lua::{LuaJob, LuaResult};
 
-pub async fn open(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
-
+pub async fn open(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     let rv = ctx.room_view()?;
 
     let Some(noun) = intent.direct.as_ref() else {
-        out.append("Open what?\n");
-        out.failure();
-        return Ok(out);
+        ctx.output.system("Open what?").await;
+        return Ok(());
     };
 
     let mut handled = false;
@@ -33,32 +30,19 @@ pub async fn open(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutp
             }).await.map_err(|_| DomainError::InternalError("Failed to send Lua job".into()))?;
 
             match rx.await.map_err(|_| DomainError::InternalError("Lua script channel closed".into()))? {
-                Some(result) => {
-                    for msg in result.data {
-                        out.append(&msg);
-                    }
-                    if result.ok {
-                        out.success();
-                    } else {
-                        out.failure();
-                    }
-                    handled = true;
-                },
-                None => {
-                    // Not handled by Lua
-                }
+                LuaResult::Blocked => handled = false,
+                LuaResult::Success => handled = true,
+                LuaResult::Failed(msg) => ctx.output.system(format!("on_object script returned an error: {}", msg)).await,
             }
         }
     }
 
     // Check if we want to open a direction
 
-
     if !handled {
         // Nothing has handled the open command
-        out.append("You try to open it, but nothing happens.\n");
-        out.failure();
+        ctx.output.line("You try to open it, but nothing happens.").await;
     }
 
-    Ok(out)
+    Ok(())
 }

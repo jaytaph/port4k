@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::{fs, path::Path};
 use tokio_postgres::Transaction;
-
+use crate::lua::ScriptHook;
 // ====== v2 YAML models ======
 
 #[derive(Debug, Deserialize)]
@@ -22,7 +22,7 @@ struct RoomYaml {
     #[serde(rename = "description")]
     pub full_desc: String,
     #[serde(default)]
-    pub kv: HashMap<String, serde_json::Value>,
+    pub state: HashMap<String, serde_json::Value>,
     #[serde(default)]
     pub hints: Vec<HintYaml>,
     #[serde(default)]
@@ -30,7 +30,7 @@ struct RoomYaml {
     #[serde(default)]
     pub exits: Vec<ExitYaml>,
     #[serde(default)]
-    pub scripts: ScriptsYaml,
+    pub scripts: ScriptYaml,
     // optional items catalog ignored here (handled elsewhere if you add a table)
 }
 
@@ -61,7 +61,7 @@ struct ObjectYaml {
     pub visible: Option<VisiblePolicy>, // always|when_revealed|when_unlocked|script
 
     #[serde(default)]
-    pub state: serde_json::Value, // arbitrary map (locked, revealed, etc)
+    pub state: HashMap<String, serde_json::Value>, // arbitrary map (locked, revealed, etc)
     #[serde(default)]
     pub controls: Vec<String>, // ["exit:north.locked","object:door.locked"]
 
@@ -95,12 +95,13 @@ struct ExitYaml {
     pub visible_when_locked: Option<bool>,
 }
 
-#[derive(Debug, Default, Deserialize)]
-struct ScriptsYaml {
-    #[serde(default)]
-    pub on_enter: Option<String>, // Lua
-    #[serde(default)]
-    pub on_command: Option<String>, // Lua
+#[derive(Debug, Serialize, Deserialize)]
+struct ScriptYaml(HashMap<ScriptHook, String>);
+
+impl Default for ScriptYaml {
+    fn default() -> Self {
+        ScriptYaml(HashMap::new())
+    }
 }
 
 // ====== Entry point ======
@@ -143,7 +144,7 @@ pub async fn import_blueprint_sub_dir(
     // Pass 2: kv, objects (+nouns, scripts), room scripts
     for r in &rooms {
         let room_id = *room_ids.get(&r.id).expect("room id present");
-        upsert_room_kv(&tx, room_id, &r.kv).await?;
+        upsert_room_kv(&tx, room_id, &r.state).await?;
         upsert_objects(&tx, room_id, &r.objects).await?;
         upsert_room_scripts(&tx, room_id, &r.scripts).await?;
     }
@@ -240,10 +241,10 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
             .query_one(
                 r#"
                 INSERT INTO bp_objects
-                  (room_id, name, short, description, examine, state, use_lua,
-                   position, flags, visible, controls, loot)
+                    (room_id, name, short, description, examine, use_lua,
+                    position, flags, visible, controls, loot)
                 VALUES
-                  ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9::jsonb,$10,$11::jsonb,$12::jsonb)
+                    ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10::jsonb,$11::jsonb)
                 RETURNING id
                 "#,
                 &[
@@ -252,7 +253,6 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
                     &o.short,
                     &o.description,
                     &o.examine,
-                    &state_json,
                     &o.use_,
                     &(pos as i32),
                     &flags_json,
@@ -264,6 +264,20 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
             .await
             .map_err(DbError::from)?;
         let obj_id: uuid::Uuid = row.get(0);
+
+        // state
+        for (k, v) in state_json {
+            tx.execute(
+                r#"
+                INSERT INTO bp_objects_kv (object_id, key, value)
+                VALUES ($1,$2,$3)
+                ON CONFLICT (object_id, key) DO UPDATE SET value = EXCLUDED.value
+                "#,
+                &[&obj_id, k, v],
+            )
+            .await
+            .map_err(DbError::from)?;
+        }
 
         // nouns
         for n in &o.nouns {
@@ -283,21 +297,21 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
     Ok(())
 }
 
-async fn upsert_room_scripts(tx: &Transaction<'_>, room_id: uuid::Uuid, scripts: &ScriptsYaml) -> AppResult<()> {
+async fn upsert_room_scripts(tx: &Transaction<'_>, room_id: uuid::Uuid, scripts: &ScriptYaml) -> AppResult<()> {
     // single-row table keyed by room_id
-    tx.execute(
-        r#"
-        INSERT INTO bp_room_scripts (room_id, on_enter_lua, on_command_lua)
-        VALUES ($1,$2,$3)
-        ON CONFLICT (room_id) DO UPDATE
-        SET on_enter_lua = EXCLUDED.on_enter_lua,
-            on_command_lua = EXCLUDED.on_command_lua,
-            updated_at = now()
-        "#,
-        &[&room_id, &scripts.on_enter, &scripts.on_command],
-    )
-    .await
-    .map_err(DbError::from)?;
+    for (_, (hook, script)) in scripts.0.iter().enumerate() {
+        dbg!(&hook);
+        tx.execute(
+            r#"
+            INSERT INTO bp_room_scripts (room_id, hook, script)
+            VALUES ($1,$2,$3)
+            ON CONFLICT (room_id, hook) DO UPDATE SET script = EXCLUDED.script
+            "#,
+        &[&room_id, &hook.as_str(), &script],
+        )
+            .await
+            .map_err(DbError::from)?;
+    }
     Ok(())
 }
 
@@ -445,11 +459,8 @@ fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
 fn validate_lua_for_room(room: &RoomYaml) -> AppResult<()> {
     let lua = Lua::new();
 
-    if let Some(code) = room.scripts.on_enter.as_deref() {
-        compile_lua_chunk(&lua, &format!("room:{}:on_enter", room.id), code)?;
-    }
-    if let Some(code) = room.scripts.on_command.as_deref() {
-        compile_lua_chunk(&lua, &format!("room:{}:on_command", room.id), code)?;
+    for (hook, code) in &room.scripts.0 {
+        compile_lua_chunk(&lua, &format!("room:{}:script:{:?}", room.id, hook), code)?;
     }
 
     // Inline object `use` blocks

@@ -8,7 +8,7 @@ description: |
   To the north, a {o:blast_door} blocks further passage. A {o:wall_console} beside it blinks weakly. Near the corner, a {o:toolkit} lies half-buried in dust. Etched into the wall are faint {o:markings}.
 
 # Free-form room KV available to Lua and UI
-kv:
+state:
   ambience: "low_hum"
   dust_level: "high"
 
@@ -41,37 +41,37 @@ objects:
       - exit:north.locked                 # keep exit lock in sync with this door
     examine: "The locking mechanism is intact; manual overrides are scarred but functional."
     use: |
-      return function(ctx, verb, _)
-          local exit = "north"
-          ctx:say("Well... it's time for a luau script!")
-      
-          if verb == "open" then
-              local locked = ctx:get_object_state("blast_door", "locked")
-              if locked then
-                  ctx:say("The door is locked tight.")
-                  return true
-              end
-              if ctx.is_exit_locked and ctx:is_exit_locked(exit) == false then
-                  ctx:say("It's already open.")
-                  return true
-              end
-              ctx:say("Hydraulics hiss as the blast door slides open.")
-              ctx:set_exit_locked(exit, false)
-              return true
-      
-          elseif verb == "close" then
-              if ctx.is_exit_locked and ctx:is_exit_locked(exit) == true then
-                  ctx:say("It's already closed.")
-                  return true
-              end
-              ctx:say("The blast door rumbles shut.")
-              ctx:set_exit_locked(exit, true)
-              return true
-          end
-      
-          return false
+      return function(ctx)
+        local exit = "north"
+          
+        if ctx.intent.verb == "open" then
+            if not ctx.room.exits[exit] then
+                ctx:say("There is no door here to open.")
+            end
+            if ctx.object.locked then
+                ctx:say("The door is locked tight.")
+                return true
+            end
+            if ctx.object.locked == false then
+                ctx:say("It's already open.")
+                return true
+            end
+            ctx:say("Hydraulics hiss as the blast door slides open.")
+            ctx:set_exit_locked(exit, false)
+            return true
+    
+        elseif ctx.intent.verb == "close" then
+            if ctx:is_exit_locked(exit) == true then
+                ctx:say("It's already closed.")
+                return true
+            end
+            ctx:say("The blast door rumbles shut.")
+            ctx:set_exit_locked(exit, true)
+            return true
+        end
+    
+        return false
       end
-
 
   - id: wall_console
     nouns: ["console","terminal","panel"]
@@ -89,8 +89,8 @@ objects:
       --   use console
       --   power console with <item>
       --   enter <code> on console
-      return function(ctx, verb, args)
-        local powered = ctx:get_object_state("wall_console","powered")
+      return function(ctx)
+        local powered = ctx.object.state.powered
         if not powered then
           if verb == "power" and ctx:has_item("microcell") then
             ctx:set_object_state("wall_console","powered", true)
@@ -105,7 +105,7 @@ objects:
 
         if verb == "enter" and #args > 0 then
           local code = table.concat(args, " ")
-          local required = ctx:get_object_state("wall_console","code_required") or "4312"
+          local required = ctx.object.code_required or "4312"
           if code == required then
             ctx:say("Code accepted. Releasing blast door locks.")
             ctx:set_object_state("blast_door","locked", false)
@@ -159,9 +159,14 @@ exits:
     visible_when_locked: true
 
 scripts:
+  on_first_enter: |
+    return function(ctx)
+      ctx:say("*************  FIRST TIME THE HALL  *************")
+    end
   on_enter: |
     return function(ctx)
-      if not ctx:get_object_state("wall_console","powered") then
+      ctx:say("*************  YOU ARE AGAIN ENTERING THE HALL  *************")
+      if not ctx.room.objects["wall_console"].state.powered then
         ctx:say("The console flickers once and dies. It might need a power source.")
       end
       ctx:hint_consider("enter")    -- engine may surface an 'enter' hint
@@ -176,6 +181,7 @@ scripts:
       end
       return false
     end
+
 
 # Optional: inline item catalog (skip if you have a global one)
 items_catalog:

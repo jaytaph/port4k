@@ -22,9 +22,7 @@ impl AccountRepo for AccountRepository {
         let stmt = client
             .prepare_cached(
                 r#"
-            SELECT id, username, email, password_hash, role, created_at, last_login,
-                zone_id, current_room_id, xp, health, coins,
-                inventory, flags
+            SELECT id, username, email, password_hash, role, created_at, last_login
             FROM accounts
             WHERE username = $1
             "#,
