@@ -21,15 +21,32 @@ where
     async fn send_frame(&mut self, frame: OutFrame, _seq: u64) -> anyhow::Result<()> {
         match frame {
             OutFrame::Line(s) => {
-                // normal line + newline
-                self.writer.write_all(s.as_bytes()).await?;
+                for line in s.lines() {
+                    // normal line + newline
+                    self.writer.write_all(line.as_bytes()).await?;
+                    self.writer.write_all(b"\r\n").await?;
+                }
                 self.writer.write_all(b"\r\n").await?;
             }
             OutFrame::System(s) => {
-                // maybe prefix with some ANSI color for "system"?
-                self.writer.write_all(b"\x1b[33m").await?; // yellow
-                self.writer.write_all(s.as_bytes()).await?;
-                self.writer.write_all(b"\x1b[0m\r\n").await?;
+                let lines: Vec<&str> = s.lines().collect();
+                let mut last_color = String::new();  // ansi color code tracking
+                for line in &lines {
+                    self.writer.write_all(b"\x1b[93m[SRV]\x1b[0m ").await?; // yellow [SRV] marker
+
+                    if !last_color.is_empty() {
+                        self.writer.write_all(last_color.as_bytes()).await?;
+                    }
+
+                    self.writer.write_all(line.as_bytes()).await?;
+                    self.writer.write_all(b"\x1b[0m\r\n").await?;
+
+                    match extract_last_color_code(line) {
+                        Some(code) => last_color = code,
+                        None => { }, // No ansi colors found, just keep last_color as is
+                    }
+                }
+                self.writer.write_all(b"\r\n").await?;
             }
             OutFrame::RoomView { content } => {
                 // Typically you'd clear top section or draw a frame.
@@ -54,4 +71,40 @@ where
 
         Ok(())
     }
+}
+
+
+/// Extract the last SGR (Select Graphic Rendition) ANSI escape code from a line.
+fn extract_last_color_code(line: &str) -> Option<String> {
+    let bytes = line.as_bytes();
+    let mut last_sgr = None;
+    let mut i = 0;
+
+    while i < bytes.len() {
+        if i + 1 < bytes.len() && bytes[i] == b'\x1b' && bytes[i + 1] == b'[' {
+            let start = i;
+            i += 2;
+
+            while i < bytes.len() && !bytes[i].is_ascii_alphabetic() {
+                i += 1;
+            }
+
+            if i < bytes.len() && bytes[i] == b'm' {
+                // Found \x1b[...m sequence
+                let sequence = &line[start..=i];
+
+                let params = &line[start + 2..i];
+                if params.is_empty() || params == "0" {
+                    last_sgr = Some(String::new()); // Reset clears color
+                } else {
+                    last_sgr = Some(sequence.to_string());
+                }
+            }
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    last_sgr
 }

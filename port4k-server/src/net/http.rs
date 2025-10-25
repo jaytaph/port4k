@@ -46,7 +46,8 @@ async fn ws_handler(socket: WebSocket, registry: Arc<Registry>, lua_tx: mpsc::Se
 
     let io_bundle = init_session_for_websocket(ws_write).await;
 
-    io_bundle.output.system(format!("{}{}", BANNER, ENTRY)).await;
+    io_bundle.output.system(BANNER).await;
+    io_bundle.output.system(ENTRY).await;
     io_bundle.output.prompt("> ".to_string()).await;
 
     let sess = Arc::new(RwLock::new(Session::new(Protocol::WebSocket)));

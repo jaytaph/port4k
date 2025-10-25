@@ -29,34 +29,6 @@ pub async fn handle_connection(
     Ok(())
 }
 
-// //noinspection RsExternalLinter
-// async fn start_session<W: AsyncWrite + Unpin>(
-//     w: &mut SlowWriter<W>,
-//     telnet: &mut TelnetMachine,
-//     editor: &mut LineEditor,
-//     sess: Arc<RwLock<Session>>,
-// ) -> AppResult<()> {
-//     // Telnet option negotiation: character-at-a-time + SGA + (server) echo + NAWS
-//     telnet.start_negotiation(w).await?;
-//
-//     // Welcome text
-//     if !BANNER.is_empty() {
-//         for line in BANNER.lines() {
-//             w.write_all(line.as_bytes()).await?;
-//             w.write_all(b"\n").await?;
-//         }
-//     }
-//     if !ENTRY.is_empty() {
-//         for line in ENTRY.lines() {
-//             w.write_all(line.as_bytes()).await?;
-//             w.write_all(b"\n").await?;
-//         }
-//     }
-//
-//     repaint_prompt(sess.clone(), w, editor, true).await?;
-//     Ok(())
-// }
-
 async fn read_loop(
     reader: &mut BufReader<OwnedReadHalf>,
     telnet: &mut TelnetMachine,
@@ -118,10 +90,8 @@ async fn handle_data_byte(
         }
         EditEvent::Line(line) => {
             // // Move to a fresh line before emitting any output
-            // w.write_all(b"\r\n").await?;
-            // w.write_all(b"\r\n").await?;
+            ctx.output.line("\n\n").await;
             let raw = line.trim();
-            tracing::debug!(%raw, "received line");
 
             // Try login flow first; if handled, we just repaint
             if try_handle_login(raw, reader, telnet, ctx.clone(), sess.clone()).await? == LoginOutcome::Handled {
@@ -156,28 +126,6 @@ async fn dispatch_command(raw: &str, ctx: Arc<AppCtx>, sess: Arc<RwLock<Session>
     _ = process_command(raw, cmd_ctx.clone()).await;
     Ok(())
 }
-
-// async fn output_error<W: AsyncWrite + Unpin>(w: &mut W, out: CommandOutput) {
-//     let error_template = r#"
-// {c:bright_yellow:bright_red} An error occurred while processing your command.{c}
-//
-// {v:messages}
-//     "#;
-//
-//     let vars = RenderVars::default().with("messages", out.messages().join("").as_str());
-//     let rendered_out = render_template(error_template, &vars, 80);
-//
-//     let _ = write_with_newline(w, rendered_out.as_bytes()).await;
-// }
-
-// async fn output_success<W: AsyncWrite + Unpin>(w: &mut W, out: CommandOutput) {
-//     let _ = write_with_newline(w, b"\n").await;
-//     for msg in out.messages() {
-//         let _ = write_with_newline(w, msg.as_bytes()).await;
-//         // let _ = write_with_newline(w, b"\n").await;
-//     }
-//     let _ = write_with_newline(w, b"\n").await;
-// }
 
 #[derive(PartialEq, Eq)]
 enum LoginOutcome {

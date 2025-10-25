@@ -12,6 +12,7 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
+use crate::banner::{BANNER, ENTRY};
 use crate::net::output::init_session_for_telnet;
 use crate::net::telnet::crlf_wrapper::CrlfWriter;
 use crate::net::telnet::slow_writer::{Pace, SlowWriter};
@@ -61,20 +62,22 @@ async fn handle_telnet_connection(
 
     // Wrap write half with CRLF conversion and pacing
     let crlf_writer = CrlfWriter::new(write_half);
-    let mut paced_writer = SlowWriter::new(
-        crlf_writer,
-        Pace::PerWord {
-            delay: Duration::from_millis(1),
-        }
-    );
+    // let mut paced_writer = SlowWriter::new(
+    //     crlf_writer,
+    //     Pace::PerWord {
+    //         delay: Duration::from_millis(1),
+    //     }
+    // );
+    let mut wrapper_writer = crlf_writer;
 
     // Telnet option negotiation: character-at-a-time + SGA + (server) echo + NAWS
     let mut telnet = TelnetMachine::new();
-    telnet.start_negotiation(&mut paced_writer).await?;
+    telnet.start_negotiation(&mut wrapper_writer).await?;
 
-    let io_bundle = init_session_for_telnet(paced_writer).await;
+    let io_bundle = init_session_for_telnet(wrapper_writer).await;
 
-    io_bundle.output.system(format!("{}{}", crate::banner::BANNER, crate::banner::ENTRY)).await;
+    io_bundle.output.system(BANNER).await;
+    io_bundle.output.system(ENTRY).await;
     io_bundle.output.prompt("> ".to_string()).await;
 
     let sess = Arc::new(RwLock::new(Session::new(Protocol::Telnet)));

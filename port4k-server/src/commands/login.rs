@@ -13,26 +13,26 @@ const MOTD: &str = r#"
 
 ** ==============  PORT4K INCOMING MESSAGE =================
 **
-** Welcome back, {c:yellow}{v:account.name}{c}!  (last login: {v:last_login})
-** Server time: {c:white}{v:wall_time}{c}
-** Location: {c:bright_white}{v:cursor.zone} - {v:cursor.room.title}{c}
+**   Welcome back, {c:yellow}{v:account.name}{c}!  (last login: {v:last_login})
+**   Server time: {c:white}{v:wall_time}{c}
+**   Location: {c:bright_white}{v:cursor.zone} - {v:cursor.room.title}{c}
 **
-** Account:
+**   Account:
 **      HP    : {c:green:bold}{v:account.health}/100{c}
 **      XP    : {c:green:bold}{v:account.xp}{c}
 **      Coins : {c:green:bold}{v:account.coins}{c}
 **
-** News:
-**  - New vault area unlocked in The Hub.
-**  - Type 'help' or 'commands' to get started.
-**  - Use 'who' to see who's online.
+**   News:
+**    - New vault area unlocked in The Hub.
+**    - Type 'help' or 'commands' to get started.
+**    - Use 'who' to see who's online.
 **
-** Tips:
-**  - Most rooms have hidden nouns. Try: {c:blue}'examine terminal'{c}, {c:blue}'open crate'{c}.
-**  - Use cardinal directions or verbs like {c:blue}'in'{c}/{c:blue}'out'{c} to move.
-**  - Stuck? Try {c:blue}'look'{c}, {c:blue}'hint'{c}, or {c:blue}'scan'{c}.
+**   Tips:
+**    - Most rooms have hidden nouns. Try: {c:blue}'examine terminal'{c}, {c:blue}'open crate'{c}.
+**    - Use cardinal directions or verbs like {c:blue}'in'{c}/{c:blue}'out'{c} to move.
+**    - Stuck? Try {c:blue}'look'{c}, {c:blue}'hint'{c}, or {c:blue}'scan'{c}.
 **
-** Enjoy your stay, {v:account.role} {v:account.name}.
+**   Enjoy your stay, {v:account.role} {v:account.name}.
 **
 ** ====================  END OF MESSAGE ====================
 
