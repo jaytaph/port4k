@@ -30,18 +30,18 @@ impl RoomService {
         }
     }
 
-    pub async fn hint_consider(&self, ctx: Arc<CmdCtx>, trigger: &str) -> AppResult<()> {
-        let room_view = ctx.room_view()?;
-        let current_visit = room_view.visit_count;
+    pub async fn hint_consider(&self, cursor: &Cursor, trigger: &str) -> AppResult<Option<String>> {
+        let current_visit = cursor.room_view.visit_count;
+        let rv = &cursor.room_view;
+        let room_id = cursor.room_id;
+        let account_id = cursor.account_id;
+        let zone_id = cursor.zone_id;
 
-        for hint in room_view.blueprint.hints.iter() {
+        let mut result = None;
+
+        for hint in rv.blueprint.hints.iter() {
             if hint.when == trigger {
-                let account_id = ctx.account_id()?;
-                let room_id = ctx.room_id()?;
-                let zone_id = ctx.zone_id()?;
-
-                let kv = self.user_repo.room_kv(zone_id, room_id, account_id).await?;
-                let shown = kv.get_bool(&format!("hint_shown_{}", hint.id), false);
+                let shown = rv.room_kv.get_bool(&format!("hint_shown_{}", hint.id), false);
 
                 if hint.once.unwrap_or(false) && shown {
                     continue; // Already shown
@@ -49,14 +49,14 @@ impl RoomService {
 
                 // Check cooldown
                 if let Some(cooldown) = hint.cooldown {
-                    let last_shown_visit = kv.get_num::<i64>(&format!("hint_last_visit_{}", hint.id), 0);
+                    let last_shown_visit = rv.room_kv.get_num::<i64>(&format!("hint_last_visit_{}", hint.id), 0);
                     if current_visit - last_shown_visit < cooldown as i64 {
                         continue; // Still in cooldown
                     }
                 }
 
-                // Show the hint
-                ctx.output.system(format!("{{c:cyan:bright_cyan}}Hint: {}{{c}}", hint.text)).await;
+                // Return the hint
+                result = Some(format!("{{c:cyan:bright_cyan}}Hint: {}{{c}}", hint.text));
 
                 // Mark as shown
                 if hint.once.unwrap_or(false) {
@@ -82,14 +82,26 @@ impl RoomService {
             }
         }
 
-        Ok(())
+        Ok(result)
     }
 
     // Travel to the given room
     pub async fn enter_room(&self, ctx: Arc<CmdCtx>, c: &Cursor) -> AppResult<()> {
         // Enter the current room
-
         ctx.sess.write().cursor = Some(c.clone());
+
+        // Increase visit count and last visit timestamp
+        self.user_repo.inc_room_kv(ctx.zone_id()?, ctx.room_id()?, ctx.account_id()?, "__visit_count", 1).await?;
+        let ts = serde_json::Value::Number(serde_json::Number::from(chrono::Utc::now().timestamp()));
+        self.user_repo.set_room_kv(ctx.zone_id()?, ctx.room_id()?, ctx.account_id()?, "__last_visited_at", &ts).await?;
+
+        // reload room view after updating visit count
+        let rv = self.build_room_view(&ctx.zone_ctx()?, ctx.account_id()?, ctx.room_id()?).await?;
+        {
+            let mut sess = ctx.sess.write();
+            let cursor = sess.cursor.as_mut().ok_or_else(|| DomainError::InternalError("Cursor not able to mutate".into()))?;
+            cursor.room_view = rv;
+        }
 
         // Enter or First enter lua hooks
         self.lua_on_enter(ctx.clone()).await?;
@@ -106,30 +118,14 @@ impl RoomService {
 
     /// Called when we enter the room. Either calls on_enter or on_first_enter lua hooks.
     async fn lua_on_enter(&self, ctx: Arc<CmdCtx>) -> AppResult<()> {
-        let account_id = ctx.account_id()?;
-        let room_id = ctx.room_id()?;
-        let zone_id = ctx.zone_id()?;
-        let room = ctx.room_view()?;
-
-        let kv = self.user_repo.room_kv(zone_id, room_id, account_id).await?;
-        let cnt = kv.get_num::<i32>("has_entered", 0);
-
-        // Key does not exist. This is the first time we enter, so we only update the counter
-        self.user_repo.set_room_kv(
-            zone_id,
-            room_id,
-            account_id,
-            "has_entered",
-            &serde_json::Value::Number(serde_json::Number::from(cnt + 1)),
-        ).await?;
+        let rv = ctx.room_view()?;
 
         let (tx, rx) = oneshot::channel();
 
         let output_handle = ctx.output.clone();
+        let first_enter_hook = rv.scripts.get(&ScriptHook::OnFirstEnter);
 
-        let first_enter_hook = room.scripts.get(&ScriptHook::OnFirstEnter);
-
-        if cnt == 0 && first_enter_hook.is_some() {
+        if rv.visit_count == 1 && first_enter_hook.is_some() {
             // Enter first time hook if there is such a script
             ctx.lua_tx.send(LuaJob::OnFirstEnter {
                 output_handle,
@@ -177,10 +173,6 @@ impl RoomService {
 
     /// Called when we exit the room.
     async fn lua_on_exit(&self, ctx: Arc<CmdCtx>) -> AppResult<()> {
-        // let account_id = ctx.account_id()?;
-        // let room_id = ctx.room_id()?;
-        // let zone_id = ctx.zone_id()?;
-
         let (tx, rx) = oneshot::channel();
 
         let output_handle = ctx.output.clone();

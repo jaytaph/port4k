@@ -61,7 +61,7 @@ impl Registry {
             room: room_service.clone(),
             cursor: Arc::new(CursorService::new(zone_router.clone(), room_service.clone())),
             navigator: Arc::new(NavigatorService::new(zone_router.clone())),
-            zone: Arc::new(ZoneService::new(repos.zone.clone())),
+            zone: Arc::new(ZoneService::new(repos.zone.clone(), room_service.clone())),
         });
 
         Self {

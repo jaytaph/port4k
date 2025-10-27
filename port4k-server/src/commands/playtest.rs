@@ -77,8 +77,10 @@ pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str) -> anyhow::Result<()
 
     let zone_ctx = ZoneContext::ephemeral(account_id, blueprint.clone());
     let new_c = Cursor {
-        zone_ctx: zone_ctx.clone(),
+        zone_id: zone_ctx.zone.id,
         room_id: blueprint.entry_room_id,
+        account_id: account_id,
+        zone_ctx: zone_ctx.clone(),
         room_view: ctx
             .registry
             .services

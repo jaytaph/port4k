@@ -269,50 +269,6 @@ fn create_lua_env(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Result<Table> {
     Ok(env)
 }
 
-// fn install_game_api(lua: &Lua, env: &Table, arg_ctx: &LuaArgContext) -> mlua::Result<()> {
-//     let ctx = arg_ctx.clone();
-//     env.set("say", lua.create_function(move |_, msg: String| -> mlua::Result<()> {
-//         let ctx = ctx.clone();
-//         ctx.rt_handle.spawn(async move {
-//             ctx.output_handle.line(msg).await;
-//         });
-//         Ok(())
-//     })?)?;
-//
-//
-//     let ctx = arg_ctx.clone();
-//     env.set("say", lua.create_function(move |_, msg: String| -> mlua::Result<()> {
-//         let ctx = ctx.clone();
-//         ctx.rt_handle.spawn(async move {
-//             ctx.output_handle.line(msg).await;
-//         });
-//         Ok(())
-//     })?)?;
-//
-//
-//     // env.set("has_object", lua.create_function({
-//     // })?)?;
-//     //
-//     // env.set("reveal_object", lua.create_function({
-//     // })?)?;
-//     //
-//     // env.set("remove_object", lua.create_function({
-//     // })?)?;
-//
-//     /*
-//     env.set("set_exit_locked_shared", lua.create_function({
-//         let cursor = cursor.clone();
-//         let handle = rt_handle.clone();
-//         let registry = registry.clone();
-//         move |_, (exit_key, locked): (String, bool)| -> mlua::Result<()> {
-//             let room_id = cursor.room_view.room.id;
-//             // let fut = registry.services.room.set_exit_locked(zone_id, room_id, &exit_key, locked);
-//             // handle.block_on(fut).map_err(mlua::Error::external)?;
-//             Ok(())
-//         }
-//     })?)?;
-//     */
-//
 //     if let (Some(cursor), Some(account)) = (arg_ctx.cursor.as_ref(), arg_ctx.account.as_ref()) {
 //         let cursor = cursor.clone();
 //         let account = account.clone();
@@ -419,8 +375,26 @@ fn create_port4k_function_table(
     })?)?;
 
     // port4k.hint_consider(hint_type: str) -> bool
-    port4k.set("hint_consider", lua.create_function(move |_, hint_type: String| -> mlua::Result<mlua::Value> {
-        let _ = hint_type;
+    //         let cursor = cursor.clone();
+    //         let handle = rt_handle.clone();
+    //         let registry = registry.clone();
+    //         move |_, (exit_key, locked): (String, bool)| -> mlua::Result<()> {
+    //             let room_id = cursor.room_view.room.id;
+    //             // let fut = registry.services.room.set_exit_locked(zone_id, room_id, &exit_key, locked);
+    //             // handle.block_on(fut).map_err(mlua::Error::external)?;
+    //             Ok(())
+    //         }
+
+    let ctx = arg_ctx.clone();
+    let rt_handle = arg_ctx.rt_handle.clone();
+    port4k.set("hint_consider", lua.create_function(move |_, trigger: String| -> mlua::Result<mlua::Value> {
+        let cursor = ctx.cursor.clone();
+        rt_handle.block_on(async {
+            let cursor = cursor.as_ref().unwrap();
+            if let Ok(Some(hint)) = ctx.registry.services.room.hint_consider(cursor, trigger.as_str()).await {
+                ctx.output_handle.line(hint).await;
+            }
+        });
         Ok(mlua::Value::Boolean(true))
     })?)?;
 
@@ -539,7 +513,7 @@ fn create_lua_roomview_table(lua: &Lua, rv: &RoomView) -> mlua::Result<Table> {
 
     // Add kv
     let kv_tbl = lua.create_table()?;
-    for (k, v) in rv.room_kv.iter() {
+    for (k, v) in rv.room_kv.inner.iter() {
         kv_tbl.set(k.as_str(), v.as_str())?;
     }
     rt.set("state", kv_tbl)?;
@@ -563,7 +537,7 @@ fn create_lua_object_table(lua: &Lua, obj: &ResolvedObject) -> mlua::Result<Tabl
 
     // Add kv
     let kv_tbl = lua.create_table()?;
-    for (k, v) in obj.kv.iter() {
+    for (k, v) in obj.kv.inner.iter() {
         kv_tbl.set(k.as_str(), v.as_str())?;
     }
     ot.set("state", kv_tbl)?;

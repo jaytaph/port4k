@@ -66,6 +66,28 @@ impl UserRepo for UserRepository {
         Ok(map)
     }
 
+    async fn inc_room_kv(&self, zone_id: ZoneId, room_id: RoomId, account_id: AccountId, key: &str, inc_by: i64) -> DbResult<i64> {
+        let client = self.db.get_client().await?;
+
+        let row = client
+            .query_one(
+                r#"
+            INSERT INTO user_room_kv (zone_id, room_id, account_id, key, value)
+            VALUES ($1, $2, $3, $4, to_jsonb($5::bigint))
+            ON CONFLICT (zone_id, room_id, account_id, key)
+            DO UPDATE SET value = to_jsonb((COALESCE((user_room_kv.value->>0)::bigint, 0) + $5)::bigint)
+            RETURNING value
+            "#,
+                &[&zone_id, &room_id, &account_id, &key, &inc_by],
+            )
+            .await?;
+
+        let value: Value = row.get("value");
+        let new_value = value.as_i64().ok_or_else(|| DbError::Decode("Cannot decode incremented value".into()))?;
+
+        Ok(new_value)
+    }
+
     async fn set_room_kv(&self, zone_id: ZoneId, room_id: RoomId, account_id: AccountId, key: &str, value: &Value) -> DbResult<()> {
         let client = self.db.get_client().await?;
 

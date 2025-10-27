@@ -178,7 +178,7 @@ impl RoomScripts {
 
 /// Resolved KV values. They are basically the same as the Kv type, but we know this type is
 /// already resolved.
-pub type KvResolved = HashMap<String, String>;
+pub type KvResolved = Kv;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Kv {
@@ -186,6 +186,12 @@ pub struct Kv {
 }
 
 impl Kv {
+    pub(crate) fn new() -> Self {
+        Kv {
+            inner: HashMap::new(),
+        }
+    }
+
     pub(crate) fn get_bool(&self, key: &str, default: bool) -> bool {
         self.inner
             .get(key)
@@ -402,7 +408,7 @@ pub(crate) fn build_room_view_impl(
         });
     }
 
-    let visit_count = user_room_kv.get_num::<i64>("__visit_count", 0);
+    let visit_count = user_room_kv.get_num::<i64>("__visit_count", 1);
     let last_visit_at = match user_room_kv.get_num::<i64>("__last_visit_at", 0) {
         0 => None,
         n => Some(n),

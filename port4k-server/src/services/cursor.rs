@@ -30,8 +30,10 @@ impl CursorService {
             .await?;
 
         Ok(Cursor {
-            zone_ctx,
+            zone_id: zone_ctx.zone.id,
             room_id: bp.entry_room_id,
+            account_id,
+            zone_ctx,
             room_view,
         })
     }
