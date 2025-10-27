@@ -16,9 +16,22 @@ pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         "col" => {
             ctx.output.system("Color codes:").await;
             let colors = vec![
-                "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
-                "bright_black", "bright_red", "bright_green", "bright_yellow",
-                "bright_blue", "bright_magenta", "bright_cyan", "bright_white",
+                "black",
+                "red",
+                "green",
+                "yellow",
+                "blue",
+                "magenta",
+                "cyan",
+                "white",
+                "bright_black",
+                "bright_red",
+                "bright_green",
+                "bright_yellow",
+                "bright_blue",
+                "bright_magenta",
+                "bright_cyan",
+                "bright_white",
             ];
             let mut i = 0;
             let mut line = String::new();
@@ -38,14 +51,18 @@ pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
             let username = account.username;
 
             if !ctx.has_cursor() {
-                ctx.output.system("You have no cursor. Use 'go <zone>' to set one.").await;
+                ctx.output
+                    .system("You have no cursor. Use 'go <zone>' to set one.")
+                    .await;
             }
 
             let cursor = ctx.cursor()?;
-            ctx.output.system(format!(
-                "[debug] user={username} zone={} zone_kind: {:?} room: {}",
-                cursor.zone_ctx.zone.title, cursor.zone_ctx.kind, cursor.room_view.blueprint.title
-            )).await;
+            ctx.output
+                .system(format!(
+                    "[debug] user={username} zone={} zone_kind: {:?} room: {}",
+                    cursor.zone_ctx.zone.title, cursor.zone_ctx.kind, cursor.room_view.blueprint.title
+                ))
+                .await;
         }
         _ => {
             ctx.output.system("Unknown debug command.").await;

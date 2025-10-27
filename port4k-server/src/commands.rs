@@ -7,16 +7,16 @@ use crate::models::account::Account;
 use crate::models::room::RoomView;
 use crate::models::types::{AccountId, RoomId, ZoneId};
 use crate::models::zone::ZoneContext;
+use crate::net::output::OutputHandle;
 use crate::services::ServiceError;
 use crate::state::session::{Cursor, Session};
 use crate::{Registry, ansi};
+use async_trait::async_trait;
 use parking_lot::RwLock;
 use std::sync::Arc;
-use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::SendError;
-use crate::net::output::OutputHandle;
 
 mod blueprint;
 mod debug_cmd;
@@ -26,13 +26,13 @@ mod go;
 mod login;
 mod logout;
 mod look;
+mod lua;
+mod open;
 mod playtest;
 mod register;
 mod search;
 mod take;
 mod who;
-mod open;
-mod lua;
 
 pub type CommandResult = Result<(), CommandError>;
 
@@ -149,25 +149,54 @@ pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
         return Ok(());
     }
 
-
     let intent = parse_command(raw);
     match intent.verb {
-        Verb::Close => { ctx.output.system("Goodbye! Connection closed by user.").await; Ok(()) }
-        Verb::Help => { ctx.output.system(help_text()).await; Ok(()) }
+        Verb::Close => {
+            ctx.output.system("Goodbye! Connection closed by user.").await;
+            Ok(())
+        }
+        Verb::Help => {
+            ctx.output.system(help_text()).await;
+            Ok(())
+        }
         Verb::Look => look::look(ctx.clone(), intent).await,
         Verb::Examine => examine::examine(ctx.clone(), intent).await,
         Verb::Search => search::search(ctx.clone(), intent).await,
         Verb::Take => take::take(ctx.clone(), intent).await,
-        Verb::Drop => { ctx.output.system("Drop command not implemented yet.").await; Ok(()) }
+        Verb::Drop => {
+            ctx.output.system("Drop command not implemented yet.").await;
+            Ok(())
+        }
         Verb::Open => open::open(ctx.clone(), intent).await,
-        Verb::Unlock => { ctx.output.system("Unlock command not implemented yet.").await; Ok(()) }
-        Verb::Lock => { ctx.output.system("Lock command not implemented yet.").await; Ok(()) }
-        Verb::Use => { ctx.output.system("Use command not implemented yet.").await; Ok(()) }
-        Verb::Put => { ctx.output.system("Put command not implemented yet.").await; Ok(()) }
-        Verb::Talk => { ctx.output.system("Talk command not implemented yet.").await; Ok(()) }
+        Verb::Unlock => {
+            ctx.output.system("Unlock command not implemented yet.").await;
+            Ok(())
+        }
+        Verb::Lock => {
+            ctx.output.system("Lock command not implemented yet.").await;
+            Ok(())
+        }
+        Verb::Use => {
+            ctx.output.system("Use command not implemented yet.").await;
+            Ok(())
+        }
+        Verb::Put => {
+            ctx.output.system("Put command not implemented yet.").await;
+            Ok(())
+        }
+        Verb::Talk => {
+            ctx.output.system("Talk command not implemented yet.").await;
+            Ok(())
+        }
         Verb::Go => go::go(ctx.clone(), intent).await,
-        Verb::Inventory => { ctx.output.system("Inventory command not implemented yet.").await; Ok(()) }
-        Verb::Quit => { ctx.output.system("Goodbye! Connection closed by user.").await; Ok(()) }
+        Verb::Inventory => {
+            ctx.output.system("Inventory command not implemented yet.").await;
+            Ok(())
+        }
+        Verb::Quit => {
+            ctx.output.system("Goodbye! Connection closed by user.").await;
+            Ok(())
+        }
         Verb::Who => who::who(ctx.clone()).await,
         Verb::Logout => logout::logout(ctx.clone(), intent).await,
         Verb::Login => login::login(ctx.clone(), intent).await,

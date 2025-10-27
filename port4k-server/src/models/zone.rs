@@ -3,14 +3,14 @@ use crate::db::{Db, DbResult};
 use crate::error::AppResult;
 use crate::models::blueprint::Blueprint;
 use crate::models::types::{AccountId, ObjectId, RoomId, ZoneId};
+use crate::util::serde::serde_to_str;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde_json::Value;
 use tokio_postgres::Row;
-use crate::util::serde::serde_to_str;
 
 /// Type of zone defines what is allowed and how it is persisted.
 #[derive(Clone, Debug)]
@@ -23,8 +23,8 @@ pub enum ZoneKind {
 /// How the zone is persisted.
 #[derive(Clone, Debug)]
 pub enum Persistence {
-    Ephemeral,      // Save to memory only
-    Persistent,     // Save to database / disk
+    Ephemeral,  // Save to memory only
+    Persistent, // Save to database / disk
 }
 
 impl Persistence {
@@ -155,10 +155,30 @@ impl ZoneRouter {
 #[async_trait]
 pub trait StateStorage: Send + Sync {
     async fn update_zone_room_kv(&self, zone_id: ZoneId, room_id: RoomId, key: &str, value: Value) -> AppResult<bool>;
-    async fn update_user_room_kv(&self, zone_id: ZoneId, room_id: RoomId, account_id: AccountId, key: &str, value: Value) -> AppResult<bool>;
+    async fn update_user_room_kv(
+        &self,
+        zone_id: ZoneId,
+        room_id: RoomId,
+        account_id: AccountId,
+        key: &str,
+        value: Value,
+    ) -> AppResult<bool>;
 
-    async fn update_zone_object_kv(&self, zone_id: ZoneId, object_id: ObjectId, key: &str, value: Value) -> AppResult<bool>;
-    async fn update_user_object_kv(&self, zone_id: ZoneId, account_id: AccountId, object_id: ObjectId, key: &str, value: Value) -> AppResult<bool>;
+    async fn update_zone_object_kv(
+        &self,
+        zone_id: ZoneId,
+        object_id: ObjectId,
+        key: &str,
+        value: Value,
+    ) -> AppResult<bool>;
+    async fn update_user_object_kv(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        object_id: ObjectId,
+        key: &str,
+        value: Value,
+    ) -> AppResult<bool>;
 
     // async fn update_inventory(&mut self, room_id: RoomId, obj_id: ObjectId, qty: i32) -> AppResult<bool>;
     // async fn update_xp(&mut self, account_id: AccountId, amount: i32) -> AppResult<bool>;
@@ -185,55 +205,87 @@ impl StateStorage for DbBackend {
     async fn update_zone_room_kv(&self, zone_id: ZoneId, room_id: RoomId, key: &str, value: Value) -> AppResult<bool> {
         let client = self.db.get_client().await?;
 
-        let _ = client.execute(
-            "INSERT INTO zone_room_kv (zone_id, room_id, key, value)
+        let _ = client
+            .execute(
+                "INSERT INTO zone_room_kv (zone_id, room_id, key, value)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (zone_id, room_id, key)
                 DO UPDATE SET value = EXCLUDED.value",
-            &[&zone_id, &room_id, &key, &value],
-        ).await.map_err(DbError::from)?;
+                &[&zone_id, &room_id, &key, &value],
+            )
+            .await
+            .map_err(DbError::from)?;
 
         Ok(true)
     }
 
-    async fn update_user_room_kv(&self, zone_id: ZoneId, room_id: RoomId, account_id: AccountId, key: &str, value: Value) -> AppResult<bool> {
+    async fn update_user_room_kv(
+        &self,
+        zone_id: ZoneId,
+        room_id: RoomId,
+        account_id: AccountId,
+        key: &str,
+        value: Value,
+    ) -> AppResult<bool> {
         let client = self.db.get_client().await?;
 
-        let _ = client.execute(
-            "INSERT INTO user_room_kv (zone_id, room_id, account_id, key, value)
+        let _ = client
+            .execute(
+                "INSERT INTO user_room_kv (zone_id, room_id, account_id, key, value)
                 VALUES ($1, $2, $3, $4, $5)
                 ON CONFLICT (zone_id, room_id, account_id, key)
                 DO UPDATE SET value = EXCLUDED.value",
-            &[&zone_id, &room_id, &account_id, &key, &value],
-        ).await.map_err(DbError::from)?;
+                &[&zone_id, &room_id, &account_id, &key, &value],
+            )
+            .await
+            .map_err(DbError::from)?;
 
         Ok(true)
     }
 
-    async fn update_zone_object_kv(&self, zone_id: ZoneId, object_id: ObjectId, key: &str, value: Value) -> AppResult<bool> {
+    async fn update_zone_object_kv(
+        &self,
+        zone_id: ZoneId,
+        object_id: ObjectId,
+        key: &str,
+        value: Value,
+    ) -> AppResult<bool> {
         let client = self.db.get_client().await?;
 
-        let _ = client.execute(
-            "INSERT INTO zone_object_kv (zone_id, object_id, key, value)
+        let _ = client
+            .execute(
+                "INSERT INTO zone_object_kv (zone_id, object_id, key, value)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (zone_id, object_id, key)
                 DO UPDATE SET value = EXCLUDED.value",
-            &[&zone_id, &object_id, &key, &value],
-        ).await.map_err(DbError::from)?;
+                &[&zone_id, &object_id, &key, &value],
+            )
+            .await
+            .map_err(DbError::from)?;
 
         Ok(true)
     }
 
-    async fn update_user_object_kv(&self, zone_id: ZoneId, account_id: AccountId, object_id: ObjectId, key: &str, value: Value) -> AppResult<bool> {
+    async fn update_user_object_kv(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        object_id: ObjectId,
+        key: &str,
+        value: Value,
+    ) -> AppResult<bool> {
         let client = self.db.get_client().await?;
 
-        let _ = client.execute(
-            "INSERT INTO user_object_kv (zone_id, account_id, object_id, key, value)
+        let _ = client
+            .execute(
+                "INSERT INTO user_object_kv (zone_id, account_id, object_id, key, value)
                 VALUES ($1, $2, $3, $4, $5)
                 ON CONFLICT (zone_id, account_id, object_id, key)
                 DO UPDATE SET value = EXCLUDED.value",
-            &[&zone_id, &account_id, &object_id, &key, &value],
-        ).await.unwrap();
+                &[&zone_id, &account_id, &object_id, &key, &value],
+            )
+            .await
+            .unwrap();
 
         Ok(true)
     }
@@ -241,16 +293,25 @@ impl StateStorage for DbBackend {
     async fn set_current_room(&self, zone_id: ZoneId, account_id: AccountId, to_room: RoomId) -> AppResult<()> {
         let client = self.db.get_client().await?;
 
-        let _ = client.execute(
-            "UPDATE characters SET room_id = $1
+        let _ = client
+            .execute(
+                "UPDATE characters SET room_id = $1
             WHERE zone_id = $2 AND account_id = $3",
-            &[&to_room, &zone_id, &account_id],
-        ).await.map_err(DbError::from)?;
+                &[&to_room, &zone_id, &account_id],
+            )
+            .await
+            .map_err(DbError::from)?;
 
         Ok(())
     }
 
-    async fn record_travel(&self, _zone_id: ZoneId, _account_id: AccountId, _from: RoomId, _to: RoomId) -> AppResult<()> {
+    async fn record_travel(
+        &self,
+        _zone_id: ZoneId,
+        _account_id: AccountId,
+        _from: RoomId,
+        _to: RoomId,
+    ) -> AppResult<()> {
         todo!()
     }
 }
@@ -305,7 +366,6 @@ impl MemoryBackend {
 //     }
 // }
 
-
 #[derive(Default)]
 struct MemZone {
     zone_room_kv: DashMap<RoomId, HashMap<String, String>>,
@@ -319,7 +379,6 @@ struct MemZone {
     // items: DashMap<(AccountId, ObjectId), i32>,
     // health: DashMap<AccountId, i32>,
     // xp: DashMap<AccountId, i32>,
-
     current_room: DashMap<AccountId, RoomId>,
 }
 
@@ -328,16 +387,20 @@ impl StateStorage for MemoryBackend {
     async fn update_zone_room_kv(&self, zone_id: ZoneId, room_id: RoomId, key: &str, value: Value) -> AppResult<bool> {
         let zone = self.zone(zone_id);
 
-        let mut inner = zone
-            .zone_room_kv
-            .entry(room_id)
-            .or_insert_with(HashMap::new);
+        let mut inner = zone.zone_room_kv.entry(room_id).or_insert_with(HashMap::new);
         inner.insert(key.to_string(), serde_to_str(value));
 
         Ok(true)
     }
 
-    async fn update_user_room_kv(&self, zone_id: ZoneId, room_id: RoomId, account_id: AccountId, key: &str, value: Value) -> AppResult<bool> {
+    async fn update_user_room_kv(
+        &self,
+        zone_id: ZoneId,
+        room_id: RoomId,
+        account_id: AccountId,
+        key: &str,
+        value: Value,
+    ) -> AppResult<bool> {
         let zone = self.zone(zone_id);
 
         let mut inner = zone
@@ -349,19 +412,29 @@ impl StateStorage for MemoryBackend {
         Ok(true)
     }
 
-    async fn update_zone_object_kv(&self, zone_id: ZoneId, object_id: ObjectId, key: &str, value: Value) -> AppResult<bool> {
+    async fn update_zone_object_kv(
+        &self,
+        zone_id: ZoneId,
+        object_id: ObjectId,
+        key: &str,
+        value: Value,
+    ) -> AppResult<bool> {
         let zone = self.zone(zone_id);
 
-        let mut inner = zone
-            .zone_object_kv
-            .entry(object_id)
-            .or_insert_with(HashMap::new);
+        let mut inner = zone.zone_object_kv.entry(object_id).or_insert_with(HashMap::new);
         inner.insert(key.to_string(), serde_to_str(value));
 
         Ok(true)
     }
 
-    async fn update_user_object_kv(&self, zone_id: ZoneId, account_id: AccountId, object_id: ObjectId, key: &str, value: Value) -> AppResult<bool>{
+    async fn update_user_object_kv(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        object_id: ObjectId,
+        key: &str,
+        value: Value,
+    ) -> AppResult<bool> {
         let zone = self.zone(zone_id);
 
         let mut inner = zone
@@ -380,7 +453,13 @@ impl StateStorage for MemoryBackend {
         Ok(())
     }
 
-    async fn record_travel(&self, _zone_id: ZoneId, _account_id: AccountId, _from: RoomId, _to: RoomId) -> AppResult<()> {
+    async fn record_travel(
+        &self,
+        _zone_id: ZoneId,
+        _account_id: AccountId,
+        _from: RoomId,
+        _to: RoomId,
+    ) -> AppResult<()> {
         // @TODO: We don't track travel history in memory for now
         Ok(())
     }

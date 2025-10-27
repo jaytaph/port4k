@@ -1,24 +1,24 @@
 use crate::db::DbResult;
 use crate::db::error::DbError;
+use crate::lua::ScriptHook;
+use crate::models::room_helpers::{compute_object_visible, merge_kv, resolve_bool, resolve_qty, str_is_truthy};
 use crate::models::types::{BlueprintId, Direction, ExitId, HintId, ObjectId, RoomId};
+use crate::util::serde::serde_to_str;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tokio_postgres::Row;
 use uuid::Uuid;
-use crate::lua::ScriptHook;
-use crate::models::room_helpers::{compute_object_visible, merge_kv, resolve_bool, resolve_qty, str_is_truthy};
-use crate::util::serde::serde_to_str;
 
 /// Hints that a user can request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hint {
-    pub id: String,             // Unique ID (in the room)
-    pub once: Option<bool>,     // Only show once
+    pub id: String,         // Unique ID (in the room)
+    pub once: Option<bool>, // Only show once
     pub text: String,
-    pub when: String,           // first_look, enter, search, after_fail
-    pub cooldown: Option<u32>,  // seconds; null = no cooldown
+    pub when: String,          // first_look, enter, search, after_fail
+    pub cooldown: Option<u32>, // seconds; null = no cooldown
 }
 
 /// Blueprint room model for `bp_rooms`. There are no zone or user overlays in here
@@ -187,9 +187,7 @@ pub struct Kv {
 
 impl Kv {
     pub(crate) fn new() -> Self {
-        Kv {
-            inner: HashMap::new(),
-        }
+        Kv { inner: HashMap::new() }
     }
 
     pub(crate) fn get_bool(&self, key: &str, default: bool) -> bool {
@@ -200,10 +198,7 @@ impl Kv {
     }
 
     pub(crate) fn get_num<T: FromStr>(&self, key: &str, default: T) -> T {
-        self.inner
-            .get(key)
-            .and_then(|v| v.parse::<T>().ok())
-            .unwrap_or(default)
+        self.inner.get(key).and_then(|v| v.parse::<T>().ok()).unwrap_or(default)
     }
 
     pub fn try_from_rows(rows: &[Row]) -> DbResult<Self> {
@@ -277,9 +272,7 @@ impl RoomView {
     // }
 
     pub fn object_by_key(&self, obj_key: &str) -> Option<&ResolvedObject> {
-        self.objects_by_key
-            .get(obj_key)
-            .and_then(|&idx| self.objects.get(idx))
+        self.objects_by_key.get(obj_key).and_then(|&idx| self.objects.get(idx))
     }
 
     pub fn object_by_noun(&self, noun: &str) -> Option<&ResolvedObject> {
@@ -288,7 +281,6 @@ impl RoomView {
             .find(|o| o.name.eq_ignore_ascii_case(noun) || o.nouns.iter().any(|n| n.eq_ignore_ascii_case(noun)))
     }
 }
-
 
 /// Builds up a complete room view by assembling blueprint, zone, and user data.
 pub(crate) fn build_room_view_impl(
@@ -351,7 +343,7 @@ pub(crate) fn build_room_view_impl(
         let kv = merge_kv(
             &o.object_kv,
             zone_obj_kv.get(&key).unwrap_or(&Kv::default()),
-            user_obj_kv.get(&key).unwrap_or(&Kv::default())
+            user_obj_kv.get(&key).unwrap_or(&Kv::default()),
         );
         let qty = resolve_qty(
             o.initial_qty.unwrap_or(1),
@@ -427,7 +419,6 @@ pub(crate) fn build_room_view_impl(
     }
 }
 
-
 // Allowed 'when' values; tweak as you like
 const ALLOWED_WHEN: &[&str] = &["first_look", "enter", "search", "after_fail", "manual"];
 
@@ -498,9 +489,9 @@ fn parse_hints_value(hints: Option<Value>) -> DbResult<Vec<Hint>> {
 /// Exit flags
 #[derive(Default, Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct ExitFlags {
-    pub locked: bool,               // Exit is locked and cannot be passed
-    pub hidden: bool,               // Exit is invisible to the player
-    pub visible_when_locked: bool,  // Exit is visible even when locked
+    pub locked: bool,              // Exit is locked and cannot be passed
+    pub hidden: bool,              // Exit is invisible to the player
+    pub visible_when_locked: bool, // Exit is visible even when locked
 }
 
 impl ExitFlags {
@@ -515,11 +506,11 @@ impl ExitFlags {
 
 #[derive(Default, Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct ObjectFlags {
-    pub locked: bool,       // Can't interact until unlocked
-    pub hidden: bool,       // Invisible to the player if true
-    pub revealed: bool,     // Has been discovered by the player
-    pub takeable: bool,     // Can be picked up
-    pub stackable: bool,    // Can be stacked in inventory (coins etc.)
+    pub locked: bool,    // Can't interact until unlocked
+    pub hidden: bool,    // Invisible to the player if true
+    pub revealed: bool,  // Has been discovered by the player
+    pub takeable: bool,  // Can be picked up
+    pub stackable: bool, // Can be stacked in inventory (coins etc.)
 }
 
 impl ObjectFlags {
@@ -528,14 +519,13 @@ impl ObjectFlags {
     }
 }
 
-
 /// Resolved exit that takes into account the zone and the player's overlays
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedExit {
-    pub direction: Direction,       // Direction of the exit
-    pub from_room_id: RoomId,       // From Room ID
+    pub direction: Direction, // Direction of the exit
+    pub from_room_id: RoomId, // From Room ID
     pub from_room_key: String,
-    pub to_room_id: RoomId,         // To Room ID
+    pub to_room_id: RoomId, // To Room ID
     pub to_room_key: String,
     pub flags: ExitFlags,
 }
@@ -570,8 +560,6 @@ pub struct ResolvedObject {
     pub qty: i32,
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -579,9 +567,15 @@ mod tests {
 
     // ---------- test helpers (local to tests) ----------
     // Helper: make a RoomId/ObjectId with a stable UUID for deterministic snapshots
-    fn rid() -> RoomId { RoomId(Uuid::from_u128(1)) }
-    fn rid_b() -> RoomId { RoomId(Uuid::from_u128(2)) }
-    fn oid() -> ObjectId { ObjectId(Uuid::from_u128(3)) }
+    fn rid() -> RoomId {
+        RoomId(Uuid::from_u128(1))
+    }
+    fn rid_b() -> RoomId {
+        RoomId(Uuid::from_u128(2))
+    }
+    fn oid() -> ObjectId {
+        ObjectId(Uuid::from_u128(3))
+    }
 
     // Helper: construct a minimal BlueprintRoom (used by build_room_view tests)
     fn mk_room() -> BlueprintRoom {
@@ -635,7 +629,9 @@ mod tests {
 
     // Helper: Kv builder from (&str, &str) pairs
     fn kv(pairs: &[(&str, &str)]) -> Kv {
-        Kv { inner: pairs.iter().map(|(k,v)| (k.to_string(), v.to_string())).collect() }
+        Kv {
+            inner: pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+        }
     }
 
     // ---------- normalize_when() ----------
@@ -716,16 +712,26 @@ mod tests {
     #[test]
     fn exit_flags_is_visible_matrix() {
         // From: ExitFlags::is_visible()
-        let mut f = ExitFlags { locked: false, hidden: false, visible_when_locked: false };
+        let mut f = ExitFlags {
+            locked: false,
+            hidden: false,
+            visible_when_locked: false,
+        };
         assert!(f.is_visible(), "unlocked + not hidden => visible");
 
-        f.locked = true; f.hidden = false; f.visible_when_locked = false;
+        f.locked = true;
+        f.hidden = false;
+        f.visible_when_locked = false;
         assert!(!f.is_visible(), "locked + not visible when locked => hidden");
 
-        f.locked = true; f.hidden = false; f.visible_when_locked = true;
+        f.locked = true;
+        f.hidden = false;
+        f.visible_when_locked = true;
         assert!(f.is_visible(), "locked + visible_when_locked => visible");
 
-        f.locked = false; f.hidden = true; f.visible_when_locked = true;
+        f.locked = false;
+        f.hidden = true;
+        f.visible_when_locked = true;
         assert!(!f.is_visible(), "hidden overrides visibility");
     }
 
@@ -733,13 +739,21 @@ mod tests {
     #[test]
     fn object_flags_is_visible_matrix() {
         // From: ObjectFlags::is_visible()
-        let mut f = ObjectFlags { locked: false, hidden: false, revealed: false, takeable: true, stackable: false };
+        let mut f = ObjectFlags {
+            locked: false,
+            hidden: false,
+            revealed: false,
+            takeable: true,
+            stackable: false,
+        };
         assert!(f.is_visible(), "not hidden => visible");
 
-        f.hidden = true; f.revealed = false;
+        f.hidden = true;
+        f.revealed = false;
         assert!(!f.is_visible(), "hidden && not revealed => not visible");
 
-        f.hidden = true; f.revealed = true;
+        f.hidden = true;
+        f.revealed = true;
         assert!(f.is_visible(), "revealed pierces hidden");
     }
 
@@ -750,20 +764,23 @@ mod tests {
         let objs = vec![mk_object_wrench()];
         let view = build_room_view_impl(
             &room,
-            &[],               // bp_exits
-            &objs,             // bp_objs
+            &[],                     // bp_exits
+            &objs,                   // bp_objs
             &RoomScripts::default(), // bp_scripts
-            &Kv::default(),    // bp_room_kv
-            &Kv::default(),    // zone_room_kv
-            &HashMap::new(),   // zone_obj_kv
-            &HashMap::new(),   // zone_qty_override
-            &Kv::default(),    // user_room_kv
-            &HashMap::new(),   // user_obj_kv
-            &HashMap::new(),   // user_qty_override
+            &Kv::default(),          // bp_room_kv
+            &Kv::default(),          // zone_room_kv
+            &HashMap::new(),         // zone_obj_kv
+            &HashMap::new(),         // zone_qty_override
+            &Kv::default(),          // user_room_kv
+            &HashMap::new(),         // user_obj_kv
+            &HashMap::new(),         // user_qty_override
         );
 
         assert!(view.object_by_noun("wrench").is_some());
-        assert!(view.object_by_noun("SpAnNeR").is_some(), "matches synonyms case-insensitive");
+        assert!(
+            view.object_by_noun("SpAnNeR").is_some(),
+            "matches synonyms case-insensitive"
+        );
         assert!(view.object_by_noun("tool").is_some());
         assert!(view.object_by_noun("computer").is_none());
     }
@@ -780,9 +797,17 @@ mod tests {
 
         // No overrides: remains locked, but visible (due to visible_when_locked)
         let view = build_room_view_impl(
-            &room, &exits, &[], &RoomScripts::default(), &Kv::default(),
-            &Kv::default(), &HashMap::new(), &HashMap::new(),
-            &Kv::default(), &HashMap::new(), &HashMap::new(),
+            &room,
+            &exits,
+            &[],
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
         );
         let north = &view.exits[0];
         assert!(north.flags.locked);
@@ -791,9 +816,17 @@ mod tests {
         // Zone override unlocks it: exit.north.locked=false
         let zone_kv = kv(&[("exit.north.locked", "false")]);
         let view = build_room_view_impl(
-            &room, &exits, &[], &RoomScripts::default(), &Kv::default(),
-            &zone_kv, &HashMap::new(), &HashMap::new(),
-            &Kv::default(), &HashMap::new(), &HashMap::new(),
+            &room,
+            &exits,
+            &[],
+            &RoomScripts::default(),
+            &Kv::default(),
+            &zone_kv,
+            &HashMap::new(),
+            &HashMap::new(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
         );
         let north = &view.exits[0];
         assert!(!north.flags.locked);
@@ -801,9 +834,17 @@ mod tests {
         // User override wins over zone, locks it again: exit.north.locked=true
         let user_kv = kv(&[("exit.north.locked", "true")]);
         let view = build_room_view_impl(
-            &room, &exits, &[], &RoomScripts::default(), &Kv::default(),
-            &zone_kv, &HashMap::new(), &HashMap::new(),
-            &user_kv, &HashMap::new(), &HashMap::new(),
+            &room,
+            &exits,
+            &[],
+            &RoomScripts::default(),
+            &Kv::default(),
+            &zone_kv,
+            &HashMap::new(),
+            &HashMap::new(),
+            &user_kv,
+            &HashMap::new(),
+            &HashMap::new(),
         );
         let north = &view.exits[0];
         assert!(north.flags.locked);
@@ -811,9 +852,17 @@ mod tests {
         // Explicit visibility override: exit.north.visible=false hides even if visible_when_locked
         let user_kv = kv(&[("exit.north.visible", "false")]);
         let view = build_room_view_impl(
-            &room, &exits, &[], &RoomScripts::default(), &Kv::default(),
-            &Kv::default(), &HashMap::new(), &HashMap::new(),
-            &user_kv, &HashMap::new(), &HashMap::new(),
+            &room,
+            &exits,
+            &[],
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &user_kv,
+            &HashMap::new(),
+            &HashMap::new(),
         );
         let north = &view.exits[0];
         assert!(!north.flags.is_visible(), "explicit visible=false hides it");
@@ -835,9 +884,17 @@ mod tests {
 
         // No overrides -> stays 5
         let view = build_room_view_impl(
-            &room, &[], &bp_objs, &RoomScripts::default(), &Kv::default(),
-            &Kv::default(), &HashMap::new(), &HashMap::new(),
-            &Kv::default(), &HashMap::new(), &HashMap::new(),
+            &room,
+            &[],
+            &bp_objs,
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
         );
         assert_eq!(view.objects[0].qty, 5);
 
@@ -845,9 +902,17 @@ mod tests {
         let mut zone_qty = HashMap::new();
         zone_qty.insert(key.clone(), 12);
         let view = build_room_view_impl(
-            &room, &[], &bp_objs, &RoomScripts::default(), &Kv::default(),
-            &Kv::default(), &HashMap::new(), &zone_qty,
-            &Kv::default(), &HashMap::new(), &HashMap::new(),
+            &room,
+            &[],
+            &bp_objs,
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &zone_qty,
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
         );
         assert_eq!(view.objects[0].qty, 12);
 
@@ -855,9 +920,17 @@ mod tests {
         let mut user_qty = HashMap::new();
         user_qty.insert(key.clone(), 99);
         let view = build_room_view_impl(
-            &room, &[], &bp_objs, &RoomScripts::default(), &Kv::default(),
-            &Kv::default(), &HashMap::new(), &zone_qty,
-            &Kv::default(), &HashMap::new(), &user_qty,
+            &room,
+            &[],
+            &bp_objs,
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &zone_qty,
+            &Kv::default(),
+            &HashMap::new(),
+            &user_qty,
         );
         assert_eq!(view.objects[0].qty, 99);
     }
@@ -873,9 +946,17 @@ mod tests {
 
         // No reveal, compute_object_visible may hide it -> object should be visible iff flags allow.
         let view = build_room_view_impl(
-            &room, &[], &bp_objs, &RoomScripts::default(), &Kv::default(),
-            &Kv::default(), &HashMap::new(), &HashMap::new(),
-            &Kv::default(), &HashMap::new(), &HashMap::new(),
+            &room,
+            &[],
+            &bp_objs,
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
         );
         let f = view.objects[0].flags;
         // We can’t assert exact hidden/visible of compute_object_visible(), but we can assert consistency:
@@ -892,9 +973,17 @@ mod tests {
             m
         };
         let view = build_room_view_impl(
-            &room, &[], &bp_objs, &RoomScripts::default(), &Kv::default(),
-            &Kv::default(), &HashMap::new(), &HashMap::new(),
-            &Kv::default(), &user_obj_kv, &HashMap::new(),
+            &room,
+            &[],
+            &bp_objs,
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &Kv::default(),
+            &user_obj_kv,
+            &HashMap::new(),
         );
         let f = view.objects[0].flags;
         assert!(f.revealed, "revealed overlay applied");
@@ -918,12 +1007,20 @@ mod tests {
                 description: None,
                 visible_when_locked: false,
                 default_locked: false,
-            }
+            },
         ];
         let view = build_room_view_impl(
-            &room, &exits, &[], &RoomScripts::default(), &Kv::default(),
-            &Kv::default(), &HashMap::new(), &HashMap::new(),
-            &Kv::default(), &HashMap::new(), &HashMap::new(),
+            &room,
+            &exits,
+            &[],
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
         );
         assert_eq!(view.exits_by_dir.get(&Direction::North).copied(), Some(0));
         assert_eq!(view.exits_by_dir.get(&Direction::East).copied(), Some(1));

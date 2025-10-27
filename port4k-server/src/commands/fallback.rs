@@ -1,6 +1,6 @@
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use crate::lua::{LuaJob, LUA_CMD_TIMEOUT};
+use crate::lua::{LUA_CMD_TIMEOUT, LuaJob};
 use crate::models::zone::ZoneKind;
 use std::sync::Arc;
 use tokio::sync::oneshot;

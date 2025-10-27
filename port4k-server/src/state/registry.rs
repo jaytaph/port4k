@@ -1,8 +1,8 @@
 use crate::config::Config;
 use crate::db::Db;
-use crate::db::repo::{AccountRepo, AccountRepository, RoomRepository, UserRepo, UserRepository, ZoneRepository};
 use crate::db::repo::RoomRepo;
 use crate::db::repo::ZoneRepo;
+use crate::db::repo::{AccountRepo, AccountRepository, RoomRepository, UserRepo, UserRepository, ZoneRepository};
 use crate::models::account::Account;
 use crate::models::zone::{DbBackend, MemoryBackend, ZoneRouter};
 use crate::services::{
@@ -52,7 +52,11 @@ impl Registry {
         let zone_router = Arc::new(ZoneRouter::new(zone_db, zone_mem));
 
         let blueprint_service = Arc::new(BlueprintService::new(repos.room.clone()));
-        let room_service = Arc::new(RoomService::new(repos.room.clone(), repos.zone.clone(), repos.user.clone()));
+        let room_service = Arc::new(RoomService::new(
+            repos.room.clone(),
+            repos.zone.clone(),
+            repos.user.clone(),
+        ));
 
         let services = Arc::new(Services {
             auth: Arc::new(AuthService::new(repos.account.clone())),

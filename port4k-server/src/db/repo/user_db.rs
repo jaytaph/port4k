@@ -1,12 +1,12 @@
-use std::collections::HashMap;
-use crate::db::{Db, DbResult};
-use std::sync::Arc;
-use serde_json::Value;
 use crate::db::error::DbError;
 use crate::db::repo::UserRepo;
+use crate::db::{Db, DbResult};
 use crate::models::room::Kv;
 use crate::models::types::{AccountId, ExitId, RoomId, ZoneId};
 use crate::util::serde::serde_to_str;
+use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 pub struct UserRepository {
     db: Arc<Db>,
@@ -50,7 +50,6 @@ impl UserRepo for UserRepository {
             )
             .await?;
 
-
         let mut map: HashMap<String, Kv> = HashMap::new();
 
         for row in rows {
@@ -58,15 +57,20 @@ impl UserRepo for UserRepository {
             let kv_key: String = row.get("kv_key");
             let value: serde_json::Value = row.get("value");
 
-            map.entry(object_key)
-                .or_default()
-                .insert(kv_key, serde_to_str(value));
+            map.entry(object_key).or_default().insert(kv_key, serde_to_str(value));
         }
 
         Ok(map)
     }
 
-    async fn inc_room_kv(&self, zone_id: ZoneId, room_id: RoomId, account_id: AccountId, key: &str, inc_by: i64) -> DbResult<i64> {
+    async fn inc_room_kv(
+        &self,
+        zone_id: ZoneId,
+        room_id: RoomId,
+        account_id: AccountId,
+        key: &str,
+        inc_by: i64,
+    ) -> DbResult<i64> {
         let client = self.db.get_client().await?;
 
         let row = client
@@ -83,12 +87,21 @@ impl UserRepo for UserRepository {
             .await?;
 
         let value: Value = row.get("value");
-        let new_value = value.as_i64().ok_or_else(|| DbError::Decode("Cannot decode incremented value".into()))?;
+        let new_value = value
+            .as_i64()
+            .ok_or_else(|| DbError::Decode("Cannot decode incremented value".into()))?;
 
         Ok(new_value)
     }
 
-    async fn set_room_kv(&self, zone_id: ZoneId, room_id: RoomId, account_id: AccountId, key: &str, value: &Value) -> DbResult<()> {
+    async fn set_room_kv(
+        &self,
+        zone_id: ZoneId,
+        room_id: RoomId,
+        account_id: AccountId,
+        key: &str,
+        value: &Value,
+    ) -> DbResult<()> {
         let client = self.db.get_client().await?;
 
         client
@@ -106,7 +119,14 @@ impl UserRepo for UserRepository {
         Ok(())
     }
 
-    async fn set_exit_locked(&self, zone_id: ZoneId, room_id: RoomId, account_id: AccountId, exit_id: ExitId, locked: bool) -> DbResult<()> {
+    async fn set_exit_locked(
+        &self,
+        zone_id: ZoneId,
+        room_id: RoomId,
+        account_id: AccountId,
+        exit_id: ExitId,
+        locked: bool,
+    ) -> DbResult<()> {
         let client = self.db.get_client().await?;
 
         client
@@ -124,4 +144,3 @@ impl UserRepo for UserRepository {
         Ok(())
     }
 }
-

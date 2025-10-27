@@ -1,13 +1,13 @@
 use crate::Registry;
 use crate::lua::LuaJob;
+use crate::net::output::OutputHandle;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use crate::net::output::OutputHandle;
 
 pub mod http;
-pub mod telnet;
 pub mod output;
 pub mod sink;
+pub mod telnet;
 
 #[derive(Clone)]
 struct AppCtx {

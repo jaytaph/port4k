@@ -85,11 +85,7 @@ pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str) -> anyhow::Result<()
             .registry
             .services
             .room
-            .build_room_view(
-                &zone_ctx,
-                account_id,
-                blueprint.entry_room_id,
-            )
+            .build_room_view(&zone_ctx, account_id, blueprint.entry_room_id)
             .await?,
     };
 
@@ -106,7 +102,9 @@ pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str) -> anyhow::Result<()
                 }
                 s.cursor = Some(new_c);
             }
-            ctx.output.system(format!("[playtest] entered recursive blueprint '{bp_key}'")).await;
+            ctx.output
+                .system(format!("[playtest] entered recursive blueprint '{bp_key}'"))
+                .await;
         }
         Next::NotInPlaytest => {
             {
@@ -117,7 +115,9 @@ pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str) -> anyhow::Result<()
                 }
                 s.cursor = Some(new_c);
             }
-            ctx.output.system(format!("[playtest] entered blueprint '{bp_key}'.")).await;
+            ctx.output
+                .system(format!("[playtest] entered blueprint '{bp_key}'."))
+                .await;
         }
     }
 

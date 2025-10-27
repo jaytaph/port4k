@@ -13,10 +13,9 @@ pub use user_db::UserRepository;
 pub use zone_db::ZoneRepository;
 
 pub use account::AccountRepo;
+pub use room::RoomRepo;
 pub use user::UserRepo;
 pub use zone::ZoneRepo;
-pub use room::RoomRepo;
-
 
 /// Even though room_ids are globally unique, we still use a combination of
 /// blueprint key and room key to identify a room sometimes. So we have a combined key

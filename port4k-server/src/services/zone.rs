@@ -18,10 +18,7 @@ pub struct ZoneService {
 }
 
 impl ZoneService {
-    pub fn new(
-        repo: Arc<dyn ZoneRepo>,
-        room_service: Arc<RoomService>,
-    ) -> Self {
+    pub fn new(repo: Arc<dyn ZoneRepo>, room_service: Arc<RoomService>) -> Self {
         Self { repo, room_service }
     }
 
@@ -34,7 +31,10 @@ impl ZoneService {
         // Get the room from the zone's blueprint to ensure it exists
         let zone_ctx = ctx.zone_ctx()?;
 
-        let rv = self.room_service.build_room_view(&zone_ctx, account.id, room_id).await?;
+        let rv = self
+            .room_service
+            .build_room_view(&zone_ctx, account.id, room_id)
+            .await?;
 
         Ok(Cursor {
             zone_id: zone_ctx.zone.id,

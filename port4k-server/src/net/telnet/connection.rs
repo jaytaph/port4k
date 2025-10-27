@@ -1,24 +1,24 @@
-use std::collections::HashSet;
 use crate::commands::CmdCtx;
 use crate::error::AppResult;
 use crate::input::readline::{EditEvent, LineEditor};
+use crate::lua::{LuaJob, LuaResult};
 use crate::models::account::Account;
 use crate::net::AppCtx;
+use crate::net::output::OutputHandle;
 use crate::util::telnet::{TelnetIn, TelnetMachine};
 use crate::{ConnState, Registry, Session, process_command};
 use parking_lot::RwLock;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, BufReader};
 use tokio::net::tcp::OwnedReadHalf;
 use tokio::sync::oneshot;
-use crate::lua::{LuaJob, LuaResult};
-use crate::net::output::OutputHandle;
 
 pub async fn handle_connection(
     read_half: OwnedReadHalf,
     ctx: Arc<AppCtx>,
     telnet: &mut TelnetMachine,
-    sess: Arc<RwLock<Session>>
+    sess: Arc<RwLock<Session>>,
 ) -> AppResult<()> {
     let mut reader = BufReader::new(read_half);
     let mut editor = LineEditor::new("> ");
@@ -54,12 +54,8 @@ async fn read_loop(
 
         if let Some(evt) = response.event {
             match evt {
-                TelnetIn::Data(b) => {
-                    handle_data_byte(b, reader, telnet, editor, sess.clone(), ctx.clone()).await?
-                },
-                TelnetIn::Naws { cols, rows } => {
-                    handle_naws(cols, rows, sess.clone()).await
-                },
+                TelnetIn::Data(b) => handle_data_byte(b, reader, telnet, editor, sess.clone(), ctx.clone()).await?,
+                TelnetIn::Naws { cols, rows } => handle_naws(cols, rows, sess.clone()).await,
             }
         }
     }
@@ -99,7 +95,7 @@ async fn handle_data_byte(
                 handle_repl_input(raw, ctx.clone(), sess.clone()).await?;
                 // ctx.output.line("\n\n").await;
                 update_prompt(sess.clone(), ctx.output.clone(), editor).await;
-                return Ok(())
+                return Ok(());
             }
 
             // // Move to a fresh line before emitting any output
@@ -175,10 +171,11 @@ async fn try_handle_login(
     };
 
     if !ctx.registry.services.account.exists(username).await? {
-        ctx.output.system("No such user. Try `register <name> <password>`.").await;
+        ctx.output
+            .system("No such user. Try `register <name> <password>`.")
+            .await;
         return Ok(LoginOutcome::Handled);
     }
-
 
     // We need special handling here to avoid echoing the password
     ctx.output.system("Password: ").await;
@@ -199,7 +196,9 @@ async fn try_handle_login(
     }
     ctx.registry.set_online(&account, true).await;
 
-    ctx.output.system(format!("Welcome, {}! Type `look` or `help`.", account.username)).await;
+    ctx.output
+        .system(format!("Welcome, {}! Type `look` or `help`.", account.username))
+        .await;
     Ok(LoginOutcome::Handled)
 }
 
@@ -208,7 +207,7 @@ fn generate_prompt(sess: Arc<RwLock<Session>>, prompt: &str) -> String {
     if s.in_lua_repl {
         return "lua> ".to_string();
     }
-    
+
     prompt.to_string()
 
     // // No room view vars in prompt generation
@@ -225,7 +224,6 @@ async fn update_prompt(sess: Arc<RwLock<Session>>, output: OutputHandle, editor:
 
     output.prompt(editor.repaint_line()).await;
 }
-
 
 /// Read a single line (CR or LF) from the Telnet stream WITHOUT echoing.
 /// Backspace/Delete are handled locally. NAWS events update the session.
@@ -281,12 +279,7 @@ async fn read_secret_line(
     Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
-
-async fn handle_repl_input(
-    raw: &str,
-    ctx: Arc<AppCtx>,
-    sess: Arc<RwLock<Session>>,
-) -> AppResult<()> {
+async fn handle_repl_input(raw: &str, ctx: Arc<AppCtx>, sess: Arc<RwLock<Session>>) -> AppResult<()> {
     if matches!(raw, ".quit" | ".exit" | ".q") {
         {
             let mut s = sess.write();
@@ -298,7 +291,9 @@ async fn handle_repl_input(
     }
 
     if raw == ".help" {
-        ctx.output.system("Lua REPL commands:\n.quit, .exit, .q - Exit REPL\n.help - Show this help").await;
+        ctx.output
+            .system("Lua REPL commands:\n.quit, .exit, .q - Exit REPL\n.help - Show this help")
+            .await;
         return Ok(());
     }
 
@@ -358,11 +353,7 @@ fn format_lua_value_impl(value: &mlua::Value, indent: usize, seen: &mut HashSet<
     }
 }
 
-fn print_lua_table(
-    table: &mlua::Table,
-    indent: usize,
-    seen: &mut HashSet<usize>,
-) -> String {
+fn print_lua_table(table: &mlua::Table, indent: usize, seen: &mut HashSet<usize>) -> String {
     // Get a unique identifier for this table to detect cycles
     let table_ptr = table.to_pointer() as usize;
 
@@ -462,9 +453,8 @@ fn is_valid_lua_identifier(s: &str) -> bool {
 
     // Check if it's a Lua keyword
     const LUA_KEYWORDS: &[&str] = &[
-        "and", "break", "do", "else", "elseif", "end", "false", "for", "function",
-        "if", "in", "local", "nil", "not", "or", "repeat", "return", "then",
-        "true", "until", "while",
+        "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "if", "in", "local", "nil", "not",
+        "or", "repeat", "return", "then", "true", "until", "while",
     ];
 
     if LUA_KEYWORDS.contains(&s) {

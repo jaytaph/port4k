@@ -1,6 +1,7 @@
 use crate::db::error::DbError;
 use crate::error::{AppResult, DomainError, InfraError};
 use crate::hardening::{ALLOWED_DIRS, FORBIDDEN_LUA_TOKENS, MAX_LUA_BYTES};
+use crate::lua::ScriptHook;
 use crate::models::types::BlueprintId;
 use crate::util::{list_yaml_files_guarded, resolve_content_subdir};
 use mlua::Lua;
@@ -9,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::{fs, path::Path};
 use tokio_postgres::Transaction;
-use crate::lua::ScriptHook;
 
 // ====== v3 YAML models ======
 
@@ -196,8 +196,13 @@ pub async fn import_blueprint_sub_dir(
     for (idx, r) in rooms.iter().enumerate() {
         let from_room_id = *room_ids.get(&r.id).unwrap();
         if !r.exits.is_empty() {
-            print!("  [{}/{}] Creating {} exit(s) from '{}'...",
-                   idx + 1, rooms.len(), r.exits.len(), r.id);
+            print!(
+                "  [{}/{}] Creating {} exit(s) from '{}'...",
+                idx + 1,
+                rooms.len(),
+                r.exits.len(),
+                r.id
+            );
             upsert_exits(&tx, from_room_id, &r.exits, &room_ids).await?;
             println!(" ✓");
         }
@@ -258,8 +263,8 @@ async fn upsert_room_kv(
             "#,
             &[&room_id, k, v],
         )
-            .await
-            .map_err(DbError::from)?;
+        .await
+        .map_err(DbError::from)?;
     }
     Ok(())
 }
@@ -326,8 +331,8 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
                 "#,
                 &[&obj_id, k, v],
             )
-                .await
-                .map_err(DbError::from)?;
+            .await
+            .map_err(DbError::from)?;
         }
 
         // nouns
@@ -340,8 +345,8 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
                 "#,
                 &[&room_id, &obj_id, n],
             )
-                .await
-                .map_err(DbError::from)?;
+            .await
+            .map_err(DbError::from)?;
         }
     }
 
@@ -359,8 +364,8 @@ async fn upsert_room_scripts(tx: &Transaction<'_>, room_id: uuid::Uuid, scripts:
             "#,
             &[&room_id, &hook.as_str(), &script],
         )
-            .await
-            .map_err(DbError::from)?;
+        .await
+        .map_err(DbError::from)?;
     }
     Ok(())
 }
@@ -397,8 +402,8 @@ async fn upsert_exits(
                 &ex.visible_when_locked,
             ],
         )
-            .await
-            .map_err(DbError::from)?;
+        .await
+        .map_err(DbError::from)?;
     }
     Ok(())
 }

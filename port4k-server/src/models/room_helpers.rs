@@ -47,7 +47,6 @@ use crate::models::room::{Kv, KvResolved};
 //     }
 // }
 
-
 #[inline]
 pub fn resolve_qty(bp_default: i32, zone_override: Option<i32>, user_override: Option<i32>) -> i32 {
     let v = user_override.or(zone_override).unwrap_or(bp_default);

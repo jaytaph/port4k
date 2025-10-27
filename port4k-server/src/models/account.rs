@@ -1,20 +1,20 @@
-use std::error::Error;
-use bytes;
-use postgres_types::{FromSql, IsNull, ToSql, Type};
-use postgres_types::private::BytesMut;
-use serde::{Deserialize, Serialize};
 use crate::db::DbResult;
 use crate::db::error::DbError;
 use crate::error::{AppResult, DomainError};
-use crate::models::types::{AccountId, RoomId, ZoneId};
-use tokio_postgres::Row;
 use crate::models::inventory::{Inventory, InventoryItem};
+use crate::models::types::{AccountId, RoomId, ZoneId};
+use bytes;
+use postgres_types::private::BytesMut;
+use postgres_types::{FromSql, IsNull, ToSql, Type};
+use serde::{Deserialize, Serialize};
+use std::error::Error;
+use tokio_postgres::Row;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AccountRole {
-    Admin,          // Can do everything
-    Builder,        // Can build new rooms / blueprints
-    User,           // Regular user
+    Admin,   // Can do everything
+    Builder, // Can build new rooms / blueprints
+    User,    // Regular user
 }
 
 impl ToSql for AccountRole {
@@ -41,10 +41,7 @@ impl ToSql for AccountRole {
 }
 
 impl FromSql<'_> for AccountRole {
-    fn from_sql(
-        ty: &postgres_types::Type,
-        raw: &[u8],
-    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+    fn from_sql(ty: &postgres_types::Type, raw: &[u8]) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
         let s = String::from_sql(ty, raw)?;
         match s.as_str() {
             "admin" => Ok(AccountRole::Admin),
@@ -137,8 +134,6 @@ impl Account {
     }
 }
 
-
-
 pub struct UserZoneData {
     /// Account ID of the user
     pub account_id: AccountId,
@@ -194,7 +189,8 @@ impl UserZoneData {
             coins,
             inventory: Inventory {
                 items,
-                max_item_count: row.try_get::<_, i32>("max_item_count")?
+                max_item_count: row
+                    .try_get::<_, i32>("max_item_count")?
                     .try_into()
                     .map_err(|_| DbError::Decode("max_item_count < 0".into()))?,
             },

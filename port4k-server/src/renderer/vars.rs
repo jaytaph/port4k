@@ -46,7 +46,10 @@ fn get_global_vars(sess: Arc<RwLock<Session>>) -> HashMap<String, String> {
     }
     if let Some(cursor) = sess.read().cursor.as_ref() {
         vars.insert("cursor.zone".to_string(), cursor.zone_ctx.zone.title.to_string());
-        vars.insert("cursor.room.title".to_string(), cursor.room_view.blueprint.title.to_string());
+        vars.insert(
+            "cursor.room.title".to_string(),
+            cursor.room_view.blueprint.title.to_string(),
+        );
         // vars.insert("cursor.view".to_string(), cursor.room.title.to_string());
     }
 
@@ -96,7 +99,9 @@ fn push(vars: &mut HashMap<String, String>, key: &str, val: impl ToString) {
 }
 
 #[inline] // (from: get_roomview_vars)
-fn yesno(b: bool) -> &'static str { if b { "true" } else { "false" } }
+fn yesno(b: bool) -> &'static str {
+    if b { "true" } else { "false" }
+}
 
 // #[inline]
 // fn join_list(vs: &[String]) -> String {
@@ -127,7 +132,7 @@ pub fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
 
     // Room basics
     push(&mut vars, "title", &rv.blueprint.title);
-    push(&mut vars, "body",  &rv.blueprint.body);
+    push(&mut vars, "body", &rv.blueprint.body);
 
     // --------------------
     // Exits (aggregate)
@@ -135,11 +140,15 @@ pub fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
     let mut exit_dirs: Vec<String> = rv.exits.iter().map(|e| e.direction.to_string()).collect();
     exit_dirs.sort(); // stable output for deterministic templates
 
-    let exits_line = if exit_dirs.is_empty() { "none".to_string() } else { exit_dirs.join(", ") };
+    let exits_line = if exit_dirs.is_empty() {
+        "none".to_string()
+    } else {
+        exit_dirs.join(", ")
+    };
     push(&mut vars, "exits_line", &exits_line);
-    push(&mut vars, "exits",      &exits_line); // keep your original alias
+    push(&mut vars, "exits", &exits_line); // keep your original alias
     push(&mut vars, "exit_count", exit_dirs.len());
-    push(&mut vars, "has_exits",  yesno(!exit_dirs.is_empty()));
+    push(&mut vars, "has_exits", yesno(!exit_dirs.is_empty()));
 
     // Per-exit presence flags like exit.north.present=1
     for d in &exit_dirs {
@@ -152,11 +161,15 @@ pub fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
     let mut all_objs: Vec<String> = rv.objects.iter().map(|o| o.name.to_string()).collect();
     all_objs.sort();
 
-    let items_line = if all_objs.is_empty() { "none".to_string() } else { all_objs.join(", ") };
+    let items_line = if all_objs.is_empty() {
+        "none".to_string()
+    } else {
+        all_objs.join(", ")
+    };
     push(&mut vars, "items_line", &items_line);
-    push(&mut vars, "items",      &items_line); // keep your original alias
+    push(&mut vars, "items", &items_line); // keep your original alias
     push(&mut vars, "item_count", all_objs.len());
-    push(&mut vars, "has_items",  yesno(!all_objs.is_empty()));
+    push(&mut vars, "has_items", yesno(!all_objs.is_empty()));
 
     let mut visible_objs: Vec<String> = rv
         .objects
@@ -166,11 +179,15 @@ pub fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
         .collect();
     visible_objs.sort();
 
-    let visible_line = if visible_objs.is_empty() { "none".to_string() } else { visible_objs.join(", ") };
+    let visible_line = if visible_objs.is_empty() {
+        "none".to_string()
+    } else {
+        visible_objs.join(", ")
+    };
     push(&mut vars, "visible_items_line", &visible_line);
-    push(&mut vars, "visible_items",      &visible_line);
+    push(&mut vars, "visible_items", &visible_line);
     push(&mut vars, "visible_item_count", visible_objs.len());
-    push(&mut vars, "has_visible_items",  yesno(!visible_objs.is_empty()));
+    push(&mut vars, "has_visible_items", yesno(!visible_objs.is_empty()));
 
     for o in &rv.objects {
         // let key = slug(&o.name);
@@ -178,7 +195,11 @@ pub fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
         push(&mut vars, &format!("obj.{}.name", key), &o.name);
         push(&mut vars, &format!("obj.{}.short", key), &o.short);
         push(&mut vars, &format!("obj.{}.description", key), &o.description);
-        push(&mut vars, &format!("obj.{}.examine", key), o.examine.as_deref().unwrap_or("You see nothing special."));
+        push(
+            &mut vars,
+            &format!("obj.{}.examine", key),
+            o.examine.as_deref().unwrap_or("You see nothing special."),
+        );
         push(&mut vars, &format!("obj.{}.visible", key), yesno(o.flags.is_visible()));
         push(&mut vars, &format!("obj.{}.quantity", key), o.qty);
         push(&mut vars, &format!("obj.{}.locked", key), yesno(o.flags.locked));

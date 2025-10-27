@@ -31,7 +31,9 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
             let to_key = parse_bp_room_key(to_key).ok_or(CommandError::Custom("to must be <bp>:<room>".into()))?;
 
             if from_key.bp_key != to_key.bp_key {
-                ctx.output.system("[bp] exits must stay within the same blueprint.").await;
+                ctx.output
+                    .system("[bp] exits must stay within the same blueprint.")
+                    .await;
                 return Ok(());
             }
 

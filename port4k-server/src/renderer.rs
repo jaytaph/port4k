@@ -1,18 +1,18 @@
 mod ansi;
 mod parser;
 
+mod objects;
 pub mod room_view;
 pub mod vars;
-mod objects;
 
 use crate::Session;
 use crate::renderer::parser::Alignment;
+use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 pub use parser::{Token, VarFmt};
+use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;
-use once_cell::sync::Lazy;
-use regex::Regex;
 
 /// How many passes we allow for nested expansions (vars -> {o:..} -> colors -> ...)
 const MAX_PASSES: usize = 3;
@@ -159,9 +159,7 @@ fn render_single_pass(template: &str, vars: &RenderVars, opts: &RenderOptions) -
 }
 
 /// Regex for {o:<id>} tokens. <id> allows [A-Za-z0-9_-]
-static O_TAG_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\{(?:o|obj):([A-Za-z0-9_\-]+)\}").unwrap()
-});
+static O_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{(?:o|obj):([A-Za-z0-9_\-]+)\}").unwrap());
 
 /// Resolve object labels for {o:id}. We try a few common key shapes so you
 /// don't have to change your `RenderVars` right away:
@@ -171,7 +169,10 @@ fn resolve_object_label(id: &str, vars: &RenderVars) -> Option<String> {
     let k1 = format!("obj.{}.short", id);
     let k2 = format!("obj.{}", id);
 
-    vars.room_view.get(&k1).cloned().or_else(|| vars.room_view.get(&k2).cloned())
+    vars.room_view
+        .get(&k1)
+        .cloned()
+        .or_else(|| vars.room_view.get(&k2).cloned())
 }
 
 /// Replace {o:id} with a nicely highlighted label.
@@ -262,20 +263,28 @@ fn pad_string(s: &str, width: usize, alignment: Alignment) -> String {
             let left_pad = pad / 2;
             let right_pad = pad - left_pad;
             let mut out = String::with_capacity(width);
-            for _ in 0..left_pad { out.push(' '); }
+            for _ in 0..left_pad {
+                out.push(' ');
+            }
             out.push_str(s);
-            for _ in 0..right_pad { out.push(' '); }
+            for _ in 0..right_pad {
+                out.push(' ');
+            }
             out
         }
         Alignment::Left => {
             let mut out = String::with_capacity(width);
             out.push_str(s);
-            for _ in 0..pad { out.push(' '); }
+            for _ in 0..pad {
+                out.push(' ');
+            }
             out
         }
         Alignment::Right => {
             let mut out = String::with_capacity(width);
-            for _ in 0..pad { out.push(' '); }
+            for _ in 0..pad {
+                out.push(' ');
+            }
             out.push_str(s);
             out
         }
@@ -392,11 +401,9 @@ fn process_token(
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn var_default_and_format() {
@@ -445,19 +452,22 @@ mod tests {
         assert_eq!(s, "Hell4       Ada!");
         let s = render_template("Hell5 {v:name|%*9s}!", &vars, 80);
         assert_eq!(s, "Hell5    Ada   !");
-
     }
 
     #[test]
     fn expands_object_token_basic() {
         let mut vars = RenderVars::default();
-        vars.room_view.insert("obj.toolkit.short".into(), "discarded toolkit".into());
+        vars.room_view
+            .insert("obj.toolkit.short".into(), "discarded toolkit".into());
 
         let tpl = "You notice a {o:toolkit} here.";
         let out = super::render_template_with_opts(
             tpl,
             &vars,
-            &RenderOptions { missing_var: MissingVarPolicy::Color, max_width: 80 },
+            &RenderOptions {
+                missing_var: MissingVarPolicy::Color,
+                max_width: 80,
+            },
         );
 
         assert!(!out.contains("{o:toolkit}"));
@@ -467,13 +477,17 @@ mod tests {
     #[test]
     fn expands_object_token_with_dot_variant_key() {
         let mut vars = RenderVars::default();
-        vars.room_view.insert("obj.toolkit.short".into(), "discarded toolkit".into());
+        vars.room_view
+            .insert("obj.toolkit.short".into(), "discarded toolkit".into());
 
         let tpl = "You notice a {o:toolkit} here.";
         let out = super::render_template_with_opts(
             tpl,
             &vars,
-            &RenderOptions { missing_var: MissingVarPolicy::Color, max_width: 80 },
+            &RenderOptions {
+                missing_var: MissingVarPolicy::Color,
+                max_width: 80,
+            },
         );
 
         assert!(!out.contains("{o:toolkit}"));
@@ -483,13 +497,17 @@ mod tests {
     #[test]
     fn multipass_resolves_colors_inside_object_label() {
         let mut vars = RenderVars::default();
-        vars.room_view.insert("obj.map.short".into(), "{c:magenta}patched wall map{c}".into());
+        vars.room_view
+            .insert("obj.map.short".into(), "{c:magenta}patched wall map{c}".into());
 
         let tpl = "On the bulkhead: {o:map}.";
         let out = super::render_template_with_opts(
             tpl,
             &vars,
-            &RenderOptions { missing_var: MissingVarPolicy::Color, max_width: 80 },
+            &RenderOptions {
+                missing_var: MissingVarPolicy::Color,
+                max_width: 80,
+            },
         );
 
         assert!(!out.contains("{o:map}"));
@@ -504,7 +522,10 @@ mod tests {
         let out = super::render_template_with_opts(
             tpl,
             &vars,
-            &RenderOptions { missing_var: MissingVarPolicy::Color, max_width: 80 },
+            &RenderOptions {
+                missing_var: MissingVarPolicy::Color,
+                max_width: 80,
+            },
         );
 
         assert!(out.contains("{o:nonexistent}"));
@@ -519,7 +540,10 @@ mod tests {
         let out = super::render_template_with_opts(
             tpl,
             &vars,
-            &RenderOptions { missing_var: MissingVarPolicy::Color, max_width: 80 },
+            &RenderOptions {
+                missing_var: MissingVarPolicy::Color,
+                max_width: 80,
+            },
         );
 
         assert!(out.contains("{o:loop}"));
@@ -529,14 +553,18 @@ mod tests {
     #[test]
     fn soft_wrap_respects_ansi_and_words() {
         let mut vars = RenderVars::default();
-        vars.global.insert("msg".into(), "Alpha Beta Gamma Delta Epsilon Zeta".into());
+        vars.global
+            .insert("msg".into(), "Alpha Beta Gamma Delta Epsilon Zeta".into());
 
         // Add some ANSI around a word; should not count toward width
         let tpl = "{c:bright_yellow}{v:msg}{c}";
         let s = render_template_with_opts(
             tpl,
             &vars,
-            &RenderOptions { missing_var: MissingVarPolicy::Color, max_width: 20 },
+            &RenderOptions {
+                missing_var: MissingVarPolicy::Color,
+                max_width: 20,
+            },
         );
 
         // Expect at least one newline due to wrapping near 20 visible chars
@@ -607,5 +635,4 @@ mod tests {
         let out = wrap_ansi_aware(s, 80);
         assert_eq!(out, "   foo  \n  bar ");
     }
-
 }

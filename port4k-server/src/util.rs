@@ -5,8 +5,8 @@ use std::path::{Component, Path, PathBuf};
 
 pub mod args;
 pub mod helpers;
-pub mod telnet;
 pub mod serde;
+pub mod telnet;
 
 pub fn resolve_content_subdir(base: &Path, subdir: &str) -> AppResult<PathBuf> {
     let p = Path::new(subdir);

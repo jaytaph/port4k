@@ -1,8 +1,8 @@
 pub mod telnet;
 pub mod websocket;
 
-use async_trait::async_trait;
 use crate::net::output::OutFrame;
+use async_trait::async_trait;
 
 #[async_trait]
 pub trait ClientSink: Send {

@@ -49,13 +49,19 @@ impl AuthService {
 
     pub async fn authenticate(&self, username: &str, password: &str) -> AppResult<Account> {
         let Some(account) = self.repo.get_by_username(username).await? else {
-            warn!("[AuthService] Authentication failed for username '{}': not found", username);
+            warn!(
+                "[AuthService] Authentication failed for username '{}': not found",
+                username
+            );
             return Err(DomainError::NotFound("Account not found".into()));
         };
 
         let parsed = PasswordHash::new(&account.password_hash).map_err(DomainError::Password)?;
         if self.argon.verify_password(password.as_bytes(), &parsed).is_err() {
-            warn!("[AuthService] Authentication failed for username '{}': invalid password", username);
+            warn!(
+                "[AuthService] Authentication failed for username '{}': invalid password",
+                username
+            );
             return Err(DomainError::NotFound("Account not found".into()));
         }
 

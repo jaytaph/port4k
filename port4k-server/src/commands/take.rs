@@ -26,7 +26,11 @@ pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         return Ok(());
     };
 
-    let got = ctx.registry.db.pickup_coins(&account, room_view.blueprint.id, want).await?;
+    let got = ctx
+        .registry
+        .db
+        .pickup_coins(&account, room_view.blueprint.id, want)
+        .await?;
     if got == 0 {
         ctx.output.line("No coins to pick up.").await;
         return Ok(());

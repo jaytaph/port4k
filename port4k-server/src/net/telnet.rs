@@ -11,10 +11,10 @@ use crate::{Registry, Session};
 use parking_lot::RwLock;
 use std::sync::Arc;
 // use std::time::Duration;
-use tokio::sync::mpsc;
 use crate::banner::{BANNER, ENTRY};
 use crate::net::output::init_session_for_telnet;
 use crate::net::telnet::crlf_wrapper::CrlfWriter;
+use tokio::sync::mpsc;
 // use crate::net::telnet::slow_writer::{Pace, SlowWriter};
 use crate::util::telnet::TelnetMachine;
 
@@ -57,7 +57,6 @@ async fn handle_telnet_connection(
     registry: Arc<Registry>,
     lua_tx: mpsc::Sender<LuaJob>,
 ) -> AppResult<()> {
-
     let (read_half, write_half) = stream.into_split();
 
     // Wrap write half with CRLF conversion and pacing
@@ -81,7 +80,6 @@ async fn handle_telnet_connection(
     io_bundle.output.system(BANNER).await;
     io_bundle.output.system(ENTRY).await;
     io_bundle.output.prompt("> ".to_string()).await;
-
 
     let ctx = Arc::new(AppCtx {
         registry: registry.clone(),

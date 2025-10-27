@@ -1,7 +1,7 @@
-use async_trait::async_trait;
-use tokio::io::AsyncWriteExt;
 use crate::net::output::OutFrame;
 use crate::net::sink::ClientSink;
+use async_trait::async_trait;
+use tokio::io::AsyncWriteExt;
 
 pub struct TelnetSink<W> {
     writer: W,
@@ -30,7 +30,7 @@ where
             }
             OutFrame::System(s) => {
                 let lines: Vec<&str> = s.lines().collect();
-                let mut last_color = String::new();  // ansi color code tracking
+                let mut last_color = String::new(); // ansi color code tracking
                 for line in &lines {
                     self.writer.write_all(b"\x1b[93m[SRV]\x1b[0m ").await?; // yellow [SRV] marker
 
@@ -43,7 +43,7 @@ where
 
                     match extract_last_color_code(line) {
                         Some(code) => last_color = code,
-                        None => { }, // No ansi colors found, just keep last_color as is
+                        None => {} // No ansi colors found, just keep last_color as is
                     }
                 }
                 self.writer.write_all(b"\r\n").await?;
@@ -72,7 +72,6 @@ where
         Ok(())
     }
 }
-
 
 /// Extract the last SGR (Select Graphic Rendition) ANSI escape code from a line.
 fn extract_last_color_code(line: &str) -> Option<String> {

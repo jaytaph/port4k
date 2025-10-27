@@ -21,28 +21,33 @@ pub enum VarFmt {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Scope {
-    Global,  // {v:...}
-    Room,    // {rv:...}
-    Object,  // {o:...}
+    Global, // {v:...}
+    Room,   // {rv:...}
+    Object, // {o:...}
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VarToken {
-    pub raw: String,              // original "{...}"
+    pub raw: String, // original "{...}"
     pub scope: Scope,
-    pub key: String,              // for o: "door.short" or just "door"
+    pub key: String, // for o: "door.short" or just "door"
     pub default: Option<String>,
     pub fmt: Option<VarFmt>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DebugScope { All, Global, Room, Object }
+pub enum DebugScope {
+    All,
+    Global,
+    Room,
+    Object,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DebugKey {
-    None, // whole scope
-    Var(String),                          // v/rv
-    Object(String),                       // o:name
+    None,                                      // whole scope
+    Var(String),                               // v/rv
+    Object(String),                            // o:name
     ObjectProp { name: String, prop: String }, // o:name.prop
 }
 
@@ -58,7 +63,11 @@ pub struct DebugToken {
 pub enum Token {
     Text(String),
     /// {c:...}
-    Color { fg: Option<String>, bg: Option<String>, attrs: Vec<String> },
+    Color {
+        fg: Option<String>,
+        bg: Option<String>,
+        attrs: Vec<String>,
+    },
     ColorReset,
     /// {v:..}/{rv:..}/{o:..}
     Var(VarToken),
@@ -146,16 +155,16 @@ fn parse_token(raw: String, content: String) -> Token {
 
     match tag {
         // (global) variables
-        "v" | "var"  => parse_var_like(raw, rest.unwrap_or(""), Scope::Global),
+        "v" | "var" => parse_var_like(raw, rest.unwrap_or(""), Scope::Global),
         // Room variables
         "rv" | "room" => parse_var_like(raw, rest.unwrap_or(""), Scope::Room),
         // Objects
-        "o" | "obj" | "object"  => parse_var_like(raw, rest.unwrap_or(""), Scope::Object),
+        "o" | "obj" | "object" => parse_var_like(raw, rest.unwrap_or(""), Scope::Object),
         // Colors
         "c" | "col" | "color" => parse_color(raw, rest),
         // Debug
         "dbg" | "debug" => parse_dbg(raw, rest.unwrap_or("")),
-        _    => Token::Unknown(raw),
+        _ => Token::Unknown(raw),
     }
 }
 
@@ -179,7 +188,13 @@ fn parse_var_like(raw: String, rest: &str, scope: Scope) -> Token {
     let key = parts.next().unwrap_or("").trim().to_string();
     let default = parts.next().map(|s| s.to_string());
 
-    Token::Var(VarToken { raw, scope, key, default, fmt })
+    Token::Var(VarToken {
+        raw,
+        scope,
+        key,
+        default,
+        fmt,
+    })
 }
 
 // Parse {c:...} (from: parse_color)
@@ -242,10 +257,30 @@ fn split_attrs(a: &str) -> Vec<String> {
 fn is_color_name(s: &str) -> bool {
     static NAMES: once_cell::sync::Lazy<HashSet<&'static str>> = once_cell::sync::Lazy::new(|| {
         HashSet::from([
-            "black","red","green","yellow","blue","magenta","cyan","white",
-            "gray","grey","bright_black","bright_red","bright_green","bright_yellow",
-            "bright_blue","bright_magenta","bright_cyan","bright_white",
-            "default","reset","orange","purple","teal","pink",
+            "black",
+            "red",
+            "green",
+            "yellow",
+            "blue",
+            "magenta",
+            "cyan",
+            "white",
+            "gray",
+            "grey",
+            "bright_black",
+            "bright_red",
+            "bright_green",
+            "bright_yellow",
+            "bright_blue",
+            "bright_magenta",
+            "bright_cyan",
+            "bright_white",
+            "default",
+            "reset",
+            "orange",
+            "purple",
+            "teal",
+            "pink",
         ])
     });
     NAMES.contains(s)
@@ -268,22 +303,65 @@ fn parse_dbg(raw: String, rest: &str) -> Token {
     };
 
     if core.is_empty() {
-        return Token::Debug(DebugToken { raw, scope: DebugScope::All, key: DebugKey::None, fmt });
+        return Token::Debug(DebugToken {
+            raw,
+            scope: DebugScope::All,
+            key: DebugKey::None,
+            fmt,
+        });
     }
 
     let mut segs = core.split(':');
     match (segs.next(), segs.next()) {
-        (Some("v"),  None) | (Some("var"), None) => Token::Debug(DebugToken { raw, scope: DebugScope::Global, key: DebugKey::None, fmt }),
-        (Some("rv"), None) | (Some("room"), None) => Token::Debug(DebugToken { raw, scope: DebugScope::Room,   key: DebugKey::None, fmt }),
-        (Some("o"),  None) | (Some("obj"), None) | (Some("object"), None) => Token::Debug(DebugToken { raw, scope: DebugScope::Object, key: DebugKey::None, fmt }),
+        (Some("v"), None) | (Some("var"), None) => Token::Debug(DebugToken {
+            raw,
+            scope: DebugScope::Global,
+            key: DebugKey::None,
+            fmt,
+        }),
+        (Some("rv"), None) | (Some("room"), None) => Token::Debug(DebugToken {
+            raw,
+            scope: DebugScope::Room,
+            key: DebugKey::None,
+            fmt,
+        }),
+        (Some("o"), None) | (Some("obj"), None) | (Some("object"), None) => Token::Debug(DebugToken {
+            raw,
+            scope: DebugScope::Object,
+            key: DebugKey::None,
+            fmt,
+        }),
 
-        (Some("v"),  Some(k)) | (Some("var"), Some(k)) => Token::Debug(DebugToken { raw, scope: DebugScope::Global, key: DebugKey::Var(k.to_string()), fmt }),
-        (Some("rv"), Some(k)) | (Some("room"), Some(k)) => Token::Debug(DebugToken { raw, scope: DebugScope::Room,   key: DebugKey::Var(k.to_string()), fmt }),
-        (Some("o"),  Some(k)) | (Some("obj"), Some(k)) | (Some("object"), Some(k)) => {
-            if let Some((n,p)) = k.split_once('.') {
-                Token::Debug(DebugToken { raw, scope: DebugScope::Object, key: DebugKey::ObjectProp { name: n.to_string(), prop: p.to_string() }, fmt })
+        (Some("v"), Some(k)) | (Some("var"), Some(k)) => Token::Debug(DebugToken {
+            raw,
+            scope: DebugScope::Global,
+            key: DebugKey::Var(k.to_string()),
+            fmt,
+        }),
+        (Some("rv"), Some(k)) | (Some("room"), Some(k)) => Token::Debug(DebugToken {
+            raw,
+            scope: DebugScope::Room,
+            key: DebugKey::Var(k.to_string()),
+            fmt,
+        }),
+        (Some("o"), Some(k)) | (Some("obj"), Some(k)) | (Some("object"), Some(k)) => {
+            if let Some((n, p)) = k.split_once('.') {
+                Token::Debug(DebugToken {
+                    raw,
+                    scope: DebugScope::Object,
+                    key: DebugKey::ObjectProp {
+                        name: n.to_string(),
+                        prop: p.to_string(),
+                    },
+                    fmt,
+                })
             } else {
-                Token::Debug(DebugToken { raw, scope: DebugScope::Object, key: DebugKey::Object(k.to_string()), fmt })
+                Token::Debug(DebugToken {
+                    raw,
+                    scope: DebugScope::Object,
+                    key: DebugKey::Object(k.to_string()),
+                    fmt,
+                })
             }
         }
         _ => Token::Unknown(raw),

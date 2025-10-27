@@ -5,19 +5,19 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
+use futures::StreamExt;
 use parking_lot::RwLock;
 use std::sync::Arc;
-use futures::StreamExt;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::banner::{BANNER, ENTRY};
 use crate::commands::CmdCtx;
 use crate::error::{AppResult, InfraError};
 use crate::lua::LuaJob;
+use crate::net::output::init_session_for_websocket;
 use crate::state::session::Protocol;
 use crate::{Registry, Session, process_command};
 use tokio::sync::mpsc;
-use crate::net::output::init_session_for_websocket;
 
 #[derive(Clone)]
 struct HttpAppCtx {
@@ -51,7 +51,6 @@ async fn ws_handler(socket: WebSocket, registry: Arc<Registry>, lua_tx: mpsc::Se
     io_bundle.output.system(BANNER).await;
     io_bundle.output.system(ENTRY).await;
     io_bundle.output.prompt("> ".to_string()).await;
-
 
     let ctx = Arc::new(CmdCtx {
         registry: registry.clone(),

@@ -36,7 +36,9 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
             }
 
             if ctx.registry.services.blueprint.new_room(&key, title, body).await? {
-                ctx.output.system(format!("[bp] room {}:{} added.\n", key.bp_key, key.room_key)).await;
+                ctx.output
+                    .system(format!("[bp] room {}:{} added.\n", key.bp_key, key.room_key))
+                    .await;
             } else {
                 ctx.output.system("[bp] room already exists").await;
             }

@@ -37,12 +37,13 @@ const MOTD: &str = r#"
 "#;
 
 pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
-
     // Step 1: Validate input
 
     if intent.args.len() < 3 {
         ctx.output.line("Login failed. Check your username and password.").await;
-        ctx.output.system("Not enough arguments. Usage: login <user> [pass]").await;
+        ctx.output
+            .system("Not enough arguments. Usage: login <user> [pass]")
+            .await;
         return Ok(());
     }
 
@@ -83,7 +84,6 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         ctx.output.system(MOTD).await;
     }
 
-
     // Step 6: Fetch zone/blueprint/room context and set up cursor
 
     // Either we have a blueprint/room specified in the user account, or we use the default one.
@@ -94,13 +94,14 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     let zone_ctx = match create_zone_context(ctx.clone(), zone_key, bp_key).await {
         Ok(z) => z,
         Err(e) => {
-            ctx.output.line("Login failed due to server error. Contact admin.").await;
+            ctx.output
+                .line("Login failed due to server error. Contact admin.")
+                .await;
             ctx.output.system(format!("Error: {}", e)).await;
             return Ok(());
         }
     };
     ctx.sess.write().zone_ctx = Some(zone_ctx);
-
 
     // Step 7: Find the room within the blueprint
     let Ok(room) = ctx
@@ -110,7 +111,9 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         .room_by_key(BlueprintAndRoomKey::new(bp_key, room_key))
         .await
     else {
-        ctx.output.line("Login failed due to server error. Contact admin.").await;
+        ctx.output
+            .line("Login failed due to server error. Contact admin.")
+            .await;
         ctx.output.system("Room not found").await;
         return Ok(());
     };
@@ -127,24 +130,35 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     // Step 9: Enter the room, run lua hooks if needed
     match ctx.registry.services.room.enter_room(ctx.clone(), &c).await {
         Err(DomainError::RoomNotFound) => {
-            ctx.output.line("Login failed due to server error. Contact admin.").await;
+            ctx.output
+                .line("Login failed due to server error. Contact admin.")
+                .await;
             ctx.output.system("Error: Starting room not found.".to_string()).await;
             return Ok(());
         }
         Err(e) => {
-            ctx.output.line("Login failed due to server error. Contact admin.").await;
+            ctx.output
+                .line("Login failed due to server error. Contact admin.")
+                .await;
             ctx.output.system(format!("Error: {}", e)).await;
             return Ok(());
         }
         Ok(_) => {}
     }
 
-
     // Step 10: Just show the current room after login
 
-    ctx.output.system("You are logged in. Welcome to port4k!".to_string()).await;
+    ctx.output
+        .system("You are logged in. Welcome to port4k!".to_string())
+        .await;
     ctx.output.line("You have successfully logged in.").await;
-    ctx.output.line(format!("You are in the {}: {}", room.title, room.short.as_deref().unwrap_or("it's not a very descriptive place"))).await;
+    ctx.output
+        .line(format!(
+            "You are in the {}: {}",
+            room.title,
+            room.short.as_deref().unwrap_or("it's not a very descriptive place")
+        ))
+        .await;
 
     Ok(())
 }

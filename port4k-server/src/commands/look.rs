@@ -21,7 +21,9 @@ pub async fn look(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
             // out.success();
             // return Ok(out)
         } else {
-            ctx.output.system(format!("You don't see any '{}' here.", noun.head)).await;
+            ctx.output
+                .system(format!("You don't see any '{}' here.", noun.head))
+                .await;
             Ok(())
         };
     }

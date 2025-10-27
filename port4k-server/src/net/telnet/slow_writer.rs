@@ -9,12 +9,8 @@ use tokio::time::{Sleep, sleep};
 
 #[allow(unused)]
 pub enum Pace {
-    PerChar {
-        delay: Duration,
-    },
-    PerWord {
-        delay: Duration,
-    },
+    PerChar { delay: Duration },
+    PerWord { delay: Duration },
 }
 
 pub struct SlowWriter<W> {

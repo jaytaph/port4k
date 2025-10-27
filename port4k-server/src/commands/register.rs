@@ -24,7 +24,9 @@ pub async fn register(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         return Ok(());
     }
     ctx.output.system("Account created successfully.").await;
-    ctx.output.system(format!("You can now `login {} <password>`.", username)).await;
+    ctx.output
+        .system(format!("You can now `login {} <password>`.", username))
+        .await;
 
     Ok(())
 }

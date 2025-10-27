@@ -1,12 +1,12 @@
-use std::collections::HashMap;
+use crate::db::error::DbError;
 use crate::db::repo::zone::ZoneRepo;
 use crate::db::{Db, DbResult};
-use crate::models::zone::Zone;
-use std::sync::Arc;
-use crate::db::error::DbError;
 use crate::models::room::Kv;
 use crate::models::types::{ExitId, RoomId, ZoneId};
+use crate::models::zone::Zone;
 use crate::util::serde::serde_to_str;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 pub struct ZoneRepository {
     db: Arc<Db>,
@@ -67,7 +67,6 @@ impl ZoneRepo for ZoneRepository {
             )
             .await?;
 
-
         let mut map: HashMap<String, Kv> = HashMap::new();
 
         for row in rows {
@@ -75,9 +74,7 @@ impl ZoneRepo for ZoneRepository {
             let kv_key: String = row.get("kv_key");
             let value: serde_json::Value = row.get("value");
 
-            map.entry(object_key)
-                .or_default()
-                .insert(kv_key, serde_to_str(value));
+            map.entry(object_key).or_default().insert(kv_key, serde_to_str(value));
         }
 
         Ok(map)

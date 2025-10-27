@@ -1,11 +1,11 @@
 use crate::db::error::DbError;
 use crate::db::repo::{BlueprintAndRoomKey, RoomRepo};
 use crate::db::{Db, DbResult};
+use crate::lua::ScriptHook;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::{BlueprintExit, BlueprintObject, BlueprintRoom, Kv, RoomScripts};
 use crate::models::types::{AccountId, BlueprintId, RoomId};
 use std::sync::Arc;
-use crate::lua::ScriptHook;
 
 pub struct RoomRepository {
     pub db: Arc<Db>,
@@ -106,8 +106,9 @@ impl RoomRepo for RoomRepository {
     async fn room_objects(&self, room_id: RoomId) -> DbResult<Vec<BlueprintObject>> {
         let client = self.db.get_client().await?;
 
-        let rows = client.query(
-            r#"
+        let rows = client
+            .query(
+                r#"
         SELECT o.id, o.room_id, o.name, o.short, o.description, o.examine, o.state, o.use_lua, o.position,
             COALESCE(n.nouns, ARRAY[]::text[]) AS nouns,
             COALESCE(k.kv, '{}'::jsonb) AS kv
@@ -125,8 +126,9 @@ impl RoomRepo for RoomRepository {
         WHERE o.room_id = $1
         ORDER BY COALESCE(o.position, 0), o.name
         "#,
-            &[&room_id],
-        ).await?;
+                &[&room_id],
+            )
+            .await?;
 
         let mut out = Vec::with_capacity(rows.len());
         for row in rows {
@@ -142,20 +144,20 @@ impl RoomRepo for RoomRepository {
     async fn room_scripts(&self, room_id: RoomId) -> DbResult<RoomScripts> {
         let client = self.db.get_client().await?;
 
-        let rows = client.query(
-            &format!("SELECT hook, script FROM bp_room_scripts WHERE room_id = $1"),
-            &[&room_id],
-        ).await?;
+        let rows = client
+            .query(
+                &format!("SELECT hook, script FROM bp_room_scripts WHERE room_id = $1"),
+                &[&room_id],
+            )
+            .await?;
 
         let mut scripts = RoomScripts::new();
         for row in &rows {
             let hook_str = row.get::<_, String>(0);
-            let hook = ScriptHook::from_str(&hook_str).map_err(|_| DbError::Decode(format!("Invalid script hook: {}", hook_str)))?;
+            let hook = ScriptHook::from_str(&hook_str)
+                .map_err(|_| DbError::Decode(format!("Invalid script hook: {}", hook_str)))?;
 
-            scripts.insert(
-                hook,
-                row.get::<_, String>(1),
-            );
+            scripts.insert(hook, row.get::<_, String>(1));
         }
 
         Ok(scripts)
@@ -198,7 +200,12 @@ impl RoomRepo for RoomRepository {
         Ok(n == 1)
     }
 
-    async fn add_exit(&self, from_key: &BlueprintAndRoomKey, dir: &str, to_key: &BlueprintAndRoomKey) -> DbResult<bool> {
+    async fn add_exit(
+        &self,
+        from_key: &BlueprintAndRoomKey,
+        dir: &str,
+        to_key: &BlueprintAndRoomKey,
+    ) -> DbResult<bool> {
         if from_key.bp_key != to_key.bp_key {
             return Err(DbError::Validation("from/to must be in the same blueprint".into()));
         }

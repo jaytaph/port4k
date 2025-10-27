@@ -6,7 +6,9 @@ pub async fn who(ctx: Arc<CmdCtx>) -> CommandResult {
     if list.is_empty() {
         ctx.output.system("No one is online.").await;
     } else {
-        ctx.output.system(format!("Online ({}): {}\n", list.len(), list.join(", "))).await;
+        ctx.output
+            .system(format!("Online ({}): {}\n", list.len(), list.join(", ")))
+            .await;
     };
 
     Ok(())

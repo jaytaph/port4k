@@ -1,8 +1,8 @@
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use std::sync::Arc;
 use crate::models::account::Account;
 use crate::models::types::{Direction, RoomId};
+use std::sync::Arc;
 
 pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     // 1. parse direction
@@ -29,7 +29,9 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     };
 
     let Some(dir) = intent.direction else {
-        ctx.output.system(format!("'{}' is not a valid direction.", dir_str)).await;
+        ctx.output
+            .system(format!("'{}' is not a valid direction.", dir_str))
+            .await;
         return Ok(());
     };
 
@@ -58,10 +60,20 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
 /// Attempt to move the player from `from_room_id` in direction `dir`.
 /// On success, this function is responsible for producing ALL relevant output
 /// (leave narration, enter narration, new room view, prompt).
-async fn try_move_player(ctx: Arc<CmdCtx>, account: &Account, from_room_id: RoomId, dir: Direction) -> Result<(), MoveError> {
+async fn try_move_player(
+    ctx: Arc<CmdCtx>,
+    account: &Account,
+    from_room_id: RoomId,
+    dir: Direction,
+) -> Result<(), MoveError> {
     // 1. find exit
-    let rv = ctx.room_view().map_err(|e| MoveError::Internal(format!("failed to get room view: {}", e)))?;
-    let exit = rv.exits.iter().find(|e| e.direction == dir && e.from_room_id == from_room_id);
+    let rv = ctx
+        .room_view()
+        .map_err(|e| MoveError::Internal(format!("failed to get room view: {}", e)))?;
+    let exit = rv
+        .exits
+        .iter()
+        .find(|e| e.direction == dir && e.from_room_id == from_room_id);
     let Some(exit) = exit else {
         return Err(MoveError::NoSuchExit);
     };
@@ -73,7 +85,6 @@ async fn try_move_player(ctx: Arc<CmdCtx>, account: &Account, from_room_id: Room
     if exit.is_locked() {
         return Err(MoveError::ExitLocked);
     }
-
 
     // 3. call on_leave hook on current room
     //    Hook is allowed to:
@@ -87,16 +98,19 @@ async fn try_move_player(ctx: Arc<CmdCtx>, account: &Account, from_room_id: Room
     }
 
     // 4. actually move player in world state
-    let c = ctx.registry.services.zone
+    let c = ctx
+        .registry
+        .services
+        .zone
         .generate_cursor(ctx.clone(), &account, exit.to_room_id)
         .await
-        .map_err(|e| MoveError::Internal(format!("failed to generate cursor: {e}")))?
-    ;
-    ctx.registry.services.room
+        .map_err(|e| MoveError::Internal(format!("failed to generate cursor: {e}")))?;
+    ctx.registry
+        .services
+        .room
         .enter_room(ctx.clone(), &c)
         .await
-        .map_err(|e| MoveError::Internal(format!("failed to enter room: {e}")))?
-    ;
+        .map_err(|e| MoveError::Internal(format!("failed to enter room: {e}")))?;
 
     Ok(())
 }
@@ -105,6 +119,6 @@ async fn try_move_player(ctx: Arc<CmdCtx>, account: &Account, from_room_id: Room
 enum MoveError {
     NoSuchExit,
     ExitLocked,
-    Blocked(String),    // e.g. "The blast door won't budge."
-    Internal(String),   // db errors, logic errors, etc.
+    Blocked(String),  // e.g. "The blast door won't budge."
+    Internal(String), // db errors, logic errors, etc.
 }

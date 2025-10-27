@@ -3,19 +3,19 @@ use crate::error::{AppResult, DomainError};
 use crate::input::parser::{Intent, Preposition, Quantifier};
 use crate::models::account::Account;
 use crate::models::room::{ResolvedExit, ResolvedObject, RoomView};
+use crate::models::types::Direction;
+use crate::net::output::OutputHandle;
 use crate::state::session::Cursor;
 use mlua::{Function, Lua, Table};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot::Sender;
-use crate::models::types::Direction;
-use crate::net::output::OutputHandle;
 
 pub const LUA_CMD_TIMEOUT: Duration = Duration::from_secs(5);
-const REPL_ENV_KEY : &str = "__repl_env";
+const REPL_ENV_KEY: &str = "__repl_env";
 
 macro_rules! set_lua_table_readonly {
     ($table:expr, $lua:expr) => {{
@@ -77,8 +77,8 @@ impl ScriptHook {
 
 #[derive(Debug, Clone)]
 pub enum LuaResult {
-    Success(mlua::Value),   // Lua script executed successfully
-    Failed(String),         // Lua script execution failed
+    Success(mlua::Value), // Lua script executed successfully
+    Failed(String),       // Lua script execution failed
 }
 
 impl From<DomainError> for LuaResult {
@@ -166,7 +166,7 @@ pub enum LuaJob {
         code: String,
         /// Return channel
         reply: Sender<LuaResult>,
-    }
+    },
 }
 
 /// Start a dedicated Lua worker thread with its own Lua state.
@@ -180,28 +180,98 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
 
         while let Some(job) = rx.blocking_recv() {
             match job {
-                LuaJob::OnEnter { output_handle, cursor, account, reply } => {
-                    let ctx = LuaArgContext::new(output_handle.clone(), Some(*cursor), Some(account), registry.clone(), rt_handle.clone());
+                LuaJob::OnEnter {
+                    output_handle,
+                    cursor,
+                    account,
+                    reply,
+                } => {
+                    let ctx = LuaArgContext::new(
+                        output_handle.clone(),
+                        Some(*cursor),
+                        Some(account),
+                        registry.clone(),
+                        rt_handle.clone(),
+                    );
                     handle_room_script(&lua, &ctx, ScriptHook::OnEnter, reply);
                 }
-                LuaJob::OnFirstEnter { output_handle, cursor, account, reply } => {
-                    let ctx = LuaArgContext::new(output_handle.clone(), Some(*cursor), Some(account), registry.clone(), rt_handle.clone());
+                LuaJob::OnFirstEnter {
+                    output_handle,
+                    cursor,
+                    account,
+                    reply,
+                } => {
+                    let ctx = LuaArgContext::new(
+                        output_handle.clone(),
+                        Some(*cursor),
+                        Some(account),
+                        registry.clone(),
+                        rt_handle.clone(),
+                    );
                     handle_room_script(&lua, &ctx, ScriptHook::OnFirstEnter, reply);
                 }
-                LuaJob::OnLeave { output_handle, cursor, account, reply } => {
-                    let ctx = LuaArgContext::new(output_handle.clone(), Some(*cursor), Some(account), registry.clone(), rt_handle.clone());
+                LuaJob::OnLeave {
+                    output_handle,
+                    cursor,
+                    account,
+                    reply,
+                } => {
+                    let ctx = LuaArgContext::new(
+                        output_handle.clone(),
+                        Some(*cursor),
+                        Some(account),
+                        registry.clone(),
+                        rt_handle.clone(),
+                    );
                     handle_room_script(&lua, &ctx, ScriptHook::OnLeave, reply);
                 }
-                LuaJob::OnObject { output_handle, cursor, account, intent, obj, reply } => {
-                    let ctx = LuaArgContext::new(output_handle.clone(), Some(*cursor), Some(account), registry.clone(), rt_handle.clone());
+                LuaJob::OnObject {
+                    output_handle,
+                    cursor,
+                    account,
+                    intent,
+                    obj,
+                    reply,
+                } => {
+                    let ctx = LuaArgContext::new(
+                        output_handle.clone(),
+                        Some(*cursor),
+                        Some(account),
+                        registry.clone(),
+                        rt_handle.clone(),
+                    );
                     handle_object_script(&lua, &ctx, &intent, &obj, reply);
                 }
-                LuaJob::OnCommand { output_handle, cursor, account, intent, reply } => {
-                    let ctx = LuaArgContext::new(output_handle.clone(), Some(*cursor), Some(account), registry.clone(), rt_handle.clone());
+                LuaJob::OnCommand {
+                    output_handle,
+                    cursor,
+                    account,
+                    intent,
+                    reply,
+                } => {
+                    let ctx = LuaArgContext::new(
+                        output_handle.clone(),
+                        Some(*cursor),
+                        Some(account),
+                        registry.clone(),
+                        rt_handle.clone(),
+                    );
                     handle_command_script(&lua, &ctx, &intent, reply);
                 }
-                LuaJob::ReplEval { output_handle, cursor, account, code, reply } => {
-                    let ctx = LuaArgContext::new(output_handle.clone(), Some(*cursor), Some(account), registry.clone(), rt_handle.clone());
+                LuaJob::ReplEval {
+                    output_handle,
+                    cursor,
+                    account,
+                    code,
+                    reply,
+                } => {
+                    let ctx = LuaArgContext::new(
+                        output_handle.clone(),
+                        Some(*cursor),
+                        Some(account),
+                        registry.clone(),
+                        rt_handle.clone(),
+                    );
                     _ = handle_repl_eval(&lua, &ctx, &code, reply);
                 }
             };
@@ -225,7 +295,13 @@ struct LuaArgContext {
 }
 
 impl LuaArgContext {
-    fn new(output_handle: OutputHandle, cursor: Option<Cursor>, account: Option<Account>, registry: Arc<Registry>, rt_handle: Handle) -> Self {
+    fn new(
+        output_handle: OutputHandle,
+        cursor: Option<Cursor>,
+        account: Option<Account>,
+        registry: Arc<Registry>,
+        rt_handle: Handle,
+    ) -> Self {
         LuaArgContext {
             output_handle,
             registry,
@@ -309,70 +385,92 @@ pub fn init_lua() -> anyhow::Result<Lua> {
     Ok(lua)
 }
 
-
-fn create_port4k_function_table(
-    lua: &Lua,
-    arg_ctx: &LuaArgContext,
-) -> mlua::Result<mlua::Table> {
+fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Result<mlua::Table> {
     let port4k = lua.create_table()?;
 
     // port4k.say(text)
     let ctx = arg_ctx.clone();
-    port4k.set("say", lua.create_function(move |_, msg: String| -> mlua::Result<()> {
-        let ctx = ctx.clone();
-        ctx.rt_handle.spawn(async move {
-            ctx.output_handle.line(msg).await;
-        });
-        Ok(())
-    })?)?;
+    port4k.set(
+        "say",
+        lua.create_function(move |_, msg: String| -> mlua::Result<()> {
+            let ctx = ctx.clone();
+            ctx.rt_handle.spawn(async move {
+                ctx.output_handle.line(msg).await;
+            });
+            Ok(())
+        })?,
+    )?;
 
     // port4k.broadcast(text)
     let ctx = arg_ctx.clone();
-    port4k.set("broadcast", lua.create_function(move |_, msg: String| -> mlua::Result<()> {
-        let ctx = ctx.clone();
-        ctx.rt_handle.spawn(async move {
-            ctx.output_handle.line(format!("BROADCAST: {}", msg)).await;
-        });
-        Ok(())
-    })?)?;
+    port4k.set(
+        "broadcast",
+        lua.create_function(move |_, msg: String| -> mlua::Result<()> {
+            let ctx = ctx.clone();
+            ctx.rt_handle.spawn(async move {
+                ctx.output_handle.line(format!("BROADCAST: {}", msg)).await;
+            });
+            Ok(())
+        })?,
+    )?;
 
     // port4k.set_exit_locked(exit: str, locked: bool)
-    port4k.set("set_exit_locked", lua.create_function(move |_, (dir, locked): (String, bool)| -> mlua::Result<()> {
-        let _ = dir;
-        let _ = locked;
-        Ok(())
-    })?)?;
+    port4k.set(
+        "set_exit_locked",
+        lua.create_function(move |_, (dir, locked): (String, bool)| -> mlua::Result<()> {
+            let _ = dir;
+            let _ = locked;
+            Ok(())
+        })?,
+    )?;
 
     // port4k.set_exit_locked(exit: str, locked: bool)
-    port4k.set("is_exit_locked", lua.create_function(move |_, dir: String| -> mlua::Result<mlua::Value> {
-        let _ = dir;
-        Ok(mlua::Value::Boolean(true))
-    })?)?;
+    port4k.set(
+        "is_exit_locked",
+        lua.create_function(move |_, dir: String| -> mlua::Result<mlua::Value> {
+            let _ = dir;
+            Ok(mlua::Value::Boolean(true))
+        })?,
+    )?;
 
     // port4k.player_has_item(item_key: str) -> bool
-    port4k.set("is_exit_locked", lua.create_function(move |_, obj_key: String| -> mlua::Result<mlua::Value> {
-        let _ = obj_key;
-        Ok(mlua::Value::Boolean(true))
-    })?)?;
+    port4k.set(
+        "is_exit_locked",
+        lua.create_function(move |_, obj_key: String| -> mlua::Result<mlua::Value> {
+            let _ = obj_key;
+            Ok(mlua::Value::Boolean(true))
+        })?,
+    )?;
 
     // port4k.set_object_state(key: str, value: str) -> bool
-    port4k.set("set_object_state", lua.create_function(move |_, (obj_key, obj_value): (String, String)| -> mlua::Result<mlua::Value> {
-        let _ = obj_key;
-        let _ = obj_value;
-        Ok(mlua::Value::Boolean(true))
-    })?)?;
+    port4k.set(
+        "set_object_state",
+        lua.create_function(
+            move |_, (obj_key, obj_value): (String, String)| -> mlua::Result<mlua::Value> {
+                let _ = obj_key;
+                let _ = obj_value;
+                Ok(mlua::Value::Boolean(true))
+            },
+        )?,
+    )?;
 
     // port4k.consume_item(key: str) -> bool
-    port4k.set("consume_item", lua.create_function(move |_, obj_key: String| -> mlua::Result<mlua::Value> {
-        let _ = obj_key;
-        Ok(mlua::Value::Boolean(true))
-    })?)?;
+    port4k.set(
+        "consume_item",
+        lua.create_function(move |_, obj_key: String| -> mlua::Result<mlua::Value> {
+            let _ = obj_key;
+            Ok(mlua::Value::Boolean(true))
+        })?,
+    )?;
 
     // port4k.hint_trigger(hint_type: str) -> bool
-    port4k.set("hint_trigger", lua.create_function(move |_, hint_type: String| -> mlua::Result<mlua::Value> {
-        let _ = hint_type;
-        Ok(mlua::Value::Boolean(true))
-    })?)?;
+    port4k.set(
+        "hint_trigger",
+        lua.create_function(move |_, hint_type: String| -> mlua::Result<mlua::Value> {
+            let _ = hint_type;
+            Ok(mlua::Value::Boolean(true))
+        })?,
+    )?;
 
     // port4k.hint_consider(hint_type: str) -> bool
     //         let cursor = cursor.clone();
@@ -387,31 +485,40 @@ fn create_port4k_function_table(
 
     let ctx = arg_ctx.clone();
     let rt_handle = arg_ctx.rt_handle.clone();
-    port4k.set("hint_consider", lua.create_function(move |_, trigger: String| -> mlua::Result<mlua::Value> {
-        let cursor = ctx.cursor.clone();
-        rt_handle.block_on(async {
-            let cursor = cursor.as_ref().unwrap();
-            if let Ok(Some(hint)) = ctx.registry.services.room.hint_consider(cursor, trigger.as_str()).await {
-                ctx.output_handle.line(hint).await;
-            }
-        });
-        Ok(mlua::Value::Boolean(true))
-    })?)?;
+    port4k.set(
+        "hint_consider",
+        lua.create_function(move |_, trigger: String| -> mlua::Result<mlua::Value> {
+            let cursor = ctx.cursor.clone();
+            rt_handle.block_on(async {
+                let cursor = cursor.as_ref().unwrap();
+                if let Ok(Some(hint)) = ctx.registry.services.room.hint_consider(cursor, trigger.as_str()).await {
+                    ctx.output_handle.line(hint).await;
+                }
+            });
+            Ok(mlua::Value::Boolean(true))
+        })?,
+    )?;
 
     // port4k.matches_noun(args: str, list: list) -> bool
-    port4k.set("matches_noun", lua.create_function(move |_, (args, list): (String, String)| -> mlua::Result<mlua::Value> {
-        let _ = args;
-        let _ = list;
-        Ok(mlua::Value::Boolean(true))
-    })?)?;
+    port4k.set(
+        "matches_noun",
+        lua.create_function(move |_, (args, list): (String, String)| -> mlua::Result<mlua::Value> {
+            let _ = args;
+            let _ = list;
+            Ok(mlua::Value::Boolean(true))
+        })?,
+    )?;
 
     // port4k.current_room() -> room
     let arg_ctx = arg_ctx.clone();
-    port4k.set("current_room", lua.create_function(move |lua, ()| -> mlua::Result<mlua::Value> {
-        let t = create_lua_roomview_table(lua, &arg_ctx.cursor.as_ref().unwrap().room_view).map(mlua::Value::Table)?;
-        Ok(t)
-    })?)?;
-
+    port4k.set(
+        "current_room",
+        lua.create_function(move |lua, ()| -> mlua::Result<mlua::Value> {
+            let t =
+                create_lua_roomview_table(lua, &arg_ctx.cursor.as_ref().unwrap().room_view).map(mlua::Value::Table)?;
+            Ok(t)
+        })?,
+    )?;
 
     // // ctx:get_object(key) -> table
     // if let Some(cursor) = arg_ctx.cursor.as_ref() {
@@ -446,7 +553,6 @@ fn create_port4k_function_table(
     // })?;
     // env.set("get_object_state", get_object_state_fn)?;
 
-
     Ok(port4k)
 }
 
@@ -471,7 +577,10 @@ fn create_lua_account_table(lua: &Lua, account: &Account) -> mlua::Result<Table>
     t.set("email", account.email.as_str())?;
     t.set("role", account.role.to_string().as_str())?;
     t.set("created_at", account.created_at.to_rfc3339())?;
-    t.set("last_login", account.last_login.map(|dt| dt.to_rfc3339()).as_deref().unwrap_or(""))?;
+    t.set(
+        "last_login",
+        account.last_login.map(|dt| dt.to_rfc3339()).as_deref().unwrap_or(""),
+    )?;
 
     _ = set_lua_table_readonly!(t, lua);
     Ok(t)
@@ -590,11 +699,7 @@ fn handle_room_script(lua: &Lua, ctx: &LuaArgContext, hook: ScriptHook, reply: S
 
         let func: Function = lua
             .load(src)
-            .set_name(format!(
-                "{}:{}",
-                cursor.room_view.blueprint.key,
-                hook.as_str(),
-            ))
+            .set_name(format!("{}:{}", cursor.room_view.blueprint.key, hook.as_str(),))
             .set_environment(env)
             .eval()?;
 
@@ -610,7 +715,7 @@ fn handle_object_script(
     ctx: &LuaArgContext,
     intent: &Intent,
     obj: &ResolvedObject,
-    reply: Sender<LuaResult>
+    reply: Sender<LuaResult>,
 ) {
     let result = (|| -> AppResult<mlua::Value> {
         let Some(src) = &obj.on_use else {
@@ -641,12 +746,7 @@ fn handle_object_script(
     send_lua_result(reply, result)
 }
 
-fn handle_command_script(
-    lua: &Lua,
-    ctx: &LuaArgContext,
-    intent: &Intent,
-    reply: Sender<LuaResult>
-) {
+fn handle_command_script(lua: &Lua, ctx: &LuaArgContext, intent: &Intent, reply: Sender<LuaResult>) {
     let Some(cursor) = ctx.cursor.as_ref() else {
         let lua_result = LuaResult::Failed("No cursor and account available for room script".into());
         _ = reply.send(lua_result);
@@ -669,10 +769,7 @@ fn handle_command_script(
 
         let func: Function = lua
             .load(src)
-            .set_name(format!(
-                "{}:on_command",
-                cursor.room_view.blueprint.key
-            ))
+            .set_name(format!("{}:on_command", cursor.room_view.blueprint.key))
             .set_environment(env)
             .eval()?;
 
@@ -684,25 +781,21 @@ fn handle_command_script(
 }
 
 fn handle_repl_eval(lua: &Lua, ctx: &LuaArgContext, code: &str, reply: Sender<LuaResult>) -> AppResult<()> {
-    let ctx_table: Table = lua.named_registry_value(REPL_ENV_KEY)
-        .or_else(|_| {
-            // First time: create and store it
-            let env = create_lua_env(lua, ctx)?;
-            lua.set_named_registry_value(REPL_ENV_KEY, env.clone())?;
-            Ok::<_, mlua::Error>(env)
-        })?;
+    let ctx_table: Table = lua.named_registry_value(REPL_ENV_KEY).or_else(|_| {
+        // First time: create and store it
+        let env = create_lua_env(lua, ctx)?;
+        lua.set_named_registry_value(REPL_ENV_KEY, env.clone())?;
+        Ok::<_, mlua::Error>(env)
+    })?;
 
     let result = (|| -> Result<mlua::Value, mlua::Error> {
-        match lua.load(format!("return {}", code))
+        match lua
+            .load(format!("return {}", code))
             .set_environment(ctx_table.clone())
             .eval()
         {
             Ok(val) => Ok(val),
-            Err(_) => {
-                lua.load(code)
-                    .set_environment(ctx_table.clone())
-                    .eval()
-            },
+            Err(_) => lua.load(code).set_environment(ctx_table.clone()).eval(),
         }
     })();
 
@@ -710,11 +803,11 @@ fn handle_repl_eval(lua: &Lua, ctx: &LuaArgContext, code: &str, reply: Sender<Lu
         Ok(value) => {
             _ = reply.send(LuaResult::Success(value));
             Ok(())
-        },
+        }
         Err(err) => {
             _ = reply.send(LuaResult::Failed(format!("Lua error: {}", err.to_string())));
             Err(DomainError::ScriptLua(err))
-        },
+        }
     }
 }
 

@@ -1,8 +1,8 @@
 use crate::db::error::DbError;
+use crate::lua::LuaJob;
 use crate::models::types::{ObjectId, RoomId};
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
-use crate::lua::LuaJob;
 
 pub type AppResult<T> = Result<T, DomainError>;
 

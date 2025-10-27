@@ -174,7 +174,7 @@ impl TelnetMachine {
                                 SGA => Some(make_will(SGA)),           // We'll suppress go-ahead
                                 LINEMODE => Some(make_wont(LINEMODE)), // We refuse LINEMODE
                                 NAWS => None,
-                                _ => Some(make_wont(opt)),      // We won't do any unknown options
+                                _ => Some(make_wont(opt)), // We won't do any unknown options
                             }
                         }
                         DONT => {
@@ -187,11 +187,11 @@ impl TelnetMachine {
                         WILL => {
                             // Client will do <opt>
                             match opt {
-                                ECHO => Some(make_do(ECHO)), // ok, you handle echo (we'd usually prefer we echo)
-                                SGA => Some(make_do(SGA)),   // ok, you suppress go-ahead too
+                                ECHO => Some(make_do(ECHO)),           // ok, you handle echo (we'd usually prefer we echo)
+                                SGA => Some(make_do(SGA)),             // ok, you suppress go-ahead too
                                 LINEMODE => Some(make_dont(LINEMODE)), // nope, please don't
-                                NAWS => Some(make_do(NAWS)), // yes, please send SB NAWS
-                                TTYPE => Some(make_do(TTYPE)), // yes, please send SB TTYPE
+                                NAWS => Some(make_do(NAWS)),           // yes, please send SB NAWS
+                                TTYPE => Some(make_do(TTYPE)),         // yes, please send SB TTYPE
                                 _ => Some(make_dont(opt)),
                             }
                         }
@@ -202,15 +202,12 @@ impl TelnetMachine {
                             return TelnetResponse {
                                 event: None,
                                 response: None,
-                            }
+                            };
                         }
                         _ => None,
                     };
 
-                    return TelnetResponse {
-                        event: None,
-                        response,
-                    };
+                    return TelnetResponse { event: None, response };
                 }
 
                 // Unexpected lone option byte; if in SB, treat as data start

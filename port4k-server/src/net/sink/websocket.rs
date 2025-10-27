@@ -1,8 +1,8 @@
+use crate::net::output::OutFrame;
+use crate::net::sink::ClientSink;
 use async_trait::async_trait;
 use futures::SinkExt;
 use serde::Serialize;
-use crate::net::output::OutFrame;
-use crate::net::sink::ClientSink;
 
 pub struct WebSocketSink<S, M> {
     ws: S,
@@ -49,9 +49,7 @@ where
             OutFrame::Prompt(s) => WsFrame::Prompt { text: s },
             OutFrame::ClearScreen => WsFrame::ClearScreen,
             OutFrame::Raw(_) => {
-                return Err(anyhow::Error::msg(
-                    "Raw frame not supported over WebSocket sink",
-                ));
+                return Err(anyhow::Error::msg("Raw frame not supported over WebSocket sink"));
             }
         };
 
@@ -61,8 +59,7 @@ where
         self.ws
             .send(json.into())
             .await
-            .map_err(|e| anyhow::Error::msg(format!("websocket send failed: {e}")))?
-        ;
+            .map_err(|e| anyhow::Error::msg(format!("websocket send failed: {e}")))?;
 
         Ok(())
     }

@@ -15,7 +15,7 @@ pub async fn logout(ctx: Arc<CmdCtx>, _intent: Intent) -> CommandResult {
         s.account = None;
         s.cursor = None;
     }
-    
+
     ctx.output.system("You have been logged out.").await;
     Ok(())
 }

@@ -22,9 +22,13 @@ async fn handle_search_object(ctx: Arc<CmdCtx>, noun: &NounPhrase) -> anyhow::Re
     let rv = ctx.room_view()?;
 
     if let Some(obj) = rv.object_by_noun(&noun.head) {
-        ctx.output.line(format!("You search the {} but find nothing of interest.", obj.name)).await;
+        ctx.output
+            .line(format!("You search the {} but find nothing of interest.", obj.name))
+            .await;
     } else {
-        ctx.output.line(format!("You see no {} here to search.", noun.head)).await;
+        ctx.output
+            .line(format!("You see no {} here to search.", noun.head))
+            .await;
     }
 
     Ok(())
@@ -33,7 +37,9 @@ async fn handle_search_object(ctx: Arc<CmdCtx>, noun: &NounPhrase) -> anyhow::Re
 async fn handle_search_room(ctx: Arc<CmdCtx>) -> anyhow::Result<()> {
     let _rv = ctx.room_view()?;
 
-    ctx.output.line("You search the area but find nothing of interest.").await;
+    ctx.output
+        .line("You search the area but find nothing of interest.")
+        .await;
 
     Ok(())
 }

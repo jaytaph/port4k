@@ -1,16 +1,16 @@
-use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
-use axum::extract::ws::{Message, WebSocket};
-use futures::stream::SplitSink;
-use parking_lot::RwLock;
-use tokio::io::AsyncWrite;
-use tokio::sync::mpsc;
+use crate::Session;
 use crate::net::sink::ClientSink;
 use crate::net::sink::telnet::TelnetSink;
 use crate::net::sink::websocket::WebSocketSink;
 use crate::renderer::render_template;
 use crate::renderer::vars::generate_render_vars;
-use crate::Session;
+use axum::extract::ws::{Message, WebSocket};
+use futures::stream::SplitSink;
+use parking_lot::RwLock;
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
+use tokio::io::AsyncWrite;
+use tokio::sync::mpsc;
 
 const MAX_TERMINAL_WIDTH: usize = 80;
 
@@ -21,13 +21,13 @@ pub enum OutFrame {
     /// System prompt from the game engine, not world related
     System(String),
     /// Room view content
-    RoomView { content: String  },
+    RoomView { content: String },
     /// Display prompt line
     Prompt(String),
     /// Clear screen
     ClearScreen,
     /// Raw bytes for telnet IAC sequences
-    Raw(Vec<u8>)
+    Raw(Vec<u8>),
 }
 
 #[derive(Clone)]
@@ -57,25 +57,40 @@ impl OutputHandle {
     pub async fn line(&self, s: impl Into<String>) {
         let vars = generate_render_vars(self.sess.clone());
         let rendered = render_template(&s.into(), &vars, MAX_TERMINAL_WIDTH);
-        let _ = self.tx.send(OutEvent::Frame(OutFrame::Line(rendered), self.next_seq())).await;
+        let _ = self
+            .tx
+            .send(OutEvent::Frame(OutFrame::Line(rendered), self.next_seq()))
+            .await;
     }
 
     pub async fn system(&self, s: impl Into<String>) {
         let vars = generate_render_vars(self.sess.clone());
         let rendered = render_template(&s.into(), &vars, MAX_TERMINAL_WIDTH);
-        let _ = self.tx.send(OutEvent::Frame(OutFrame::System(rendered), self.next_seq())).await;
+        let _ = self
+            .tx
+            .send(OutEvent::Frame(OutFrame::System(rendered), self.next_seq()))
+            .await;
     }
 
     pub async fn room_view(&self, content: impl Into<String>) {
         let vars = generate_render_vars(self.sess.clone());
         let rendered = render_template(&content.into(), &vars, MAX_TERMINAL_WIDTH);
-        let _ = self.tx.send(OutEvent::Frame(OutFrame::RoomView { content: rendered }, self.next_seq())).await;
+        let _ = self
+            .tx
+            .send(OutEvent::Frame(
+                OutFrame::RoomView { content: rendered },
+                self.next_seq(),
+            ))
+            .await;
     }
 
     pub async fn prompt(&self, s: impl Into<String>) {
         let vars = generate_render_vars(self.sess.clone());
         let rendered = render_template(&s.into(), &vars, MAX_TERMINAL_WIDTH);
-        let _ = self.tx.send(OutEvent::Frame(OutFrame::Prompt(rendered), self.next_seq())).await;
+        let _ = self
+            .tx
+            .send(OutEvent::Frame(OutFrame::Prompt(rendered), self.next_seq()))
+            .await;
     }
 
     pub async fn raw(&self, bytes: Vec<u8>) {
@@ -101,7 +116,7 @@ impl SessionOut {
 
     pub async fn run<C>(mut self, mut client: C) -> anyhow::Result<()>
     where
-        C: ClientSink
+        C: ClientSink,
     {
         while let Some(event) = self.rx.recv().await {
             match event {
@@ -117,18 +132,13 @@ impl SessionOut {
     }
 }
 
-
-
 pub struct SessionIoBundle {
     pub output: OutputHandle,
 }
 
-pub async fn init_session_for_telnet<W>(
-    telnet_writer: W,
-    sess: Arc<RwLock<Session>>,
-) -> SessionIoBundle
+pub async fn init_session_for_telnet<W>(telnet_writer: W, sess: Arc<RwLock<Session>>) -> SessionIoBundle
 where
-    W: AsyncWrite + Unpin + Send + 'static
+    W: AsyncWrite + Unpin + Send + 'static,
 {
     let (tx, rx) = mpsc::channel::<OutEvent>(64);
     let output_handle = OutputHandle::new(tx, sess.clone());
@@ -141,9 +151,7 @@ where
         }
     });
 
-    SessionIoBundle {
-        output: output_handle,
-    }
+    SessionIoBundle { output: output_handle }
 }
 
 pub async fn init_session_for_websocket(
@@ -161,7 +169,5 @@ pub async fn init_session_for_websocket(
         }
     });
 
-    SessionIoBundle {
-        output: output_handle,
-    }
+    SessionIoBundle { output: output_handle }
 }

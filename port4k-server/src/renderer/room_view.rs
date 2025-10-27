@@ -1,4 +1,3 @@
-
 pub fn render_room_view() -> String {
     let res = [
         "{c:blue}--------------------------------------------------{c}",

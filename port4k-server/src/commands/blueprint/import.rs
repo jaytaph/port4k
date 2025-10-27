@@ -22,12 +22,14 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     let base_path = Path::new(ctx.registry.config.import_dir.as_str());
     match crate::import::import_blueprint_sub_dir(blueprint.id, subdir, base_path, &ctx.registry.db).await {
         Ok(()) => {
-            ctx.output.system(format!(
-                "[bp] imported YAML rooms from {}/{} into `{}`.",
-                base_path.display(),
-                subdir,
-                bp_key
-            )).await;
+            ctx.output
+                .system(format!(
+                    "[bp] imported YAML rooms from {}/{} into `{}`.",
+                    base_path.display(),
+                    subdir,
+                    bp_key
+                ))
+                .await;
         }
         Err(e) => {
             ctx.output.system(format!("[bp] import failed: {:#}", e)).await;
