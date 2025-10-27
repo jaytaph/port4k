@@ -1,4 +1,4 @@
-version: 2
+version: 3
 id: entry
 name: Entry Hall
 short: "A small, quiet room lit by phosphor glow."
@@ -13,16 +13,20 @@ state:
   dust_level: "high"
 
 hints:
-  - text: "The blast door might be locked; perhaps there's a way to unlock it."
+  - id: blast_door_locked
+    text: "The blast door might be locked; perhaps there's a way to unlock it."
     when: first_look
     once: true
-  - text: "The console looks damaged but might still be usable."
+  - id: console_damaged
+    text: "The console looks damaged but might still be usable."
     when: enter
     cooldown: 3
-  - text: "The toolkit could contain useful items."
+  - id: toolkit_items
+    text: "The toolkit could contain useful items."
     when: search
     once: true
-  - text: "Try: 'enter 4312 on console' after powering it."
+  - id: console_code_help
+    text: "Try: 'enter 4312 on console' after powering it."
     when: after_fail        # e.g., after a wrong 'enter' attempt
     cooldown: 2
 

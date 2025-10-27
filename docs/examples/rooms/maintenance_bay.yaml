@@ -1,4 +1,4 @@
-version: 2
+version: 3
 id: maintenance_bay
 name: Maintenance Bay
 short: "An oil-stained service room full of parts and half-dead machines."
@@ -10,16 +10,20 @@ kv:
   smell: "oil_metal"
 
 hints:
-  - text: "If you need power, a generator or charger might help."
+  - id: power
+    text: "If you need power, a generator or charger might help."
     when: first_look
     once: true
-  - text: "A charged microcell could wake up dead consoles elsewhere."
+  - id: microcell
+    text: "A charged microcell could wake up dead consoles elsewhere."
     when: enter
     cooldown: 2
-  - text: "Benches often hide compartments—check the workbench carefully."
+  - id: benches
+    text: "Benches often hide compartments—check the workbench carefully."
     when: search
     once: true
-  - text: "Some machines only start once the coolant valves are open or panels are seated."
+  - id: machine
+    text: "Some machines only start once the coolant valves are open or panels are seated."
     when: manual
 
 objects:
