@@ -56,6 +56,9 @@ pub struct Session {
     // Which map am I?
     pub zone_ctx: Option<ZoneContext>,
 
+    // Are we currently in the lua repl?
+    pub in_lua_repl: bool,
+
     // Where am I (on the map)?
     pub cursor: Option<Cursor>,
     // Previous cursors (for "back" command)
@@ -78,6 +81,7 @@ impl Session {
             prev_cursors: Vec::new(),
             tty_cols: None,
             tty_rows: None,
+            in_lua_repl: false,
         }
     }
 }

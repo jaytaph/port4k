@@ -18,10 +18,13 @@ pub async fn open(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     // Check if we are opening an object
     if let Some(obj) = rv.object_by_noun(&noun.head) {
         // Do we have a script attached? run that first
-        if let Some(_) = obj.use_lua.as_ref() {
+        if let Some(_) = obj.on_use.as_ref() {
             let (tx, rx) = oneshot::channel();
 
+            let output_handle = ctx.output.clone();
+
             ctx.lua_tx.send(LuaJob::OnObject {
+                output_handle,
                 account: ctx.account()?,
                 cursor: Box::new(ctx.cursor()?),
                 intent: Box::new(intent.clone()),
@@ -30,8 +33,14 @@ pub async fn open(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
             }).await.map_err(|_| DomainError::InternalError("Failed to send Lua job".into()))?;
 
             match rx.await.map_err(|_| DomainError::InternalError("Lua script channel closed".into()))? {
-                LuaResult::Blocked => handled = false,
-                LuaResult::Success => handled = true,
+                LuaResult::Success(v) => {
+                    // Only if returned "true" then we consider it handled
+                    if v.is_boolean() && v.as_boolean().unwrap_or(false) {
+                        handled = true;
+                    } else {
+                        handled = false;
+                    }
+                },
                 LuaResult::Failed(msg) => ctx.output.system(format!("on_object script returned an error: {}", msg)).await,
             }
         }

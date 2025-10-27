@@ -4,7 +4,6 @@ use crate::error::DomainError;
 use crate::input::parser::Intent;
 use crate::models::account::Account;
 use crate::models::zone::{Persistence, ZoneContext, ZoneKind, ZonePolicy};
-use crate::renderer::{RenderVars, render_template};
 use crate::state::session::ConnState;
 use anyhow::anyhow;
 use std::sync::Arc;
@@ -13,14 +12,13 @@ const MOTD: &str = r#"
 
 ** ==============  PORT4K INCOMING MESSAGE =================
 **
-**   Welcome back, {c:yellow}{v:account.name}{c}!  (last login: {v:last_login})
+**   Welcome back, {c:yellow}{v:account.name}{c}!  (last login: {v:last_login:Never logged in before})
 **   Server time: {c:white}{v:wall_time}{c}
-**   Location: {c:bright_white}{v:cursor.zone} - {v:cursor.room.title}{c}
 **
 **   Account:
-**      HP    : {c:green:bold}{v:account.health}/100{c}
-**      XP    : {c:green:bold}{v:account.xp}{c}
-**      Coins : {c:green:bold}{v:account.coins}{c}
+**      HP    : {c:green:bold}{v:account.health:0}/100{c}
+**      XP    : {c:green:bold}{v:account.xp:0}{c}
+**      Coins : {c:green:bold}{v:account.coins:0}{c}
 **
 **   News:
 **    - New vault area unlocked in The Hub.
@@ -79,13 +77,10 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
 
     // Step 5: Show MOTD if needed
 
-    let width = 80;
     let show_motd = true; // @TODO: Make configurable per-account
-
     if show_motd {
-        let vars = RenderVars::new(ctx.sess.clone(), None);
-        let motd = render_template(MOTD, &vars, width);
-        ctx.output.system(motd).await;
+        // let vars = RenderVars::new(ctx.sess.clone(), None);
+        ctx.output.system(MOTD).await;
     }
 
 

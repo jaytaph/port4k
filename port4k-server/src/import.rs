@@ -10,11 +10,11 @@ use std::collections::{HashMap, HashSet};
 use std::{fs, path::Path};
 use tokio_postgres::Transaction;
 use crate::lua::ScriptHook;
-// ====== v2 YAML models ======
+// ====== v3 YAML models ======
 
 #[derive(Debug, Deserialize)]
 struct RoomYaml {
-    pub version: u8,  // must be 2
+    pub version: u8,  // must be 3
     pub id: String,   // "entry"
     pub name: String, // "Entry Hall"
     #[serde(default)]
@@ -36,6 +36,7 @@ struct RoomYaml {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct HintYaml {
+    pub id: String,
     pub text: String,
     #[serde(default)]
     pub when: Option<String>, // "enter" | "first_look" | "manual" | ...
@@ -118,6 +119,7 @@ pub async fn import_blueprint_sub_dir(
     // Parse first (so we can do multi-pass write)
     let mut rooms: Vec<RoomYaml> = Vec::new();
     for path in files {
+        println!("Importing room from {:?}", path);
         let text = fs::read_to_string(&path).map_err(InfraError::from)?;
         let mut room: RoomYaml = serde_yaml::from_str(&text)?;
         // normalize "use"
@@ -166,7 +168,7 @@ async fn upsert_room_header(tx: &Transaction<'_>, bp_id: BlueprintId, r: &RoomYa
     let short = r.short.as_deref().unwrap_or_default();
     let body = &r.full_desc;
 
-    // Store hints as JSON (structured v2)
+    // Store hints as JSON (structured v3)
     let hints_json = serde_json::to_value(&r.hints)?;
 
     // Insert/update by (bp_id, key), return id
@@ -300,7 +302,6 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
 async fn upsert_room_scripts(tx: &Transaction<'_>, room_id: uuid::Uuid, scripts: &ScriptYaml) -> AppResult<()> {
     // single-row table keyed by room_id
     for (_, (hook, script)) in scripts.0.iter().enumerate() {
-        dbg!(&hook);
         tx.execute(
             r#"
             INSERT INTO bp_room_scripts (room_id, hook, script)
@@ -356,10 +357,10 @@ async fn upsert_exits(
 // ====== Validation & Lua compile ======
 
 fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
-    if room.version != 2 {
+    if room.version != 3 {
         return Err(DomainError::Validation {
             field: "room.version",
-            message: "unsupported room schema version; expected 2".into(),
+            message: "unsupported room schema version; expected 3".into(),
         });
     }
     if room.id.trim().is_empty() {

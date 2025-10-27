@@ -1,9 +1,10 @@
 use crate::db::DbResult;
 use crate::db::error::DbError;
-use crate::models::types::{BlueprintId, Direction, ExitId, ObjectId, RoomId};
+use crate::models::types::{BlueprintId, Direction, ExitId, HintId, ObjectId, RoomId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::str::FromStr;
 use tokio_postgres::Row;
 use uuid::Uuid;
 use crate::lua::ScriptHook;
@@ -13,6 +14,7 @@ use crate::util::serde::serde_to_str;
 /// Hints that a user can request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hint {
+    pub id: String,             // Unique ID (in the room)
     pub once: Option<bool>,     // Only show once
     pub text: String,
     pub when: String,           // first_look, enter, search, after_fail
@@ -184,15 +186,20 @@ pub struct Kv {
 }
 
 impl Kv {
-    pub(crate) fn get_int(&self, key: &str, default: i32) -> i32 {
+    pub(crate) fn get_bool(&self, key: &str, default: bool) -> bool {
         self.inner
             .get(key)
-            .and_then(|v| v.parse::<i32>().ok())
+            .and_then(|v| Some(str_is_truthy(v.as_str())))
             .unwrap_or(default)
     }
-}
 
-impl Kv {
+    pub(crate) fn get_num<T: FromStr>(&self, key: &str, default: T) -> T {
+        self.inner
+            .get(key)
+            .and_then(|v| v.parse::<T>().ok())
+            .unwrap_or(default)
+    }
+
     pub fn try_from_rows(rows: &[Row]) -> DbResult<Self> {
         let mut kv = Kv::default();
         for row in rows {
@@ -224,31 +231,31 @@ impl Kv {
     }
 }
 
-// #[derive(Clone, Debug, Serialize, Deserialize, Default)]
-// pub enum Discovery {
-//     #[default]
-//     Visible, // always listed
-//     Hidden, // never listed until discovered
-//     Obscured { dc: u8 }, // requires a perception check >= dc
-//     Conditional { key: String, value: String }, // visible if room_kv[key]==value
-//     Scripted, // let Lua decide
-// }
-
-
-
 /// Runtime view the engine uses. It contains all resolved data for the specific zone and user
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoomView {
-    pub room: BlueprintRoom,
+    /// Room blueprint (static data only)
+    pub blueprint: BlueprintRoom,
+    // Static scripts (@TODO: should be in the blueprint)
+    pub scripts: RoomScripts,
+
+    /// Resolved key/values for the specific zone/room/user
     pub room_kv: KvResolved,
 
+    /// Resolved exits for the specific zone/room/user
     pub exits: Vec<ResolvedExit>,
+    /// Map of direction -> exit index in `exits` array
     pub exits_by_dir: HashMap<Direction, usize>,
 
+    /// Resolved objects for the specific zone/room/user
     pub objects: Vec<ResolvedObject>,
+    /// Map of object key -> object index in `objects` array
     pub objects_by_key: HashMap<String, usize>,
 
-    pub scripts: RoomScripts,
+    /// How many times we have entered the room
+    pub visit_count: i64,
+    /// Timestamp of last visit (epoch seconds)
+    pub last_visit_at: Option<i64>,
 }
 
 impl RoomView {
@@ -282,6 +289,7 @@ pub(crate) fn build_room_view_impl(
     bp_room: &BlueprintRoom,
     bp_exits: &[BlueprintExit],
     bp_objs: &[BlueprintObject],
+    bp_scripts: &RoomScripts,
     bp_room_kv: &Kv,
 
     zone_room_kv: &Kv,
@@ -297,7 +305,6 @@ pub(crate) fn build_room_view_impl(
     let mut exits = Vec::new();
     let mut exits_by_dir = HashMap::new();
     for e in bp_exits {
-
         // We store exit information inside the room KVs
         // exit.north.locked = true means the exit to the north is locked
         let key_locked = format!("exit.{}.locked", e.dir);
@@ -379,7 +386,7 @@ pub(crate) fn build_room_view_impl(
             short: o.short.clone(),
             description: o.description.clone(),
             examine: o.examine.clone(),
-            use_lua: o.on_use_lua.clone(),
+            on_use: o.on_use_lua.clone(),
             nouns: o.nouns.clone(),
             position: o.position,
             kv,
@@ -395,14 +402,22 @@ pub(crate) fn build_room_view_impl(
         });
     }
 
+    let visit_count = user_room_kv.get_num::<i64>("__visit_count", 0);
+    let last_visit_at = match user_room_kv.get_num::<i64>("__last_visit_at", 0) {
+        0 => None,
+        n => Some(n),
+    };
+
     RoomView {
-        room: bp_room.clone(),
+        blueprint: bp_room.clone(),
         room_kv,
         exits,
         exits_by_dir,
         objects,
         objects_by_key,
-        scripts: RoomScripts::default()
+        scripts: bp_scripts.clone(),
+        visit_count,
+        last_visit_at,
     }
 }
 
@@ -433,6 +448,7 @@ fn parse_hints_value(hints: Option<Value>) -> DbResult<Vec<Hint>> {
                     .into_iter()
                     .filter_map(|x| x.as_str().map(|s| s.to_string()))
                     .map(|text| Hint {
+                        id: HintId::new().to_string(),
                         once: None,
                         text,
                         when: "manual".to_string(),
@@ -441,7 +457,7 @@ fn parse_hints_value(hints: Option<Value>) -> DbResult<Vec<Hint>> {
                     .collect();
                 Ok(out)
             } else {
-                // v2 format: array of objects
+                // v2 and higher format: array of objects
                 // Deserialize then normalize 'when'
                 let mut hints: Vec<Hint> = serde_json::from_value(Value::Array(arr))
                     .map_err(|e| DbError::Validation(format!("invalid hints array: {e}")))?;
@@ -538,7 +554,7 @@ pub struct ResolvedObject {
     pub description: String,
     pub examine: Option<String>,
     pub nouns: Vec<String>,
-    pub use_lua: Option<String>,
+    pub on_use: Option<String>,
     pub position: Option<i32>,
 
     pub kv: KvResolved,
@@ -730,6 +746,7 @@ mod tests {
             &room,
             &[],               // bp_exits
             &objs,             // bp_objs
+            &RoomScripts::default(), // bp_scripts
             &Kv::default(),    // bp_room_kv
             &Kv::default(),    // zone_room_kv
             &HashMap::new(),   // zone_obj_kv
@@ -757,7 +774,7 @@ mod tests {
 
         // No overrides: remains locked, but visible (due to visible_when_locked)
         let view = build_room_view_impl(
-            &room, &exits, &[], &Kv::default(),
+            &room, &exits, &[], &RoomScripts::default(), &Kv::default(),
             &Kv::default(), &HashMap::new(), &HashMap::new(),
             &Kv::default(), &HashMap::new(), &HashMap::new(),
         );
@@ -768,7 +785,7 @@ mod tests {
         // Zone override unlocks it: exit.north.locked=false
         let zone_kv = kv(&[("exit.north.locked", "false")]);
         let view = build_room_view_impl(
-            &room, &exits, &[], &Kv::default(),
+            &room, &exits, &[], &RoomScripts::default(), &Kv::default(),
             &zone_kv, &HashMap::new(), &HashMap::new(),
             &Kv::default(), &HashMap::new(), &HashMap::new(),
         );
@@ -778,7 +795,7 @@ mod tests {
         // User override wins over zone, locks it again: exit.north.locked=true
         let user_kv = kv(&[("exit.north.locked", "true")]);
         let view = build_room_view_impl(
-            &room, &exits, &[], &Kv::default(),
+            &room, &exits, &[], &RoomScripts::default(), &Kv::default(),
             &zone_kv, &HashMap::new(), &HashMap::new(),
             &user_kv, &HashMap::new(), &HashMap::new(),
         );
@@ -788,7 +805,7 @@ mod tests {
         // Explicit visibility override: exit.north.visible=false hides even if visible_when_locked
         let user_kv = kv(&[("exit.north.visible", "false")]);
         let view = build_room_view_impl(
-            &room, &exits, &[], &Kv::default(),
+            &room, &exits, &[], &RoomScripts::default(), &Kv::default(),
             &Kv::default(), &HashMap::new(), &HashMap::new(),
             &user_kv, &HashMap::new(), &HashMap::new(),
         );
@@ -812,7 +829,7 @@ mod tests {
 
         // No overrides -> stays 5
         let view = build_room_view_impl(
-            &room, &[], &bp_objs, &Kv::default(),
+            &room, &[], &bp_objs, &RoomScripts::default(), &Kv::default(),
             &Kv::default(), &HashMap::new(), &HashMap::new(),
             &Kv::default(), &HashMap::new(), &HashMap::new(),
         );
@@ -822,7 +839,7 @@ mod tests {
         let mut zone_qty = HashMap::new();
         zone_qty.insert(key.clone(), 12);
         let view = build_room_view_impl(
-            &room, &[], &bp_objs, &Kv::default(),
+            &room, &[], &bp_objs, &RoomScripts::default(), &Kv::default(),
             &Kv::default(), &HashMap::new(), &zone_qty,
             &Kv::default(), &HashMap::new(), &HashMap::new(),
         );
@@ -832,7 +849,7 @@ mod tests {
         let mut user_qty = HashMap::new();
         user_qty.insert(key.clone(), 99);
         let view = build_room_view_impl(
-            &room, &[], &bp_objs, &Kv::default(),
+            &room, &[], &bp_objs, &RoomScripts::default(), &Kv::default(),
             &Kv::default(), &HashMap::new(), &zone_qty,
             &Kv::default(), &HashMap::new(), &user_qty,
         );
@@ -850,7 +867,7 @@ mod tests {
 
         // No reveal, compute_object_visible may hide it -> object should be visible iff flags allow.
         let view = build_room_view_impl(
-            &room, &[], &bp_objs, &Kv::default(),
+            &room, &[], &bp_objs, &RoomScripts::default(), &Kv::default(),
             &Kv::default(), &HashMap::new(), &HashMap::new(),
             &Kv::default(), &HashMap::new(), &HashMap::new(),
         );
@@ -869,7 +886,7 @@ mod tests {
             m
         };
         let view = build_room_view_impl(
-            &room, &[], &bp_objs, &Kv::default(),
+            &room, &[], &bp_objs, &RoomScripts::default(), &Kv::default(),
             &Kv::default(), &HashMap::new(), &HashMap::new(),
             &Kv::default(), &user_obj_kv, &HashMap::new(),
         );
@@ -898,7 +915,7 @@ mod tests {
             }
         ];
         let view = build_room_view_impl(
-            &room, &exits, &[], &Kv::default(),
+            &room, &exits, &[], &RoomScripts::default(), &Kv::default(),
             &Kv::default(), &HashMap::new(), &HashMap::new(),
             &Kv::default(), &HashMap::new(), &HashMap::new(),
         );

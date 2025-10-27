@@ -6,10 +6,16 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Returns a list of variables available for rendering templates.
-pub fn generate_render_vars(sess: Arc<RwLock<Session>>, rv: Option<&RoomView>) -> RenderVars {
+pub fn generate_render_vars(sess: Arc<RwLock<Session>>) -> RenderVars {
+    // We only add roomview vars when session.cursor.roomview is Some
+    let room_view = match sess.read().cursor.as_ref() {
+        Some(cursor) => get_roomview_vars(&cursor.room_view),
+        None => HashMap::new(),
+    };
+
     RenderVars {
         global: get_global_vars(sess.clone()),
-        room_view: rv.map(get_roomview_vars).unwrap_or_default(),
+        room_view,
     }
 }
 
@@ -40,7 +46,7 @@ fn get_global_vars(sess: Arc<RwLock<Session>>) -> HashMap<String, String> {
     }
     if let Some(cursor) = sess.read().cursor.as_ref() {
         vars.insert("cursor.zone".to_string(), cursor.zone_ctx.zone.title.to_string());
-        vars.insert("cursor.room.title".to_string(), cursor.room_view.room.title.to_string());
+        vars.insert("cursor.room.title".to_string(), cursor.room_view.blueprint.title.to_string());
         // vars.insert("cursor.view".to_string(), cursor.room.title.to_string());
     }
 
@@ -120,8 +126,8 @@ pub fn get_roomview_vars(rv: &RoomView) -> HashMap<String, String> {
     let mut vars = HashMap::new();
 
     // Room basics
-    push(&mut vars, "title", &rv.room.title);
-    push(&mut vars, "body",  &rv.room.body);
+    push(&mut vars, "title", &rv.blueprint.title);
+    push(&mut vars, "body",  &rv.blueprint.body);
 
     // --------------------
     // Exits (aggregate)

@@ -7,8 +7,8 @@ use std::{
 use tokio::io::AsyncWrite;
 use tokio::time::{Sleep, sleep};
 
+#[allow(unused)]
 pub enum Pace {
-    #[allow(unused)]
     PerChar {
         delay: Duration,
     },
@@ -25,6 +25,7 @@ pub struct SlowWriter<W> {
 }
 
 impl<W> SlowWriter<W> {
+    #[allow(unused)]
     pub fn new(inner: W, pace: Pace) -> Self {
         Self {
             inner,

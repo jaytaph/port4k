@@ -10,12 +10,12 @@ use crate::state::session::Protocol;
 use crate::{Registry, Session};
 use parking_lot::RwLock;
 use std::sync::Arc;
-use std::time::Duration;
+// use std::time::Duration;
 use tokio::sync::mpsc;
 use crate::banner::{BANNER, ENTRY};
 use crate::net::output::init_session_for_telnet;
 use crate::net::telnet::crlf_wrapper::CrlfWriter;
-use crate::net::telnet::slow_writer::{Pace, SlowWriter};
+// use crate::net::telnet::slow_writer::{Pace, SlowWriter};
 use crate::util::telnet::TelnetMachine;
 
 /// Run the telnet server
@@ -74,13 +74,14 @@ async fn handle_telnet_connection(
     let mut telnet = TelnetMachine::new();
     telnet.start_negotiation(&mut wrapper_writer).await?;
 
-    let io_bundle = init_session_for_telnet(wrapper_writer).await;
+    let sess = Arc::new(RwLock::new(Session::new(Protocol::Telnet)));
+
+    let io_bundle = init_session_for_telnet(wrapper_writer, sess.clone()).await;
 
     io_bundle.output.system(BANNER).await;
     io_bundle.output.system(ENTRY).await;
     io_bundle.output.prompt("> ".to_string()).await;
 
-    let sess = Arc::new(RwLock::new(Session::new(Protocol::Telnet)));
 
     let ctx = Arc::new(AppCtx {
         registry: registry.clone(),

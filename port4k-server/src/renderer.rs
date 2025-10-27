@@ -6,7 +6,6 @@ pub mod vars;
 mod objects;
 
 use crate::Session;
-use crate::models::room::RoomView;
 use crate::renderer::parser::Alignment;
 use parking_lot::RwLock;
 pub use parser::{Token, VarFmt};
@@ -64,8 +63,8 @@ impl std::fmt::Debug for RenderVars {
 }
 
 impl RenderVars {
-    pub fn new(sess: Arc<RwLock<Session>>, rv: Option<&RoomView>) -> Self {
-        vars::generate_render_vars(sess, rv)
+    pub fn new(sess: Arc<RwLock<Session>>) -> Self {
+        vars::generate_render_vars(sess)
     }
 }
 
@@ -139,9 +138,7 @@ fn render_single_pass(template: &str, vars: &RenderVars, opts: &RenderOptions) -
                         do_variable_substitution(chosen, &v.raw, &v.fmt, opts, &mut out);
                     }
                     Object => {
-                        dbg!(&v);
                         let tmp = expand_inline_object_tokens(&v.raw, vars);
-                        dbg!(&tmp);
                         out.push_str(&tmp);
                     }
                 }
@@ -462,8 +459,6 @@ mod tests {
             &vars,
             &RenderOptions { missing_var: MissingVarPolicy::Color, max_width: 80 },
         );
-
-        dbg!(&out);
 
         assert!(!out.contains("{o:toolkit}"));
         assert!(out.contains("discarded toolkit"));

@@ -37,6 +37,7 @@ pub enum Verb {
     Who,
     Login,
     Logout,
+    LuaRepl,
     Register,
     /// Unrecognized; keep the raw verb so Lua/room handlers can try.
     Unknown,
@@ -70,6 +71,7 @@ impl Verb {
             Verb::Login => "login",
             Verb::Logout => "logout",
             Verb::Register => "register",
+            Verb::LuaRepl => "lua",
             Verb::Unknown => "unknown",
             Verb::ScBlueprint => "@bp",
             Verb::ScPlaytest => "@playtest",
@@ -390,6 +392,10 @@ fn detect_verb(tokens: &[Token]) -> (Verb, usize, Option<Preposition>, Option<St
 fn verb_map() -> HashMap<&'static str, Verb> {
     use Verb::*;
     let mut m = HashMap::new();
+    // lua repl
+    for k in ["lua", "luarepl", "repl"].iter() {
+        m.insert(*k, LuaRepl);
+    }
     // look
     for k in ["look", "l"].iter() {
         m.insert(*k, Look);

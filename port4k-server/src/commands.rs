@@ -32,6 +32,7 @@ mod search;
 mod take;
 mod who;
 mod open;
+mod lua;
 
 pub type CommandResult = Result<(), CommandError>;
 
@@ -110,7 +111,7 @@ impl CmdCtx {
     }
 
     pub fn room_id(&self) -> AppResult<RoomId> {
-        self.cursor().map(|c| c.room_view.room.id)
+        self.cursor().map(|c| c.room_view.blueprint.id)
     }
 
     pub fn account(&self) -> AppResult<Account> {
@@ -148,6 +149,7 @@ pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
         return Ok(());
     }
 
+
     let intent = parse_command(raw);
     match intent.verb {
         Verb::Close => { ctx.output.system("Goodbye! Connection closed by user.").await; Ok(()) }
@@ -170,7 +172,7 @@ pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
         Verb::Logout => logout::logout(ctx.clone(), intent).await,
         Verb::Login => login::login(ctx.clone(), intent).await,
         Verb::Register => register::register(ctx.clone(), intent).await,
-
+        Verb::LuaRepl => lua::repl(ctx.clone()).await,
         Verb::ScBlueprint => blueprint::blueprint(ctx.clone(), intent).await,
         Verb::ScPlaytest => playtest::playtest(ctx.clone(), intent).await,
         // Verb::ScScript => script::script(ctx.clone(), intent).await,

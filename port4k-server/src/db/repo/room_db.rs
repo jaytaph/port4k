@@ -103,61 +103,6 @@ impl RoomRepo for RoomRepository {
         Ok(exits)
     }
 
-    // async fn room_objects(&self, room_id: RoomId) -> DbResult<Vec<BlueprintObject>> {
-    //     let client = self.db.get_client().await?;
-    //
-    //     let obj_rows = client
-    //         .query(
-    //             r#"
-    //         SELECT id, room_id, name, short, description, examine, state, use_lua, position
-    //         FROM bp_objects
-    //         WHERE room_id = $1
-    //         ORDER BY COALESCE(position, 0), name
-    //         "#,
-    //             &[&room_id],
-    //         )
-    //         .await?;
-    //
-    //     // Gather nouns in one go
-    //     let noun_rows = client
-    //         .query(
-    //             r#"
-    //         SELECT room_id, obj_id, noun
-    //         FROM bp_object_nouns
-    //         WHERE room_id = $1
-    //         "#,
-    //             &[&room_id],
-    //         )
-    //         .await?;
-    //
-    //     let mut nouns_by_obj: HashMap<ObjectId, Vec<String>> = HashMap::new();
-    //     for r in noun_rows {
-    //         let obj_id: ObjectId = r.get(1);
-    //         let noun: String = r.get(2);
-    //         nouns_by_obj.entry(obj_id).or_default().push(noun);
-    //     }
-    //
-    //     let mut objects = vec![];
-    //     for obj in obj_rows {
-    //         // Convert SQL row into an row object
-    //         let row_obj = BlueprintObject::try_from_row(&obj)?;
-    //
-    //         let nouns_slice: &[String] = nouns_by_obj
-    //             .get(&row_obj.id)
-    //             .map(Vec::as_slice) // &Vec<String> -> &[String]
-    //             .unwrap_or(&[]); // empty slice of the right type
-    //
-    //         // Get room KVs
-    //         let kv = self.room_kv(room_id).await?;
-    //
-    //         // Convert row object + nouns into a full object
-    //         let obj = BlueprintObject::from_rows(&row_obj, nouns_slice, kv);
-    //         objects.push(obj);
-    //     }
-    //
-    //     Ok(objects)
-    // }
-
     async fn room_objects(&self, room_id: RoomId) -> DbResult<Vec<BlueprintObject>> {
         let client = self.db.get_client().await?;
 

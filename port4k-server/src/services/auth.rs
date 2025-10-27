@@ -53,10 +53,6 @@ impl AuthService {
             return Err(DomainError::NotFound("Account not found".into()));
         };
 
-        println!("********************************************************");
-        dbg!(&account);
-        println!("********************************************************");
-
         let parsed = PasswordHash::new(&account.password_hash).map_err(DomainError::Password)?;
         if self.argon.verify_password(password.as_bytes(), &parsed).is_err() {
             warn!("[AuthService] Authentication failed for username '{}': invalid password", username);

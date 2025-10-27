@@ -1,7 +1,6 @@
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use std::sync::Arc;
-use crate::renderer::{render_template, RenderVars};
 
 const USAGE: &'static str = "Usage: debug <where|col>\n";
 
@@ -25,7 +24,7 @@ pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
             let mut line = String::new();
             for fg in &colors {
                 for bg in &colors {
-                    let s = render_template(&format!("{{c:{}:{}}}{:02X}{{c}} ", fg, bg, i), &RenderVars::default(), 80);
+                    let s = format!("{{c:{}:{}}}{:02X}{{c}} ", fg, bg, i);
                     line.push_str(&s);
                     i += 1;
                 }
@@ -45,7 +44,7 @@ pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
             let cursor = ctx.cursor()?;
             ctx.output.system(format!(
                 "[debug] user={username} zone={} zone_kind: {:?} room: {}",
-                cursor.zone_ctx.zone.title, cursor.zone_ctx.kind, cursor.room_view.room.title
+                cursor.zone_ctx.zone.title, cursor.zone_ctx.kind, cursor.room_view.blueprint.title
             )).await;
         }
         _ => {

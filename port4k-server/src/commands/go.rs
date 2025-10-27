@@ -34,7 +34,7 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     };
 
     // 3. attempt move via world/nav API
-    match try_move_player(ctx.clone(), &account, cur_view.room.id, dir).await {
+    match try_move_player(ctx.clone(), &account, cur_view.blueprint.id, dir).await {
         Ok(_) => { /* we already output stuff inside try_move_player */ }
         Err(MoveError::NoSuchExit) => {
             ctx.output.line("You can't go that way.").await;

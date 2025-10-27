@@ -47,30 +47,31 @@ objects:
     use: |
       return function(ctx)
         local exit = "north"
+        port4k.say("DEBUG: Checking blast door use")
           
         if ctx.intent.verb == "open" then
             if not ctx.room.exits[exit] then
-                ctx:say("There is no door here to open.")
+                port4k.say("There is no door here to open.")
             end
             if ctx.object.locked then
-                ctx:say("The door is locked tight.")
+                port4k.say("The door is locked tight.")
                 return true
             end
             if ctx.object.locked == false then
-                ctx:say("It's already open.")
+                port4k.say("It's already open.")
                 return true
             end
-            ctx:say("Hydraulics hiss as the blast door slides open.")
-            ctx:set_exit_locked(exit, false)
+            port4k.say("Hydraulics hiss as the blast door slides open.")
+            port4k.set_exit_locked(exit, false)
             return true
     
         elseif ctx.intent.verb == "close" then
-            if ctx:is_exit_locked(exit) == true then
-                ctx:say("It's already closed.")
+            if port4k.is_exit_locked(exit) == true then
+                port4k.say("It's already closed.")
                 return true
             end
-            ctx:say("The blast door rumbles shut.")
-            ctx:set_exit_locked(exit, true)
+            port4k.say("The blast door rumbles shut.")
+            port4k.set_exit_locked(exit, true)
             return true
         end
     
@@ -96,13 +97,13 @@ objects:
       return function(ctx)
         local powered = ctx.object.state.powered
         if not powered then
-          if verb == "power" and ctx:has_item("microcell") then
-            ctx:set_object_state("wall_console","powered", true)
-            ctx:consume_item("microcell")
-            ctx:say("You slot the microcell. The console hums to life.")
+          if verb == "power" and port4k.player_has_item("microcell") then
+            port4k.set_object_state("wall_console","powered", true)
+            port4k.consume_item("microcell")
+            port4k.say("You slot the microcell. The console hums to life.")
             return true
           else
-            ctx:say("The console is dead. You might power it with a microcell.")
+            port4k.say("The console is dead. You might power it with a microcell.")
             return true
           end
         end
@@ -111,17 +112,17 @@ objects:
           local code = table.concat(args, " ")
           local required = ctx.object.code_required or "4312"
           if code == required then
-            ctx:say("Code accepted. Releasing blast door locks.")
-            ctx:set_object_state("blast_door","locked", false)
+            port4k.say("Code accepted. Releasing blast door locks.")
+            port4k.set_object_state("blast_door","locked", false)
           else
-            ctx:say("ACCESS DENIED.")
-            ctx:hint_trigger("after_fail")    -- lets the engine consider an after_fail hint
+            port4k.say("{c:bright_white:bright_red}ACCESS DENIED{c}")
+            port4k.hint_trigger("after_fail")    -- lets the engine consider an after_fail hint
           end
           return true
         end
 
         if verb == "use" then
-          ctx:say("The console awaits a code. Try: enter <code> on console")
+          port4k.say("The console awaits a code. Try: enter <code> on console")
           return true
         end
 
@@ -163,24 +164,19 @@ exits:
     visible_when_locked: true
 
 scripts:
-  on_first_enter: |
-    return function(ctx)
-      ctx:say("*************  FIRST TIME THE HALL  *************")
-    end
   on_enter: |
     return function(ctx)
-      ctx:say("*************  YOU ARE AGAIN ENTERING THE HALL  *************")
-      if not ctx.room.objects["wall_console"].state.powered then
-        ctx:say("The console flickers once and dies. It might need a power source.")
+      if not ctx.room.objects["wall_console"].state["powered"] then
+        port4k.say("The console flickers once and dies. It might need a power source.")
       end
-      ctx:hint_consider("enter")    -- engine may surface an 'enter' hint
+      port4k.hint_consider("enter")    -- engine may surface an 'enter' hint
     end
-
   on_command: |
+    port4k.say("OnCommand")
     -- Allow "read markings"
     return function(ctx, verb, args)
-      if verb == "read" and ctx:matches_noun(args, {"markings","symbols","etchings"}) then
-        ctx:say("The symbols resemble hazard glyphs: 'pressure loss' and 'quarantine'.")
+      if verb == "read" and port4k.matches_noun(args, {"markings","symbols","etchings"}) then
+        port4k.say("The symbols resemble hazard glyphs: 'pressure loss' and 'quarantine'.")
         return true
       end
       return false

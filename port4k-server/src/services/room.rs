@@ -6,7 +6,7 @@ use tokio::sync::oneshot;
 use tokio::time::timeout;
 use crate::commands::CmdCtx;
 use crate::error::{AppResult, DomainError};
-use crate::lua::{LuaJob, LUA_CMD_TIMEOUT};
+use crate::lua::{LuaJob, LuaResult, ScriptHook, LUA_CMD_TIMEOUT};
 use crate::models::room::{build_room_view_impl, RoomView};
 use crate::models::zone::ZoneContext;
 use crate::state::session::Cursor;
@@ -30,6 +30,61 @@ impl RoomService {
         }
     }
 
+    pub async fn hint_consider(&self, ctx: Arc<CmdCtx>, trigger: &str) -> AppResult<()> {
+        let room_view = ctx.room_view()?;
+        let current_visit = room_view.visit_count;
+
+        for hint in room_view.blueprint.hints.iter() {
+            if hint.when == trigger {
+                let account_id = ctx.account_id()?;
+                let room_id = ctx.room_id()?;
+                let zone_id = ctx.zone_id()?;
+
+                let kv = self.user_repo.room_kv(zone_id, room_id, account_id).await?;
+                let shown = kv.get_bool(&format!("hint_shown_{}", hint.id), false);
+
+                if hint.once.unwrap_or(false) && shown {
+                    continue; // Already shown
+                }
+
+                // Check cooldown
+                if let Some(cooldown) = hint.cooldown {
+                    let last_shown_visit = kv.get_num::<i64>(&format!("hint_last_visit_{}", hint.id), 0);
+                    if current_visit - last_shown_visit < cooldown as i64 {
+                        continue; // Still in cooldown
+                    }
+                }
+
+                // Show the hint
+                ctx.output.system(format!("{{c:cyan:bright_cyan}}Hint: {}{{c}}", hint.text)).await;
+
+                // Mark as shown
+                if hint.once.unwrap_or(false) {
+                    self.user_repo.set_room_kv(
+                        zone_id,
+                        room_id,
+                        account_id,
+                        &format!("hint_shown_{}", hint.id),
+                        &serde_json::Value::Bool(true),
+                    ).await?;
+                }
+
+                // Update last shown visit for cooldown
+                if hint.cooldown.is_some() {
+                    self.user_repo.set_room_kv(
+                        zone_id,
+                        room_id,
+                        account_id,
+                        &format!("hint_last_visit_{}", hint.id),
+                        &serde_json::Value::Number(current_visit.into()),
+                    ).await?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     // Travel to the given room
     pub async fn enter_room(&self, ctx: Arc<CmdCtx>, c: &Cursor) -> AppResult<()> {
         // Enter the current room
@@ -50,13 +105,14 @@ impl RoomService {
     }
 
     /// Called when we enter the room. Either calls on_enter or on_first_enter lua hooks.
-    pub async fn lua_on_enter(&self, ctx: Arc<CmdCtx>) -> AppResult<()> {
+    async fn lua_on_enter(&self, ctx: Arc<CmdCtx>) -> AppResult<()> {
         let account_id = ctx.account_id()?;
         let room_id = ctx.room_id()?;
         let zone_id = ctx.zone_id()?;
+        let room = ctx.room_view()?;
 
         let kv = self.user_repo.room_kv(zone_id, room_id, account_id).await?;
-        let cnt = kv.get_int("has_entered", 0);
+        let cnt = kv.get_num::<i32>("has_entered", 0);
 
         // Key does not exist. This is the first time we enter, so we only update the counter
         self.user_repo.set_room_kv(
@@ -69,16 +125,23 @@ impl RoomService {
 
         let (tx, rx) = oneshot::channel();
 
-        if cnt == 0 {
-            // Enter first time hook
+        let output_handle = ctx.output.clone();
+
+        let first_enter_hook = room.scripts.get(&ScriptHook::OnFirstEnter);
+
+        if cnt == 0 && first_enter_hook.is_some() {
+            // Enter first time hook if there is such a script
             ctx.lua_tx.send(LuaJob::OnFirstEnter {
+                output_handle,
                 cursor: Box::new(ctx.cursor()?),
                 account: ctx.account()?,
                 reply: tx,
             }).await.map_err(Box::from)?;
         } else {
-            // Enter subsequent times hook
+            // Run on the first entry when there is no first enter hook
+            // Run on each subsequent times
             ctx.lua_tx.send(LuaJob::OnEnter {
+                output_handle,
                 cursor: Box::new(ctx.cursor()?),
                 account: ctx.account()?,
                 reply: tx,
@@ -86,12 +149,26 @@ impl RoomService {
         }
 
         match timeout(LUA_CMD_TIMEOUT, rx).await {
-            Err(_) => {
-                ctx.output.system("The room doesn't react (script timed out)").await;
+            Ok(Ok(lua_result)) => {
+                match lua_result {
+                    LuaResult::Failed(msg) => {
+                        let s = format!("{{c:yellow:bright_red}}Lua script failuer: {msg}{{c}}");
+                        ctx.output.system(s).await;
+                        return Ok(());
+                    }
+                    LuaResult::Success(_) => {
+                        let s = "{c:yellow:bright_green}Lua script completed without issues{c}";
+                        ctx.output.system(s).await;
+                    }
+                }
             }
-            Ok(Ok(_)) => {}
-            Ok(Err(_)) => {
-                ctx.output.system("The room doesn't react (script error)").await;
+            Ok(Err(e)) => {
+                let s = format!("{{c:yellow:bright_red}}Internal system error: {e}{{c}}");
+                ctx.output.system(s).await;
+            }
+            Err(_elapsed) => {
+                let s = "{c:yellow:bright_red}The room doesn't react (script timed out){c}";
+                ctx.output.system(s).await;
             }
         }
 
@@ -99,15 +176,18 @@ impl RoomService {
     }
 
     /// Called when we exit the room.
-    pub async fn lua_on_exit(&self, ctx: Arc<CmdCtx>) -> AppResult<()> {
+    async fn lua_on_exit(&self, ctx: Arc<CmdCtx>) -> AppResult<()> {
         // let account_id = ctx.account_id()?;
         // let room_id = ctx.room_id()?;
         // let zone_id = ctx.zone_id()?;
 
         let (tx, rx) = oneshot::channel();
 
+        let output_handle = ctx.output.clone();
+
         // Enter first time hook
         ctx.lua_tx.send(LuaJob::OnLeave {
+            output_handle,
             cursor: Box::new(ctx.cursor()?),
             account: ctx.account()?,
             reply: tx,
@@ -157,6 +237,7 @@ impl RoomService {
         let bp_exits = self.room_repo.room_exits(room_id).await?;
         let bp_objs = self.room_repo.room_objects(room_id).await?;
         let bp_room_kv = self.room_repo.room_kv(room_id).await?;
+        let bp_scripts = self.room_repo.room_scripts(room_id).await?;
 
         // Get zone info
         let zone_room_kv = self.zone_repo.room_kv(zone_ctx.zone.id, room_id).await?;
@@ -174,6 +255,7 @@ impl RoomService {
             &bp_room,
             &bp_exits.as_slice(),
             &bp_objs.as_slice(),
+            &bp_scripts,
             &bp_room_kv,
 
             &zone_room_kv,

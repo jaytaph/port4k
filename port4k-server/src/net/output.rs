@@ -2,11 +2,17 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use axum::extract::ws::{Message, WebSocket};
 use futures::stream::SplitSink;
+use parking_lot::RwLock;
 use tokio::io::AsyncWrite;
 use tokio::sync::mpsc;
 use crate::net::sink::ClientSink;
 use crate::net::sink::telnet::TelnetSink;
 use crate::net::sink::websocket::WebSocketSink;
+use crate::renderer::render_template;
+use crate::renderer::vars::generate_render_vars;
+use crate::Session;
+
+const MAX_TERMINAL_WIDTH: usize = 80;
 
 #[derive(Debug, Clone)]
 pub enum OutFrame {
@@ -30,13 +36,16 @@ pub struct OutputHandle {
     tx: mpsc::Sender<OutEvent>,
     /// Next sequence number for output frames
     next_seq: Arc<AtomicU64>,
+    /// Session pointer
+    sess: Arc<RwLock<Session>>,
 }
 
 impl OutputHandle {
-    pub fn new(tx: mpsc::Sender<OutEvent>) -> Self {
+    pub fn new(tx: mpsc::Sender<OutEvent>, session: Arc<RwLock<Session>>) -> Self {
         Self {
             tx,
             next_seq: Arc::new(AtomicU64::new(1)),
+            sess: session.clone(),
         }
     }
 
@@ -46,19 +55,27 @@ impl OutputHandle {
     }
 
     pub async fn line(&self, s: impl Into<String>) {
-        let _ = self.tx.send(OutEvent::Frame(OutFrame::Line(s.into()), self.next_seq())).await;
+        let vars = generate_render_vars(self.sess.clone());
+        let rendered = render_template(&s.into(), &vars, MAX_TERMINAL_WIDTH);
+        let _ = self.tx.send(OutEvent::Frame(OutFrame::Line(rendered), self.next_seq())).await;
     }
 
     pub async fn system(&self, s: impl Into<String>) {
-        let _ = self.tx.send(OutEvent::Frame(OutFrame::System(s.into()), self.next_seq())).await;
+        let vars = generate_render_vars(self.sess.clone());
+        let rendered = render_template(&s.into(), &vars, MAX_TERMINAL_WIDTH);
+        let _ = self.tx.send(OutEvent::Frame(OutFrame::System(rendered), self.next_seq())).await;
     }
 
     pub async fn room_view(&self, content: impl Into<String>) {
-        let _ = self.tx.send(OutEvent::Frame(OutFrame::RoomView { content: content.into() }, self.next_seq())).await;
+        let vars = generate_render_vars(self.sess.clone());
+        let rendered = render_template(&content.into(), &vars, MAX_TERMINAL_WIDTH);
+        let _ = self.tx.send(OutEvent::Frame(OutFrame::RoomView { content: rendered }, self.next_seq())).await;
     }
 
     pub async fn prompt(&self, s: impl Into<String>) {
-        let _ = self.tx.send(OutEvent::Frame(OutFrame::Prompt(s.into()), self.next_seq())).await;
+        let vars = generate_render_vars(self.sess.clone());
+        let rendered = render_template(&s.into(), &vars, MAX_TERMINAL_WIDTH);
+        let _ = self.tx.send(OutEvent::Frame(OutFrame::Prompt(rendered), self.next_seq())).await;
     }
 
     pub async fn raw(&self, bytes: Vec<u8>) {
@@ -108,12 +125,13 @@ pub struct SessionIoBundle {
 
 pub async fn init_session_for_telnet<W>(
     telnet_writer: W,
+    sess: Arc<RwLock<Session>>,
 ) -> SessionIoBundle
 where
     W: AsyncWrite + Unpin + Send + 'static
 {
     let (tx, rx) = mpsc::channel::<OutEvent>(64);
-    let output_handle = OutputHandle::new(tx);
+    let output_handle = OutputHandle::new(tx, sess.clone());
     let session_out = SessionOut::new(rx);
     let sink = TelnetSink::new(telnet_writer);
 
@@ -130,9 +148,10 @@ where
 
 pub async fn init_session_for_websocket(
     websocket_writer: SplitSink<WebSocket, Message>,
+    sess: Arc<RwLock<Session>>,
 ) -> SessionIoBundle {
     let (tx, rx) = mpsc::channel::<OutEvent>(64);
-    let output_handle = OutputHandle::new(tx);
+    let output_handle = OutputHandle::new(tx, sess);
     let session_out = SessionOut::new(rx);
     let sink = WebSocketSink::new(websocket_writer);
 

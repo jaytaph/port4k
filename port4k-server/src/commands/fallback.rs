@@ -18,9 +18,12 @@ pub async fn fallback(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         return Ok(());
     }
 
+    let output_handle = ctx.output.clone();
+
     let (tx, rx) = oneshot::channel();
     ctx.lua_tx
         .send(LuaJob::OnCommand {
+            output_handle,
             account,
             cursor: Box::new(cursor),
             intent: Box::new(intent),

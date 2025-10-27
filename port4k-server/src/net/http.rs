@@ -44,13 +44,14 @@ async fn ws_upgrade(ws: WebSocketUpgrade, State(state): State<HttpAppCtx>) -> im
 async fn ws_handler(socket: WebSocket, registry: Arc<Registry>, lua_tx: mpsc::Sender<LuaJob>) {
     let (ws_write, mut ws_read) = socket.split();
 
-    let io_bundle = init_session_for_websocket(ws_write).await;
+    let sess = Arc::new(RwLock::new(Session::new(Protocol::WebSocket)));
+
+    let io_bundle = init_session_for_websocket(ws_write, sess.clone()).await;
 
     io_bundle.output.system(BANNER).await;
     io_bundle.output.system(ENTRY).await;
     io_bundle.output.prompt("> ".to_string()).await;
 
-    let sess = Arc::new(RwLock::new(Session::new(Protocol::WebSocket)));
 
     let ctx = Arc::new(CmdCtx {
         registry: registry.clone(),

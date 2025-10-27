@@ -1,6 +1,5 @@
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use crate::renderer::RenderVars;
 use crate::renderer::room_view::render_room_view;
 use std::sync::Arc;
 
@@ -28,7 +27,7 @@ pub async fn look(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     }
 
     // No direct noun -> show room description
-    let vars = RenderVars::new(ctx.sess.clone(), Some(&rv));
-    ctx.output.line(render_room_view(&vars, 80).await).await;
+    // let vars = RenderVars::new(ctx.sess.clone(), Some(&rv));
+    ctx.output.line(render_room_view()).await;
     Ok(())
 }

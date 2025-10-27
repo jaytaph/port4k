@@ -1,6 +1,5 @@
-use crate::renderer::{RenderVars, render_template};
 
-pub async fn render_room_view(vars: &RenderVars, max_width: usize) -> String {
+pub fn render_room_view() -> String {
     let res = [
         "{c:blue}--------------------------------------------------{c}",
         "{c:bright_blue}{rv:title|%*50s}{c}",
@@ -13,5 +12,5 @@ pub async fn render_room_view(vars: &RenderVars, max_width: usize) -> String {
         "\n",
     ];
 
-    render_template(res.join("\n").as_str(), vars, max_width)
+    res.join("\n")
 }
