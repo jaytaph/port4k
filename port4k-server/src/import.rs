@@ -10,6 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::{fs, path::Path};
 use tokio_postgres::Transaction;
 use crate::lua::ScriptHook;
+
 // ====== v3 YAML models ======
 
 #[derive(Debug, Deserialize)]
@@ -31,7 +32,6 @@ struct RoomYaml {
     pub exits: Vec<ExitYaml>,
     #[serde(default)]
     pub scripts: ScriptYaml,
-    // optional items catalog ignored here (handled elsewhere if you add a table)
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -55,7 +55,6 @@ struct ObjectYaml {
     pub description: String,
     #[serde(default)]
     pub examine: Option<String>,
-
     #[serde(default)]
     pub flags: Vec<String>, // ["overlay","non_stackable"]
     #[serde(default)]
@@ -113,51 +112,101 @@ pub async fn import_blueprint_sub_dir(
     content_base: &Path,
     db: &crate::db::Db,
 ) -> AppResult<()> {
-    let dir = resolve_content_subdir(content_base, sub_dir)?;
-    let files = list_yaml_files_guarded(&dir)?;
+    println!("🚀 Starting blueprint import for '{}'", sub_dir);
 
-    // Parse first (so we can do multi-pass write)
+    let dir = resolve_content_subdir(content_base, sub_dir)?;
+    println!("📁 Scanning directory: {}", dir.display());
+
+    let files = list_yaml_files_guarded(&dir)?;
+    println!("📄 Found {} YAML file(s)", files.len());
+
+    // Parse first
     let mut rooms: Vec<RoomYaml> = Vec::new();
-    for path in files {
-        println!("Importing room from {:?}", path);
+    for (idx, path) in files.iter().enumerate() {
+        println!("\n[{}/{}] Parsing: {}", idx + 1, files.len(), path.display());
+
         let text = fs::read_to_string(&path).map_err(InfraError::from)?;
         let mut room: RoomYaml = serde_yaml::from_str(&text)?;
+
         // normalize "use"
         for o in &mut room.objects {
             if o.use_.is_none() {
                 o.use_ = o._use_compat.take();
             }
         }
+
+        println!("  ✓ Room: '{}' (id: {})", room.name, room.id);
+        println!("    • {} object(s)", room.objects.len());
+        println!("    • {} exit(s)", room.exits.len());
+        println!("    • {} hint(s)", room.hints.len());
+        println!("    • {} script hook(s)", room.scripts.0.len());
+
+        print!("  🔍 Validating semantics...");
         validate_room_semantics(&room)?;
-        validate_lua_for_room(&room)?; // compile-check
+        println!(" ✓");
+
+        print!("  🔧 Compiling Lua scripts...");
+        validate_lua_for_room(&room)?;
+        println!(" ✓");
+
         rooms.push(room);
     }
 
+    println!("\n💾 Starting database transaction...");
     let mut client = db.pool.get().await.map_err(DbError::from)?;
     let tx = client.build_transaction().start().await.map_err(DbError::from)?;
 
-    // Pass 1: upsert rooms, collect ids
+    // Pass 1: upsert rooms
+    println!("\n📝 Pass 1: Creating room headers...");
     let mut room_ids: HashMap<String, uuid::Uuid> = HashMap::new();
-    for r in &rooms {
+    for (idx, r) in rooms.iter().enumerate() {
+        print!("  [{}/{}] Upserting room '{}'...", idx + 1, rooms.len(), r.id);
         let room_id = upsert_room_header(&tx, blueprint_id, r).await?;
         room_ids.insert(r.id.clone(), room_id);
+        println!(" ✓ ({})", room_id);
     }
 
-    // Pass 2: kv, objects (+nouns, scripts), room scripts
-    for r in &rooms {
+    // Pass 2: kv, objects, scripts
+    println!("\n🔧 Pass 2: Adding objects, state, and scripts...");
+    for (idx, r) in rooms.iter().enumerate() {
         let room_id = *room_ids.get(&r.id).expect("room id present");
-        upsert_room_kv(&tx, room_id, &r.state).await?;
-        upsert_objects(&tx, room_id, &r.objects).await?;
-        upsert_room_scripts(&tx, room_id, &r.scripts).await?;
+        println!("  [{}/{}] Processing room '{}'...", idx + 1, rooms.len(), r.id);
+
+        if !r.state.is_empty() {
+            print!("    • Upserting {} state key(s)...", r.state.len());
+            upsert_room_kv(&tx, room_id, &r.state).await?;
+            println!(" ✓");
+        }
+
+        if !r.objects.is_empty() {
+            print!("    • Creating {} object(s)...", r.objects.len());
+            upsert_objects(&tx, room_id, &r.objects).await?;
+            println!(" ✓");
+        }
+
+        if !r.scripts.0.is_empty() {
+            print!("    • Installing {} script hook(s)...", r.scripts.0.len());
+            upsert_room_scripts(&tx, room_id, &r.scripts).await?;
+            println!(" ✓");
+        }
     }
 
-    // Pass 3: exits (needs both from/to room ids)
-    for r in &rooms {
+    // Pass 3: exits
+    println!("\n🚪 Pass 3: Linking exits...");
+    for (idx, r) in rooms.iter().enumerate() {
         let from_room_id = *room_ids.get(&r.id).unwrap();
-        upsert_exits(&tx, from_room_id, &r.exits, &room_ids).await?;
+        if !r.exits.is_empty() {
+            print!("  [{}/{}] Creating {} exit(s) from '{}'...",
+                   idx + 1, rooms.len(), r.exits.len(), r.id);
+            upsert_exits(&tx, from_room_id, &r.exits, &room_ids).await?;
+            println!(" ✓");
+        }
     }
 
+    println!("\n💾 Committing transaction...");
     tx.commit().await.map_err(DbError::from)?;
+
+    println!("✨ Import complete! {} room(s) successfully imported.\n", rooms.len());
     Ok(())
 }
 
@@ -209,8 +258,8 @@ async fn upsert_room_kv(
             "#,
             &[&room_id, k, v],
         )
-        .await
-        .map_err(DbError::from)?;
+            .await
+            .map_err(DbError::from)?;
     }
     Ok(())
 }
@@ -277,8 +326,8 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
                 "#,
                 &[&obj_id, k, v],
             )
-            .await
-            .map_err(DbError::from)?;
+                .await
+                .map_err(DbError::from)?;
         }
 
         // nouns
@@ -291,8 +340,8 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
                 "#,
                 &[&room_id, &obj_id, n],
             )
-            .await
-            .map_err(DbError::from)?;
+                .await
+                .map_err(DbError::from)?;
         }
     }
 
@@ -308,7 +357,7 @@ async fn upsert_room_scripts(tx: &Transaction<'_>, room_id: uuid::Uuid, scripts:
             VALUES ($1,$2,$3)
             ON CONFLICT (room_id, hook) DO UPDATE SET script = EXCLUDED.script
             "#,
-        &[&room_id, &hook.as_str(), &script],
+            &[&room_id, &hook.as_str(), &script],
         )
             .await
             .map_err(DbError::from)?;
@@ -348,8 +397,8 @@ async fn upsert_exits(
                 &ex.visible_when_locked,
             ],
         )
-        .await
-        .map_err(DbError::from)?;
+            .await
+            .map_err(DbError::from)?;
     }
     Ok(())
 }
