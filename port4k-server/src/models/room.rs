@@ -662,9 +662,9 @@ mod tests {
     fn parse_hints_v2_objects_and_normalization() {
         // From: parse_hints_value()
         let v = Some(json!([
-            {"text":"Check the panel","when":"first look","once":true},
-            {"text":"Try north","when":"ENTER"},
-            {"text":"Unknown mode","when":"freebie"}
+            {"id": "id1", "text":"Check the panel","when":"first look","once":true},
+            {"id": "id2", "text":"Try north","when":"ENTER"},
+            {"id": "id3", "text":"Unknown mode","when":"freebie"}
         ]));
         let hints = parse_hints_value(v).expect("parse ok");
         assert_eq!(hints.len(), 3);
@@ -678,9 +678,10 @@ mod tests {
     #[test]
     fn parse_hints_single_object_and_null() {
         // From: parse_hints_value()
-        let one = Some(json!({"text":"Just once","when":""}));
+        let one = Some(json!({"id":"foo", "text":"Just once","when":""}));
         let hints_one = parse_hints_value(one).expect("ok");
         assert_eq!(hints_one.len(), 1);
+        assert_eq!(hints_one[0].id, "foo");
         assert_eq!(hints_one[0].text, "Just once");
         assert_eq!(hints_one[0].when, "manual"); // empty -> manual
 
