@@ -127,6 +127,20 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         .generate_cursor(ctx.clone(), &account, room.id)
         .await?;
 
+    ctx.output
+        .system("You are logged in. Welcome to port4k!".to_string())
+        .await;
+    ctx.output.line("You have successfully logged in.").await;
+
+    // Step 10: Just show the current room after login
+    ctx.output
+        .line(format!(
+            "You are in the {}: {}",
+            room.title,
+            room.short.as_deref().unwrap_or("it's not a very descriptive place")
+        ))
+        .await;
+
     // Step 9: Enter the room, run lua hooks if needed
     match ctx.registry.services.room.enter_room(ctx.clone(), &c).await {
         Err(DomainError::RoomNotFound) => {
@@ -145,20 +159,6 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         }
         Ok(_) => {}
     }
-
-    // Step 10: Just show the current room after login
-
-    ctx.output
-        .system("You are logged in. Welcome to port4k!".to_string())
-        .await;
-    ctx.output.line("You have successfully logged in.").await;
-    ctx.output
-        .line(format!(
-            "You are in the {}: {}",
-            room.title,
-            room.short.as_deref().unwrap_or("it's not a very descriptive place")
-        ))
-        .await;
 
     Ok(())
 }

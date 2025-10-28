@@ -5,7 +5,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod hardening;
-pub mod import;
+pub mod import_blueprint;
 pub mod input;
 pub mod lua;
 pub mod models;

@@ -1,4 +1,4 @@
-version: 3
+version: 4
 id: hallway_1
 name: Reinforced Hallway
 short: "A narrow corridor with ribbed plating and emergency beacons."
@@ -36,16 +36,13 @@ objects:
     nouns: ["conduit","power conduit","cable","wiring"]
     short: "fractured power conduit"
     description: "A segmented power trunk with heat-blistered casing and exposed couplings."
-    flags: []
-    visible: always
     state:
       powered: false
       damaged: true
-      revealed: true
     controls:
       - object:access_panel.online
     examine: "Couplings are warped; some segments could be reseated with the right spanner."
-    use: |
+    on_use: |
       -- Repair with multi_spanner → restore corridor power
       return function(ctx, verb, args)
         if verb == "repair" or (verb == "use" and ctx:matches_noun(args or {}, {"conduit","power conduit"})) then
@@ -72,17 +69,14 @@ objects:
     nouns: ["panel","access panel","maintenance panel","console"]
     short: "recessed access panel"
     description: "A lockout panel with diagnostics pins and a tiny status display."
-    flags: []
-    visible: always
     state:
       online: false
       bypassed: false
-      revealed: true
     controls:
       - exit:east.locked
       - object:east_door.locked
     examine: "Its status light is dark; without corridor power, the panel is inert."
-    use: |
+    on_use: |
       -- Use fiber_probe to bypass when powered; unlock east exit
       return function(ctx, verb, args)
         local online = ctx:get_object_state("power_conduit","powered") and (not ctx:get_object_state("power_conduit","damaged"))
@@ -112,15 +106,12 @@ objects:
     nouns: ["door","east door","bulkhead"]
     short: "hardened east door"
     description: "A thick composite bulkhead door with impact scarring."
-    flags: ["overlay","non_stackable"]
-    visible: always
-    state:
+    flags:
       locked: true
-      revealed: true
     controls:
       - exit:east.locked
     examine: "No handles—purely powered from the panel. A manual release slot is sealed."
-    use: |
+    on_use: |
       return function(ctx, verb, _)
         if verb == "open" then
           if ctx:get_object_state("east_door","locked") then
@@ -137,10 +128,6 @@ objects:
     nouns: ["south","entry hall","hall"]
     short: "way south"
     description: "The corridor narrows back toward the Entry Hall."
-    flags: []
-    visible: always
-    state:
-      revealed: true
     examine: "Faint phosphor light leaks in from the Entry Hall."
 
 exits:

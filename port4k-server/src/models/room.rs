@@ -1,9 +1,8 @@
 use crate::db::DbResult;
 use crate::db::error::DbError;
 use crate::lua::ScriptHook;
-use crate::models::room_helpers::{compute_object_visible, merge_kv, resolve_bool, resolve_qty, str_is_truthy};
+use crate::models::room_helpers::{compute_object_visible, merge_kv, resolve_bool, resolve_qty};
 use crate::models::types::{BlueprintId, Direction, ExitId, HintId, ObjectId, RoomId};
-use crate::util::serde::serde_to_str;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -182,7 +181,7 @@ pub type KvResolved = Kv;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Kv {
-    pub inner: HashMap<String, String>,
+    pub inner: HashMap<String, Value>,
 }
 
 impl Kv {
@@ -191,14 +190,15 @@ impl Kv {
     }
 
     pub(crate) fn get_bool(&self, key: &str, default: bool) -> bool {
-        self.inner
-            .get(key)
-            .and_then(|v| Some(str_is_truthy(v.as_str())))
-            .unwrap_or(default)
+        self.inner.get(key).and_then(|v| v.as_bool()).unwrap_or(default)
     }
 
     pub(crate) fn get_num<T: FromStr>(&self, key: &str, default: T) -> T {
-        self.inner.get(key).and_then(|v| v.parse::<T>().ok()).unwrap_or(default)
+        self.inner
+            .get(key)
+            .and_then(|v| v.as_str()) // Convert to &str first
+            .and_then(|s| s.parse::<T>().ok()) // Then parse
+            .unwrap_or(default)
     }
 
     pub fn try_from_rows(rows: &[Row]) -> DbResult<Self> {
@@ -206,7 +206,7 @@ impl Kv {
         for row in rows {
             let key: String = row.try_get("key")?;
             let value = row.try_get("value")?;
-            kv.inner.insert(key, serde_to_str(value));
+            kv.inner.insert(key, value);
         }
         Ok(kv)
     }
@@ -216,18 +216,18 @@ impl Kv {
 
         if let Value::Object(map) = data {
             for (k, v) in map {
-                kv.inner.insert(k, serde_to_str(v));
+                kv.inner.insert(k, v);
             }
         }
 
         kv
     }
 
-    pub fn insert(&mut self, key: String, value: String) {
+    pub fn insert(&mut self, key: String, value: Value) {
         self.inner.insert(key, value);
     }
 
-    pub fn get(&self, key: &str) -> Option<&String> {
+    pub fn get(&self, key: &str) -> Option<&Value> {
         self.inner.get(key)
     }
 }
@@ -308,16 +308,16 @@ pub(crate) fn build_room_view_impl(
         let key_locked = format!("exit.{}.locked", e.dir);
         let locked = resolve_bool(
             e.default_locked,
-            zone_room_kv.get(&key_locked).map(String::as_str).map(str_is_truthy),
-            user_room_kv.get(&key_locked).map(String::as_str).map(str_is_truthy),
+            zone_room_kv.get(&key_locked).and_then(|v| v.as_bool()),
+            user_room_kv.get(&key_locked).and_then(|v| v.as_bool()),
         );
 
-        let key_visible = format!("exit.{}.visible", e.dir);
+        let key_visible_when_locked = format!("exit.{}.visible", e.dir);
         let visible = resolve_bool(
             // Note that this depends on the computed locked state from above
             !locked || e.visible_when_locked,
-            zone_room_kv.get(&key_visible).map(String::as_str).map(str_is_truthy),
-            user_room_kv.get(&key_visible).map(String::as_str).map(str_is_truthy),
+            zone_room_kv.get(&key_visible_when_locked).and_then(|v| v.as_bool()),
+            user_room_kv.get(&key_visible_when_locked).and_then(|v| v.as_bool()),
         );
 
         let idx = exits.len();
@@ -355,11 +355,11 @@ pub(crate) fn build_room_view_impl(
             zone_obj_kv
                 .get(&key)
                 .and_then(|kv| kv.get("locked"))
-                .map(|v| str_is_truthy(v.as_str())),
+                .and_then(|s| s.as_bool()),
             user_obj_kv
                 .get(&key)
                 .and_then(|kv| kv.get("locked"))
-                .map(|v| str_is_truthy(v.as_str())),
+                .and_then(|s| s.as_bool()),
         );
 
         let revealed = resolve_bool(
@@ -367,11 +367,11 @@ pub(crate) fn build_room_view_impl(
             zone_obj_kv
                 .get(&key)
                 .and_then(|kv| kv.get("revealed"))
-                .map(|v| str_is_truthy(v.as_str())),
+                .and_then(|s| s.as_bool()),
             user_obj_kv
                 .get(&key)
                 .and_then(|kv| kv.get("revealed"))
-                .map(|v| str_is_truthy(v.as_str())),
+                .and_then(|s| s.as_bool()),
         );
         let visible = compute_object_visible(&kv, revealed);
 
@@ -628,12 +628,11 @@ mod tests {
     }
 
     // Helper: Kv builder from (&str, &str) pairs
-    fn kv(pairs: &[(&str, &str)]) -> Kv {
+    fn kv(pairs: &[(&str, &Value)]) -> Kv {
         Kv {
-            inner: pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            inner: pairs.iter().map(|(k, v)| ((*k).to_string(), (*v).clone())).collect(),
         }
     }
-
     // ---------- normalize_when() ----------
     #[test]
     fn normalize_when_variants() {
@@ -688,25 +687,6 @@ mod tests {
         let none = Some(Value::Null);
         let hints_none = parse_hints_value(none).expect("ok");
         assert!(hints_none.is_empty());
-    }
-
-    // ---------- Kv::from / Kv::get ----------
-    #[test]
-    fn kv_from_only_keeps_strings() {
-        // From: Kv::from()
-        let v = json!({
-            "a": "1",
-            "b": 2,
-            "c": true,
-            "d": { "e": "nested" },
-            "e": "ok"
-        });
-        let kv = Kv::from(v);
-        assert_eq!(kv.get("a"), Some(&"1".to_string()));
-        assert_eq!(kv.get("b"), Some(&"2".to_string()));
-        assert_eq!(kv.get("c"), Some(&"true".to_string()));
-        assert_eq!(kv.get("d"), Some(&"".to_string()));
-        assert_eq!(kv.get("e"), Some(&"ok".to_string()));
     }
 
     // ---------- ExitFlags::is_visible() ----------
@@ -815,7 +795,7 @@ mod tests {
         assert!(north.flags.is_visible(), "visible_when_locked keeps it visible");
 
         // Zone override unlocks it: exit.north.locked=false
-        let zone_kv = kv(&[("exit.north.locked", "false")]);
+        let zone_kv = kv(&[("exit.north.locked", &Value::Bool(false))]);
         let view = build_room_view_impl(
             &room,
             &exits,
@@ -833,7 +813,7 @@ mod tests {
         assert!(!north.flags.locked);
 
         // User override wins over zone, locks it again: exit.north.locked=true
-        let user_kv = kv(&[("exit.north.locked", "true")]);
+        let user_kv = kv(&[("exit.north.locked", &Value::Bool(true))]);
         let view = build_room_view_impl(
             &room,
             &exits,
@@ -851,7 +831,7 @@ mod tests {
         assert!(north.flags.locked);
 
         // Explicit visibility override: exit.north.visible=false hides even if visible_when_locked
-        let user_kv = kv(&[("exit.north.visible", "false")]);
+        let user_kv = kv(&[("exit.north.visible", &Value::Bool(false))]);
         let view = build_room_view_impl(
             &room,
             &exits,
@@ -970,7 +950,7 @@ mod tests {
         // Mark revealed via user overlay; even if hidden, revealed should make it visible
         let user_obj_kv = {
             let mut m = HashMap::new();
-            m.insert("wrench".to_string(), kv(&[("revealed", "true")]));
+            m.insert("wrench".to_string(), kv(&[("revealed", &Value::Bool(true))]));
             m
         };
         let view = build_room_view_impl(

@@ -1,7 +1,6 @@
 use crate::db::DbResult;
 use crate::db::error::DbError;
 use crate::error::{AppResult, DomainError};
-use crate::models::inventory::{Inventory, InventoryItem};
 use crate::models::types::{AccountId, RoomId, ZoneId};
 use bytes;
 use postgres_types::private::BytesMut;
@@ -147,8 +146,6 @@ pub struct UserZoneData {
     pub health: u32,
     /// In-game currency
     pub coins: u32,
-    /// Inventory items
-    pub inventory: Inventory,
 }
 
 impl UserZoneData {
@@ -161,24 +158,24 @@ impl UserZoneData {
         let health = u32::try_from(health_i).map_err(|_| DbError::Decode("health < 0".into()))?;
         let coins = u32::try_from(coins_i).map_err(|_| DbError::Decode("coins < 0".into()))?;
 
-        // Prefer decoding JSON directly if schema is jsonb array of text
-        let inventory_json: Option<serde_json::Value> = row.try_get("inventory").ok();
-        let mut items = Vec::new();
-        if let Some(json) = inventory_json {
-            if let Some(array) = json.as_array() {
-                for item in array {
-                    if let (Some(object_id), Some(quantity)) = (
-                        item.get("object_id").and_then(|v| v.as_str()),
-                        item.get("quantity").and_then(|v| v.as_u64()),
-                    ) {
-                        items.push(InventoryItem {
-                            object_id: object_id.to_string(),
-                            quantity: quantity as u32,
-                        });
-                    }
-                }
-            }
-        }
+        // // Prefer decoding JSON directly if schema is jsonb array of text
+        // let inventory_json: Option<serde_json::Value> = row.try_get("inventory").ok();
+        // let mut items = Vec::new();
+        // if let Some(json) = inventory_json {
+        //     if let Some(array) = json.as_array() {
+        //         for item in array {
+        //             if let (Some(object_id), Some(quantity)) = (
+        //                 item.get("object_id").and_then(|v| v.as_str()),
+        //                 item.get("quantity").and_then(|v| v.as_u64()),
+        //             ) {
+        //                 items.push(InventoryItem {
+        //                     object_id: object_id.to_string(),
+        //                     quantity: quantity as u32,
+        //                 });
+        //             }
+        //         }
+        //     }
+        // }
 
         Ok(Self {
             account_id: row.try_get::<_, AccountId>("account_id")?,
@@ -187,13 +184,13 @@ impl UserZoneData {
             xp,
             health,
             coins,
-            inventory: Inventory {
-                items,
-                max_item_count: row
-                    .try_get::<_, i32>("max_item_count")?
-                    .try_into()
-                    .map_err(|_| DbError::Decode("max_item_count < 0".into()))?,
-            },
+            // inventory: Inventory {
+            //     items,
+            //     max_item_count: row
+            //         .try_get::<_, i32>("max_item_count")?
+            //         .try_into()
+            //         .map_err(|_| DbError::Decode("max_item_count < 0".into()))?,
+            // },
         })
     }
 }

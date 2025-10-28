@@ -1,4 +1,4 @@
-version: 3
+version: 4
 id: maintenance_bay
 name: Maintenance Bay
 short: "An oil-stained service room full of parts and half-dead machines."
@@ -31,14 +31,11 @@ objects:
     nouns: ["bench","workbench","table"]
     short: "dented workbench"
     description: "A metal bench scarred by plasma burns and drill marks."
-    flags: []
-    visible: always
     state:
       panel_open: false
       cache_taken: false
-      revealed: true
     examine: "Scratches form a rectangle—there might be a sliding panel underneath."
-    use: |
+    on_use: |
       return function(ctx, verb, args)
         if (verb == "open" or verb == "search") and not ctx:get_object_state("workbench","panel_open") then
           ctx:set_object_state("workbench","panel_open", true)
@@ -67,16 +64,13 @@ objects:
     nouns: ["generator","genset","aux"]
     short: "auxiliary generator"
     description: "A compact unit with a manual starter and coolant lines."
-    flags: []
-    visible: always
     state:
       primed: false
       running: false
-      revealed: true
     controls:
       - object:charger.powered
     examine: "A handwritten note reads: 'Prime first. Pull twice. Watch the coolant pressure.'"
-    use: |
+    on_use: |
       return function(ctx, verb, args)
         if verb == "prime" then
           ctx:set_object_state("generator","primed", true)
@@ -110,14 +104,11 @@ objects:
     nouns: ["charger","rack","charging rack"]
     short: "rack-mounted charger"
     description: "Multiple cradles for microcells and tool batteries."
-    flags: []
-    visible: always
     state:
       powered: false
       occupied: false
-      revealed: true
     examine: "LEDs are dark unless external power is present."
-    use: |
+    on_use: |
       return function(ctx, verb, args)
         local powered = ctx:get_object_state("charger","powered") or ctx:get_object_state("generator","running")
         if verb == "use" or verb == "charge" then
@@ -141,10 +132,6 @@ objects:
     nouns: ["west","hallway"]
     short: "way west"
     description: "A narrow door back to the hallway."
-    flags: []
-    visible: always
-    state:
-      revealed: true
     examine: "Scuffed boot marks suggest frequent traffic."
 
 exits:

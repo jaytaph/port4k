@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://port4k.com/schema/room-v3.schema.json",
-  "title": "Port4k Room v3",
+  "$id": "https://port4k.com/schema/room-v4.schema.json",
+  "title": "Port4k Room v4",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "id", "name", "short", "description", "objects", "exits"],
   "properties": {
-    "version": { "const": 3 },
+    "version": { "const": 4 },
     "id": { "$ref": "#/$defs/Id" },
     "name": { "type": "string", "minLength": 1 },
     "short": { "type": "string", "minLength": 1 },
@@ -108,24 +108,19 @@
         "description": { "type": "string", "minLength": 1 },
 
         "flags": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 }
-        },
-
-        "visible": {
-          "type": "string",
-          "enum": ["always", "when_revealed", "when_unlocked", "script"]
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hidden": { "type": "boolean" },
+            "revealed": { "type": "boolean" },
+            "takeable": { "type": "boolean" },
+            "stackable": { "type": "boolean" }
+          }
         },
 
         "state": {
           "type": "object",
-          "additionalProperties": true,
-          "properties": {
-            "locked": { "type": "boolean" },
-            "powered": { "type": "boolean" },
-            "revealed": { "type": "boolean" },
-            "code_required": { "type": "string" }
-          }
+          "additionalProperties": true
         },
 
         "controls": {
@@ -138,7 +133,7 @@
         },
 
         "examine": { "type": "string" },
-        "use": { "$ref": "#/$defs/Lua" },
+        "on_use": { "$ref": "#/$defs/Lua" },
 
         "loot": {
           "type": "object",

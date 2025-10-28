@@ -3,7 +3,6 @@ use crate::db::repo::UserRepo;
 use crate::db::{Db, DbResult};
 use crate::models::room::Kv;
 use crate::models::types::{AccountId, ExitId, RoomId, ZoneId};
-use crate::util::serde::serde_to_str;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -55,9 +54,9 @@ impl UserRepo for UserRepository {
         for row in rows {
             let object_key: String = row.get("object_key");
             let kv_key: String = row.get("kv_key");
-            let value: serde_json::Value = row.get("value");
+            let value: Value = row.get("value");
 
-            map.entry(object_key).or_default().insert(kv_key, serde_to_str(value));
+            map.entry(object_key).or_default().insert(kv_key, value);
         }
 
         Ok(map)

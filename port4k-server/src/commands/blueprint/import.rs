@@ -20,7 +20,7 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     let blueprint = ctx.registry.repos.room.blueprint_by_key(bp_key).await?;
 
     let base_path = Path::new(ctx.registry.config.import_dir.as_str());
-    match crate::import::import_blueprint_sub_dir(blueprint.id, subdir, base_path, &ctx.registry.db).await {
+    match crate::import_blueprint::import_blueprint_sub_dir(blueprint.id, subdir, base_path, &ctx.registry.db).await {
         Ok(()) => {
             ctx.output
                 .system(format!(

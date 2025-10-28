@@ -1,6 +1,9 @@
+pub mod table;
+
 use crate::Registry;
 use crate::error::{AppResult, DomainError};
 use crate::input::parser::{Intent, Preposition, Quantifier};
+use crate::lua::table::format_lua_value;
 use crate::models::account::Account;
 use crate::models::room::{ResolvedExit, ResolvedObject, RoomView};
 use crate::models::types::Direction;
@@ -401,6 +404,20 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
         })?,
     )?;
 
+    // port4k.debug(var)
+    let ctx = arg_ctx.clone();
+    port4k.set(
+        "debug",
+        lua.create_function(move |_, v: mlua::Value| {
+            let ctx = ctx.clone();
+            ctx.rt_handle.spawn(async move {
+                let dbg_out = format_lua_value(&v);
+                ctx.output_handle.line(dbg_out).await;
+            });
+            Ok(())
+        })?,
+    )?;
+
     // port4k.broadcast(text)
     let ctx = arg_ctx.clone();
     port4k.set(
@@ -464,24 +481,21 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
     )?;
 
     // port4k.hint_trigger(hint_type: str) -> bool
+    let ctx = arg_ctx.clone();
+    let rt_handle = arg_ctx.rt_handle.clone();
     port4k.set(
         "hint_trigger",
-        lua.create_function(move |_, hint_type: String| -> mlua::Result<mlua::Value> {
-            let _ = hint_type;
+        lua.create_function(move |_, trigger: String| -> mlua::Result<mlua::Value> {
+            let cursor = ctx.cursor.clone();
+            rt_handle.block_on(async {
+                let cursor = cursor.as_ref().unwrap();
+                if let Ok(Some(hint)) = ctx.registry.services.room.hint_trigger(cursor, trigger.as_str()).await {
+                    ctx.output_handle.line(hint).await;
+                }
+            });
             Ok(mlua::Value::Boolean(true))
         })?,
     )?;
-
-    // port4k.hint_consider(hint_type: str) -> bool
-    //         let cursor = cursor.clone();
-    //         let handle = rt_handle.clone();
-    //         let registry = registry.clone();
-    //         move |_, (exit_key, locked): (String, bool)| -> mlua::Result<()> {
-    //             let room_id = cursor.room_view.room.id;
-    //             // let fut = registry.services.room.set_exit_locked(zone_id, room_id, &exit_key, locked);
-    //             // handle.block_on(fut).map_err(mlua::Error::external)?;
-    //             Ok(())
-    //         }
 
     let ctx = arg_ctx.clone();
     let rt_handle = arg_ctx.rt_handle.clone();
@@ -623,7 +637,7 @@ fn create_lua_roomview_table(lua: &Lua, rv: &RoomView) -> mlua::Result<Table> {
     // Add kv
     let kv_tbl = lua.create_table()?;
     for (k, v) in rv.room_kv.inner.iter() {
-        kv_tbl.set(k.as_str(), v.as_str())?;
+        kv_tbl.set(k.as_str(), json_to_lua(lua, v)?)?;
     }
     rt.set("state", kv_tbl)?;
 
@@ -647,7 +661,7 @@ fn create_lua_object_table(lua: &Lua, obj: &ResolvedObject) -> mlua::Result<Tabl
     // Add kv
     let kv_tbl = lua.create_table()?;
     for (k, v) in obj.kv.inner.iter() {
-        kv_tbl.set(k.as_str(), v.as_str())?;
+        kv_tbl.set(k.as_str(), json_to_lua(lua, v)?)?;
     }
     ot.set("state", kv_tbl)?;
 
@@ -717,6 +731,12 @@ fn handle_object_script(
     obj: &ResolvedObject,
     reply: Sender<LuaResult>,
 ) {
+    let Some(cursor) = ctx.cursor.as_ref() else {
+        let lua_result = LuaResult::Failed("No cursor available for object script".into());
+        _ = reply.send(lua_result);
+        return;
+    };
+
     let result = (|| -> AppResult<mlua::Value> {
         let Some(src) = &obj.on_use else {
             return Err(DomainError::Script("No use script found on object".into()));
@@ -732,6 +752,7 @@ fn handle_object_script(
         args.set("account", create_lua_account_table(lua, ctx.account.as_ref().unwrap())?)?;
         args.set("intent", create_lua_intent_table(lua, intent)?)?;
         args.set("object", create_lua_object_table(lua, obj)?)?;
+        args.set("room", create_lua_roomview_table(lua, &cursor.room_view)?)?;
 
         let func: Function = lua
             .load(src)
@@ -820,4 +841,36 @@ fn send_lua_result(reply: Sender<LuaResult>, result: AppResult<mlua::Value>) {
     };
 
     _ = reply.send(lua_result);
+}
+
+// Convert serde_json::Value to mlua::Value
+fn json_to_lua<'lua>(lua: &'lua Lua, value: &serde_json::Value) -> mlua::Result<mlua::Value> {
+    match value {
+        serde_json::Value::Null => Ok(mlua::Value::Nil),
+        serde_json::Value::Bool(b) => Ok(mlua::Value::Boolean(*b)),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Ok(mlua::Value::Integer(i))
+            } else if let Some(f) = n.as_f64() {
+                Ok(mlua::Value::Number(f))
+            } else {
+                Ok(mlua::Value::Nil)
+            }
+        }
+        serde_json::Value::String(s) => Ok(mlua::Value::String(lua.create_string(s)?)),
+        serde_json::Value::Array(arr) => {
+            let table = lua.create_table()?;
+            for (i, item) in arr.iter().enumerate() {
+                table.set(i + 1, json_to_lua(lua, item)?)?;
+            }
+            Ok(mlua::Value::Table(table))
+        }
+        serde_json::Value::Object(obj) => {
+            let table = lua.create_table()?;
+            for (k, v) in obj.iter() {
+                table.set(k.as_str(), json_to_lua(lua, v)?)?;
+            }
+            Ok(mlua::Value::Table(table))
+        }
+    }
 }

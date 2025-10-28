@@ -1,4 +1,4 @@
-version: 3
+version: 4
 id: observation_nook
 name: Observation Nook
 short: "A dim alcove with narrow viewports and a bench."
@@ -31,12 +31,8 @@ objects:
     nouns: ["map","wall map","chart"]
     short: "patched wall map"
     description: "A faded sector chart with hand-scratched updates."
-    flags: []
-    visible: always
-    state:
-      revealed: true
     examine: "Someone added a note: 'MBAY spare code → mirrored of ENTRY'."
-    use: |
+    on_use: |
       return function(ctx, verb, args)
         if verb == "read" or verb == "examine" or verb == "scan" then
           ctx:say("The annotations show patrol routes and docking lanes. One scribble hints a locker code mirror puzzle.")
@@ -49,14 +45,12 @@ objects:
     nouns: ["locker","storage","box"]
     short: "scuffed storage locker"
     description: "A metal locker with a numeric keypad and dented side."
-    flags: []
-    visible: always
-    state:
+    flags:
       locked: true
+    state:
       opened: false
-      revealed: true
     examine: "Keypad shows smudges on 1, 2, 3, 4. The dented panel might pry with the right tool."
-    use: |
+    on_use: |
       return function(ctx, verb, args)
         if verb == "enter" and #args > 0 then
           local code = table.concat(args, " ")
@@ -96,14 +90,11 @@ objects:
     nouns: ["vent","grille","grate"]
     short: "loose vent grille"
     description: "A rectangular grille with two missing screws."
-    flags: []
-    visible: always
     state:
       loosened: false
       cache_taken: false
-      revealed: true
     examine: "You can wiggle it; the screws are barely holding."
-    use: |
+    on_use: |
       return function(ctx, verb, args)
         if verb == "unscrew" or verb == "open" then
           if not ctx:get_object_state("vent_grille","loosened") then
@@ -131,10 +122,6 @@ objects:
     nouns: ["east","hallway"]
     short: "bright corridor east"
     description: "Light spills in from the main corridor."
-    flags: []
-    visible: always
-    state:
-      revealed: true
     examine: "You can hear the faint beep of a distant panel."
 
 exits:

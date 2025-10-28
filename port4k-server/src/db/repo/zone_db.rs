@@ -4,7 +4,6 @@ use crate::db::{Db, DbResult};
 use crate::models::room::Kv;
 use crate::models::types::{ExitId, RoomId, ZoneId};
 use crate::models::zone::Zone;
-use crate::util::serde::serde_to_str;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -74,7 +73,7 @@ impl ZoneRepo for ZoneRepository {
             let kv_key: String = row.get("kv_key");
             let value: serde_json::Value = row.get("value");
 
-            map.entry(object_key).or_default().insert(kv_key, serde_to_str(value));
+            map.entry(object_key).or_default().insert(kv_key, value);
         }
 
         Ok(map)

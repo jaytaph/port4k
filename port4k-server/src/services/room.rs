@@ -6,6 +6,7 @@ use crate::models::room::{RoomView, build_room_view_impl};
 use crate::models::types::{AccountId, Direction, ExitId, RoomId, ZoneId};
 use crate::models::zone::ZoneContext;
 use crate::state::session::Cursor;
+use rand::seq::IndexedRandom;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::oneshot;
@@ -83,6 +84,21 @@ impl RoomService {
         }
 
         Ok(result)
+    }
+
+    pub async fn hint_trigger(&self, cursor: &Cursor, trigger: &str) -> AppResult<Option<String>> {
+        let rv = &cursor.room_view;
+
+        // collect all entries that have hint.when == trigger
+        let hints: Vec<_> = rv.blueprint.hints.iter().filter(|hint| hint.when == trigger).collect();
+
+        if hints.is_empty() {
+            Ok(None)
+        } else {
+            let mut rng = rand::rng();
+            let hint = hints.choose(&mut rng).unwrap();
+            Ok(Some(format!("{{c:cyan:bright_cyan}}Hint: {}{{c}}", hint.text)))
+        }
     }
 
     // Travel to the given room
