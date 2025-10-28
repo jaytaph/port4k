@@ -37,6 +37,7 @@ pub enum Verb {
     Who,
     Login,
     Logout,
+    LuaRepl,
     Register,
     /// Unrecognized; keep the raw verb so Lua/room handlers can try.
     Unknown,
@@ -70,6 +71,7 @@ impl Verb {
             Verb::Login => "login",
             Verb::Logout => "logout",
             Verb::Register => "register",
+            Verb::LuaRepl => "lua",
             Verb::Unknown => "unknown",
             Verb::ScBlueprint => "@bp",
             Verb::ScPlaytest => "@playtest",
@@ -91,9 +93,32 @@ pub enum Preposition {
     Off,
 }
 
+impl Preposition {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Preposition::At => "at",
+            Preposition::To => "to",
+            Preposition::With => "with",
+            Preposition::On => "on",
+            Preposition::In => "in",
+            Preposition::From => "from",
+            Preposition::Through => "through",
+            Preposition::Off => "off",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Quantifier {
     All,
+}
+
+impl Quantifier {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Quantifier::All => "all",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -106,6 +131,12 @@ pub struct NounPhrase {
     pub adjectives: Vec<String>,
     /// Whether the NP came from a quoted token (e.g. "red access card").
     pub quoted: bool,
+}
+
+impl std::fmt::Display for NounPhrase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.raw)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -361,6 +392,10 @@ fn detect_verb(tokens: &[Token]) -> (Verb, usize, Option<Preposition>, Option<St
 fn verb_map() -> HashMap<&'static str, Verb> {
     use Verb::*;
     let mut m = HashMap::new();
+    // lua repl
+    for k in ["lua", "luarepl", "repl"].iter() {
+        m.insert(*k, LuaRepl);
+    }
     // look
     for k in ["look", "l"].iter() {
         m.insert(*k, Look);

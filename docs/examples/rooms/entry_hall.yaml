@@ -1,33 +1,32 @@
-version: 2
+version: 3
 id: entry
 name: Entry Hall
 short: "A small, quiet room lit by phosphor glow."
 description: |
-  The room is narrow and still, its curved walls lined with pale panels that pulse faintly
-  with phosphorescent light. The glow casts long shadows across the floor, where fine dust
-  has gathered in the seams of the metal plates. A faint hum from hidden conduits echoes in
-  the silence, broken only by the occasional drip of condensation from overhead pipes.
-o:
-  To the north, a {o:blast_door} blocks further passage. A flickering {o:wall_console} beside
-  it blinks weakly. Near the corner, a {o:toolkit} lies half-buried in dust. Etched into the
-  wall are faint {o:markings}.
+  The room is narrow and still, its curved walls lined with pale panels that pulse faintly with phosphorescent light. The glow casts long shadows across the floor, where fine dust has gathered in the seams of the metal plates. A faint hum from hidden conduits echoes in the silence, broken only by the occasional drip of condensation from overhead pipes.
+
+  To the north, a {o:blast_door} blocks further passage. A {o:wall_console} beside it blinks weakly. Near the corner, a {o:toolkit} lies half-buried in dust. Etched into the wall are faint {o:markings}.
 
 # Free-form room KV available to Lua and UI
-kv:
+state:
   ambience: "low_hum"
   dust_level: "high"
 
 hints:
-  - text: "The blast door might be locked; perhaps there's a way to unlock it."
+  - id: blast_door_locked
+    text: "The blast door might be locked; perhaps there's a way to unlock it."
     when: first_look
     once: true
-  - text: "The console looks damaged but might still be usable."
+  - id: console_damaged
+    text: "The console looks damaged but might still be usable."
     when: enter
     cooldown: 3
-  - text: "The toolkit could contain useful items."
+  - id: toolkit_items
+    text: "The toolkit could contain useful items."
     when: search
     once: true
-  - text: "Try: 'enter 4312 on console' after powering it."
+  - id: console_code_help
+    text: "Try: 'enter 4312 on console' after powering it."
     when: after_fail        # e.g., after a wrong 'enter' attempt
     cooldown: 2
 
@@ -46,15 +45,37 @@ objects:
       - exit:north.locked                 # keep exit lock in sync with this door
     examine: "The locking mechanism is intact; manual overrides are scarred but functional."
     use: |
-      return function(ctx, verb, _)
-        if verb ~= "open" then return false end
-        local locked = ctx:get_object_state("blast_door","locked")
-        if locked then
-          ctx:say("The door is locked tight.")
-        else
-          ctx:say("Hydraulics hiss as the blast door slides open.")
+      return function(ctx)
+        local exit = "north"
+        port4k.say("DEBUG: Checking blast door use")
+          
+        if ctx.intent.verb == "open" then
+            if not ctx.room.exits[exit] then
+                port4k.say("There is no door here to open.")
+            end
+            if ctx.object.locked then
+                port4k.say("The door is locked tight.")
+                return true
+            end
+            if ctx.object.locked == false then
+                port4k.say("It's already open.")
+                return true
+            end
+            port4k.say("Hydraulics hiss as the blast door slides open.")
+            port4k.set_exit_locked(exit, false)
+            return true
+    
+        elseif ctx.intent.verb == "close" then
+            if port4k.is_exit_locked(exit) == true then
+                port4k.say("It's already closed.")
+                return true
+            end
+            port4k.say("The blast door rumbles shut.")
+            port4k.set_exit_locked(exit, true)
+            return true
         end
-        return true
+    
+        return false
       end
 
   - id: wall_console
@@ -73,36 +94,35 @@ objects:
       --   use console
       --   power console with <item>
       --   enter <code> on console
-      return function(ctx, verb, args)
-        local powered = ctx:get_object_state("wall_console","powered")
+      return function(ctx)
+        local powered = ctx.object.state.powered
         if not powered then
-          if verb == "power" and ctx:has_item("microcell") then
-            ctx:set_object_state("wall_console","powered", true)
-            ctx:consume_item("microcell")
-            ctx:say("You slot the microcell. The console hums to life.")
+          if verb == "power" and port4k.player_has_item("microcell") then
+            port4k.set_object_state("wall_console","powered", true)
+            port4k.consume_item("microcell")
+            port4k.say("You slot the microcell. The console hums to life.")
             return true
           else
-            ctx:say("The console is dead. You might power it with a microcell.")
+            port4k.say("The console is dead. You might power it with a microcell.")
             return true
           end
         end
 
         if verb == "enter" and #args > 0 then
           local code = table.concat(args, " ")
-          local required = ctx:get_object_state("wall_console","code_required") or "4312"
+          local required = ctx.object.code_required or "4312"
           if code == required then
-            ctx:say("Code accepted. Releasing blast door locks.")
-            ctx:set_exit_locked("north", false)
-            ctx:set_object_state("blast_door","locked", false)
+            port4k.say("Code accepted. Releasing blast door locks.")
+            port4k.set_object_state("blast_door","locked", false)
           else
-            ctx:say("ACCESS DENIED.")
-            ctx:hint_trigger("after_fail")    -- lets the engine consider an after_fail hint
+            port4k.say("{c:bright_white:bright_red}ACCESS DENIED{c}")
+            port4k.hint_trigger("after_fail")    -- lets the engine consider an after_fail hint
           end
           return true
         end
 
         if verb == "use" then
-          ctx:say("The console awaits a code. Try: enter <code> on console")
+          port4k.say("The console awaits a code. Try: enter <code> on console")
           return true
         end
 
@@ -146,21 +166,22 @@ exits:
 scripts:
   on_enter: |
     return function(ctx)
-      if not ctx:get_object_state("wall_console","powered") then
-        ctx:say("The console flickers once and dies. It might need a power source.")
+      if not ctx.room.objects["wall_console"].state["powered"] then
+        port4k.say("The console flickers once and dies. It might need a power source.")
       end
-      ctx:hint_consider("enter")    -- engine may surface an 'enter' hint
+      port4k.hint_consider("enter")    -- engine may surface an 'enter' hint
     end
-
   on_command: |
+    port4k.say("OnCommand")
     -- Allow "read markings"
     return function(ctx, verb, args)
-      if verb == "read" and ctx:matches_noun(args, {"markings","symbols","etchings"}) then
-        ctx:say("The symbols resemble hazard glyphs: 'pressure loss' and 'quarantine'.")
+      if verb == "read" and port4k.matches_noun(args, {"markings","symbols","etchings"}) then
+        port4k.say("The symbols resemble hazard glyphs: 'pressure loss' and 'quarantine'.")
         return true
       end
       return false
     end
+
 
 # Optional: inline item catalog (skip if you have a global one)
 items_catalog:

@@ -1,4 +1,4 @@
-use crate::db::repo::account::AccountRepo;
+use crate::db::repo::AccountRepo;
 use crate::error::AppResult;
 use std::sync::Arc;
 

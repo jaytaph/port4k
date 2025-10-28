@@ -6,17 +6,14 @@ pub mod room;
 pub mod submit;
 mod utils;
 
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use std::sync::Arc;
 
-pub async fn blueprint(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
-
+pub async fn blueprint(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.is_empty() {
-        out.append(USAGE);
-        out.failure();
-        return Ok(out);
+        ctx.output.system(USAGE).await;
+        return Ok(());
     }
 
     let head = intent.args[0].as_str();
@@ -31,9 +28,8 @@ pub async fn blueprint(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Comman
         "script" => submit::run(ctx, intent).await,
         "submit" => submit::run(ctx, intent).await,
         _ => {
-            out.append(USAGE);
-            out.failure();
-            Ok(out)
+            ctx.output.system(USAGE).await;
+            Ok(())
         }
     }
 }

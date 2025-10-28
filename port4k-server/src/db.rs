@@ -5,7 +5,6 @@ use deadpool_postgres::Pool;
 mod migrations;
 mod pool;
 
-pub mod accounts;
 pub mod blueprint;
 pub mod characters;
 pub mod loot;

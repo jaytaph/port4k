@@ -1,6 +1,8 @@
 use crate::db::error::DbError;
+use crate::lua::LuaJob;
 use crate::models::types::{ObjectId, RoomId};
 use thiserror::Error;
+use tokio::sync::mpsc::error::SendError;
 
 pub type AppResult<T> = Result<T, DomainError>;
 
@@ -40,8 +42,8 @@ pub enum DomainError {
     #[error("not logged in")]
     NotLoggedIn,
 
-    #[error("Not found")]
-    NotFound,
+    #[error("Not found: {0}")]
+    NotFound(String),
 
     #[error("invalid direction: {0}")]
     InvalidDirection(String),
@@ -50,7 +52,7 @@ pub enum DomainError {
     Validation { field: &'static str, message: String },
 
     #[error(transparent)]
-    Lua(#[from] mlua::Error),
+    Send(#[from] Box<SendError<LuaJob>>),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -66,6 +68,18 @@ pub enum DomainError {
 
     #[error("invalid data: {0}")]
     InvalidData(String),
+
+    #[error("internal error: {0}")]
+    InternalError(String),
+
+    #[error("blueprint or room not found")]
+    RoomNotFound,
+
+    #[error("script error: {0}")]
+    Script(String),
+
+    #[error("script lua error: {0}")]
+    ScriptLua(#[from] mlua::Error),
 }
 
 #[derive(Debug, Error)]

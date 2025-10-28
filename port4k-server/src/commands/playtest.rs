@@ -1,4 +1,4 @@
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use crate::models::zone::ZoneContext;
 use crate::state::session::Cursor;
@@ -18,24 +18,21 @@ pub enum Next {
     NotLoggedIn,
 }
 
-pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
-
+pub async fn playtest(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.len() == 1 {
         // No argument, so exit playtest
-        _ = exit_playtest(ctx.clone(), &mut out).await;
-        return Ok(out);
+        _ = exit_playtest(ctx.clone()).await;
+        return Ok(());
     }
 
     if intent.args.len() == 2 {
         // One argument, so enter playtest for the given blueprint
-        _ = enter_playtest(ctx.clone(), intent.args[0].as_str(), &mut out).await;
-        return Ok(out);
+        _ = enter_playtest(ctx.clone(), intent.args[0].as_str()).await;
+        return Ok(());
     }
 
-    out.append(USAGE);
-    out.failure();
-    Ok(out)
+    ctx.output.system(USAGE).await;
+    Ok(())
 }
 
 #[allow(unused)]
@@ -52,74 +49,75 @@ pub fn check_playtest(ctx: Arc<CmdCtx>) -> Next {
     Next::ExitToLive(Box::new(c))
 }
 
-pub async fn exit_playtest(ctx: Arc<CmdCtx>, out: &mut CommandOutput) -> anyhow::Result<()> {
+pub async fn exit_playtest(ctx: Arc<CmdCtx>) -> anyhow::Result<()> {
     match check_playtest(ctx.clone()) {
         Next::NotLoggedIn => {
-            out.append("Login required.\n");
-            out.failure();
+            ctx.output.system("Login required.").await;
         }
         Next::NotInPlaytest => {
-            out.append("You are not in playtest.\n");
-            out.failure();
+            ctx.output.system("You are not in playtest.").await;
         }
         Next::ExitToLive(c) => {
-            let mut s = ctx.sess.write();
-            s.prev_cursors.pop();
-            s.cursor = Some(*c);
-
-            out.append("[playtest] exited to live mode.\n");
-            out.success();
+            {
+                // Scope sess.write(), otherwise deadlock with output await
+                let mut s = ctx.sess.write();
+                s.prev_cursors.pop();
+                s.cursor = Some(*c);
+            }
+            ctx.output.system("[playtest] exited to live mode.").await;
         }
     }
 
     Ok(())
 }
 
-pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str, out: &mut CommandOutput) -> anyhow::Result<()> {
+pub async fn enter_playtest(ctx: Arc<CmdCtx>, bp_key: &str) -> anyhow::Result<()> {
     let account_id = ctx.account_id()?;
     let blueprint = Arc::new(ctx.registry.services.blueprint.get_by_key(bp_key).await?);
 
     let zone_ctx = ZoneContext::ephemeral(account_id, blueprint.clone());
     let new_c = Cursor {
-        zone_ctx: zone_ctx.clone(),
+        zone_id: zone_ctx.zone.id,
         room_id: blueprint.entry_room_id,
+        account_id: account_id,
+        zone_ctx: zone_ctx.clone(),
         room_view: ctx
             .registry
             .services
             .room
-            .build_room_view(
-                ctx.registry.zone_router.clone(),
-                &zone_ctx,
-                account_id,
-                blueprint.entry_room_id,
-            )
+            .build_room_view(&zone_ctx, account_id, blueprint.entry_room_id)
             .await?,
     };
 
     match check_playtest(ctx.clone()) {
         Next::NotLoggedIn => {
-            out.append("Login required.\n");
-            out.failure();
+            ctx.output.system("Login required.").await;
         }
         Next::ExitToLive(_) => {
-            let mut s = ctx.sess.write();
-            if let Some(c) = s.cursor.clone() {
-                s.prev_cursors.push(c);
+            {
+                // Scope sess.write(), otherwise deadlock with output await
+                let mut s = ctx.sess.write();
+                if let Some(c) = s.cursor.clone() {
+                    s.prev_cursors.push(c);
+                }
+                s.cursor = Some(new_c);
             }
-            s.cursor = Some(new_c);
-
-            out.append(format!("[playtest] entered recursive blueprint '{bp_key}'.\n").as_str());
-            out.success();
+            ctx.output
+                .system(format!("[playtest] entered recursive blueprint '{bp_key}'"))
+                .await;
         }
         Next::NotInPlaytest => {
-            let mut s = ctx.sess.write();
-            if let Some(c) = s.cursor.clone() {
-                s.prev_cursors.push(c);
+            {
+                // Scope sess.write(), otherwise deadlock with output await
+                let mut s = ctx.sess.write();
+                if let Some(c) = s.cursor.clone() {
+                    s.prev_cursors.push(c);
+                }
+                s.cursor = Some(new_c);
             }
-            s.cursor = Some(new_c);
-
-            out.append(format!("[playtest] entered blueprint '{bp_key}'.\n").as_str());
-            out.success();
+            ctx.output
+                .system(format!("[playtest] entered blueprint '{bp_key}'."))
+                .await;
         }
     }
 

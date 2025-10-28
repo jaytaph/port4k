@@ -1,34 +1,31 @@
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use crate::lua::LuaJob;
+use crate::lua::{LUA_CMD_TIMEOUT, LuaJob};
 use crate::models::zone::ZoneKind;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 
-#[allow(unused)]
-const LUA_CMD_TIMEOUT: Duration = Duration::from_secs(2);
-
-pub async fn fallback(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
-
-    let account = ctx.account()?;
+pub async fn fallback(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
+    // let account = ctx.account()?;
     let cursor = ctx.cursor()?;
+    let account = ctx.account()?;
 
     // @TODO: why are we only doing lua scripting in ZoneKind::Test?
     let scripting_enabled = matches!(cursor.zone_ctx.kind, ZoneKind::Test { .. });
     if !scripting_enabled {
-        out.append("Unknown command. Try `help`.\n");
-        out.failure();
-        return Ok(out);
+        ctx.output.system("Unknown command. Try `help`.").await;
+        return Ok(());
     }
+
+    let output_handle = ctx.output.clone();
 
     let (tx, rx) = oneshot::channel();
     ctx.lua_tx
         .send(LuaJob::OnCommand {
-            cursor: Box::new(cursor),
+            output_handle,
             account,
+            cursor: Box::new(cursor),
             intent: Box::new(intent),
             reply: tx,
         })
@@ -37,17 +34,15 @@ pub async fn fallback(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<Command
 
     match timeout(LUA_CMD_TIMEOUT, rx).await {
         Err(_) => {
-            out.append("The room doesn't react (script timed out)\n");
-            out.failure();
+            ctx.output.system("The room doesn't react (script timed out)").await;
         }
         Ok(Ok(_)) => {
-            out.append("result from lua\n");
-            out.success();
+            // Not handled by lua
         }
         Ok(Err(_)) => {
-            out.append("The room doesn't react (script error)\n");
-            out.failure();
+            ctx.output.system("The room doesn't react (script error)").await;
         }
     }
-    Ok(out)
+
+    Ok(())
 }

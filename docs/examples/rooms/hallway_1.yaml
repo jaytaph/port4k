@@ -1,31 +1,33 @@
-version: 2
+version: 3
 id: hallway_1
 name: Reinforced Hallway
 short: "A narrow corridor with ribbed plating and emergency beacons."
 description: |
-  The corridor runs east–west with ribbed deck plating underfoot. Emergency beacons strobe a dull red,
-  throwing staccato shadows between support struts. The air smells faintly of burnt insulation.
+  The corridor runs east–west with ribbed deck plating underfoot. Emergency beacons strobe a dull red, throwing staccato shadows between support struts. The air smells faintly of burnt insulation.
 
-  Overhead, a {o:power_conduit} snakes along the ceiling, its casing cracked. On the eastern bulkhead,
-  a recessed {o:access_panel} sits beside a hardened {o:east_door}. To the west, the passage opens
-  toward dim observation ports. The way back {o:south_exit} leads to the Entry Hall.
-o: "Overhead {o:power_conduit}; east bulkhead {o:access_panel} and {o:east_door}; back {o:south_exit}."
+  Overhead, a {o:power_conduit} snakes along the ceiling, its casing cracked. On the eastern bulkhead, a recessed {o:access_panel} sits beside a hardened {o:east_door}. To the west, the passage opens toward dim observation ports. The way back {o:south_exit} leads to the Entry Hall.
+
 kv:
   ambience: "alarm_beacons"
   grid_section: "A-3"
 
 hints:
-  - text: "The power conduit looks damaged—try repairing it with proper tools."
+  - id: power_conduit
+    text: "The power conduit looks damaged—try repairing it with proper tools."
     when: first_look
     once: true
-  - text: "If the corridor has power, access panels may accept diagnostics probes."
+  - id: corridor
+    text: "If the corridor has power, access panels may accept diagnostics probes."
     when: enter
     cooldown: 2
-  - text: "A hardened east door likely ties into the access panel's security relays."
+  - id: door
+    text: "A hardened east door likely ties into the access panel's security relays."
     when: enter
-  - text: "Emergency beacons suggest the main grid is offline or bypassed."
+  - id: beacon
+    text: "Emergency beacons suggest the main grid is offline or bypassed."
     when: manual
-  - text: "If you found tools in the previous room, they might help here."
+  - id: tools
+    text: "If you found tools in the previous room, they might help here."
     when: search
     once: true
 

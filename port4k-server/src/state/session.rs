@@ -1,6 +1,6 @@
 use crate::models::account::Account;
 use crate::models::room::RoomView;
-use crate::models::types::RoomId;
+use crate::models::types::{AccountId, RoomId, ZoneId};
 use crate::models::zone::ZoneContext;
 use serde::Serialize;
 use serde::ser::SerializeStruct;
@@ -22,8 +22,10 @@ pub enum Protocol {
 
 #[derive(Debug, Clone)]
 pub struct Cursor {
-    pub zone_ctx: ZoneContext,
+    pub zone_id: ZoneId,
     pub room_id: RoomId,
+    pub account_id: AccountId,
+    pub zone_ctx: ZoneContext,
     pub room_view: RoomView,
 }
 
@@ -36,7 +38,9 @@ impl Serialize for Cursor {
         let mut state = serializer.serialize_struct("Cursor", 3)?;
         state.serialize_field("zone_ctx.zone.key", &self.zone_ctx.zone.key)?;
         state.serialize_field("zone_ctx.blueprint.key", &self.zone_ctx.blueprint.key)?;
+        state.serialize_field("zone_id", &self.zone_id)?;
         state.serialize_field("room_id", &self.room_id)?;
+        state.serialize_field("account_id", &self.account_id)?;
         state.end()
     }
 }
@@ -55,6 +59,9 @@ pub struct Session {
 
     // Which map am I?
     pub zone_ctx: Option<ZoneContext>,
+
+    // Are we currently in the lua repl?
+    pub in_lua_repl: bool,
 
     // Where am I (on the map)?
     pub cursor: Option<Cursor>,
@@ -78,6 +85,7 @@ impl Session {
             prev_cursors: Vec::new(),
             tty_cols: None,
             tty_rows: None,
+            in_lua_repl: false,
         }
     }
 }

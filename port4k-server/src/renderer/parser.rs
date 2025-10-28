@@ -1,49 +1,83 @@
 use std::collections::HashSet;
 
-/// Internal token representation
-#[derive(Clone, Debug)]
-pub enum Token {
-    Text(String),
-    /// Any {rv:...} variable; kept separate for possible special handling
-    RoomVar {
-        raw: String, // original token text for LeaveToken
-        name: String,
-        default: Option<String>,
-        fmt: Option<VarFmt>,
-    },
-    /// Any {v:...} variable
-    Var {
-        raw: String, // original token text for LeaveToken
-        name: String,
-        default: Option<String>,
-        fmt: Option<VarFmt>,
-    },
-    /// Any {c:...} color spec
-    Color {
-        fg: Option<String>,
-        bg: Option<String>,
-        attrs: Vec<String>,
-    },
-    ColorReset,
-    Unknown(String), // pass-through
-}
+/// ===============================
+/// Token & formatting definitions
+/// ===============================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Alignment {
     Left,
     Center,
     Right,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VarFmt {
-    // %[-]Ns
+    // %[-|*]Ns -> left or center aligned string; right aligned by default
     String { width: Option<u32>, alignment: Alignment },
     // %0Nd or %Nd
     Int { width: Option<u32>, zero_pad: bool },
 }
 
-/// Parse a full template into tokens.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Scope {
+    Global, // {v:...}
+    Room,   // {rv:...}
+    Object, // {o:...}
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VarToken {
+    pub raw: String, // original "{...}"
+    pub scope: Scope,
+    pub key: String, // for o: "door.short" or just "door"
+    pub default: Option<String>,
+    pub fmt: Option<VarFmt>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DebugScope {
+    All,
+    Global,
+    Room,
+    Object,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DebugKey {
+    None,                                      // whole scope
+    Var(String),                               // v/rv
+    Object(String),                            // o:name
+    ObjectProp { name: String, prop: String }, // o:name.prop
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DebugToken {
+    pub raw: String,
+    pub scope: DebugScope,
+    pub key: DebugKey,
+    pub fmt: Option<VarFmt>, // applied to VALUE for single-item cases
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Token {
+    Text(String),
+    /// {c:...}
+    Color {
+        fg: Option<String>,
+        bg: Option<String>,
+        attrs: Vec<String>,
+    },
+    ColorReset,
+    /// {v:..}/{rv:..}/{o:..}
+    Var(VarToken),
+    /// {dbg[:...]}
+    Debug(DebugToken),
+    /// Unknown or passthrough. We keep raw so author can see literal.
+    Unknown(String),
+}
+
+/// Parse a full template into tokens. (from: parse)
 pub fn parse(input: &str) -> Vec<Token> {
     let mut out = Vec::new();
     let mut i = 0;
@@ -60,16 +94,16 @@ pub fn parse(input: &str) -> Vec<Token> {
                     i += 2;
                     continue;
                 }
-                // flush pending text
-                if !buf.is_empty() {
-                    out.push(Token::Text(std::mem::take(&mut buf)));
-                }
-                // read token until matching '}'
+                // try to read a full braced token FIRST
                 if let Some((raw, content, next_i)) = read_braced(input, i) {
+                    // only now flush pending text
+                    if !buf.is_empty() {
+                        out.push(Token::Text(std::mem::take(&mut buf)));
+                    }
                     i = next_i;
                     out.push(parse_token(raw, content));
                 } else {
-                    // no closing '}', treat as literal
+                    // no closing '}', treat '{' literally without flushing buf
                     buf.push('{');
                     i += 1;
                 }
@@ -96,7 +130,7 @@ pub fn parse(input: &str) -> Vec<Token> {
     out
 }
 
-// Read {...} starting at '{'; return (raw_token, inner_content, next_index)
+// Read {...} starting at '{'; return (raw_token, inner_content, next_index) (from: read_braced)
 fn read_braced(input: &str, start: usize) -> Option<(String, String, usize)> {
     let bytes = input.as_bytes();
     let mut i = start + 1;
@@ -112,22 +146,31 @@ fn read_braced(input: &str, start: usize) -> Option<(String, String, usize)> {
 }
 
 fn parse_token(raw: String, content: String) -> Token {
-    // content can be:  "v:var", "v:var:default", "v:var|%05d", "v:var:default|%-20s"
+    // content can be: "v:var", "v:var:default", "v:var|%05d", "v:var:default|%-20s"
     // colors: "c" or "c:yellow", "c:yellow:red:bold,underline", etc.
+    // debug: "dbg", "dbg:v", "dbg:o:wrench", "dbg:rv:user", ...
     let mut parts = content.splitn(2, ':');
-    let kind = parts.next().unwrap_or("");
+    let tag = parts.next().unwrap_or("");
     let rest = parts.next();
 
-    match kind {
-        "rv" => parse_var(raw, rest.unwrap_or(""), true),
-        "v" => parse_var(raw, rest.unwrap_or(""), false),
-        "c" => parse_color(raw, rest),
+    match tag {
+        // (global) variables
+        "v" | "var" => parse_var_like(raw, rest.unwrap_or(""), Scope::Global),
+        // Room variables
+        "rv" | "room" => parse_var_like(raw, rest.unwrap_or(""), Scope::Room),
+        // Objects
+        "o" | "obj" | "object" => parse_var_like(raw, rest.unwrap_or(""), Scope::Object),
+        // Colors
+        "c" | "col" | "color" => parse_color(raw, rest),
+        // Debug
+        "dbg" | "debug" => parse_dbg(raw, rest.unwrap_or("")),
         _ => Token::Unknown(raw),
     }
 }
 
-fn parse_var(raw: String, rest: &str, is_room_var: bool) -> Token {
-    // we need to split possible trailing |%fmt from the right
+// Parse {v:...}/{rv:...}/{o:...} (from: parse_var_like)
+fn parse_var_like(raw: String, rest: &str, scope: Scope) -> Token {
+    // split possible trailing |%fmt from the right
     let mut vv = rest.rsplitn(2, '|');
     let right = vv.next().unwrap_or("");
     let left = vv.next(); // everything before the last '|', if any
@@ -142,25 +185,19 @@ fn parse_var(raw: String, rest: &str, is_room_var: bool) -> Token {
 
     // Now split core on ':' into name[:default]
     let mut parts = core.splitn(2, ':');
-    let name = parts.next().unwrap_or("").trim().to_string();
+    let key = parts.next().unwrap_or("").trim().to_string();
     let default = parts.next().map(|s| s.to_string());
 
-    if is_room_var {
-        return Token::RoomVar {
-            raw,
-            name,
-            default,
-            fmt,
-        };
-    }
-    Token::Var {
+    Token::Var(VarToken {
         raw,
-        name,
+        scope,
+        key,
         default,
         fmt,
-    }
+    })
 }
 
+// Parse {c:...} (from: parse_color)
 fn parse_color(_raw: String, rest: Option<&str>) -> Token {
     match rest {
         None | Some("") => Token::ColorReset,
@@ -216,40 +253,124 @@ fn split_attrs(a: &str) -> Vec<String> {
         .collect()
 }
 
+// small, static-ish color name set (from: is_color_name)
 fn is_color_name(s: &str) -> bool {
-    // keep in sync with ansi.rs names
-    const NAMES: [&str; 24] = [
-        "black",
-        "red",
-        "green",
-        "yellow",
-        "blue",
-        "magenta",
-        "cyan",
-        "white",
-        "gray",
-        "grey",
-        "bright_black",
-        "bright_red",
-        "bright_green",
-        "bright_yellow",
-        "bright_blue",
-        "bright_magenta",
-        "bright_cyan",
-        "bright_white",
-        "default",
-        "reset",
-        "orange",
-        "purple",
-        "teal",
-        "pink", // optional extensions if you map them
-    ];
-    let set: HashSet<&'static str> = HashSet::from(NAMES);
-    set.contains(&s)
+    static NAMES: once_cell::sync::Lazy<HashSet<&'static str>> = once_cell::sync::Lazy::new(|| {
+        HashSet::from([
+            "black",
+            "red",
+            "green",
+            "yellow",
+            "blue",
+            "magenta",
+            "cyan",
+            "white",
+            "gray",
+            "grey",
+            "bright_black",
+            "bright_red",
+            "bright_green",
+            "bright_yellow",
+            "bright_blue",
+            "bright_magenta",
+            "bright_cyan",
+            "bright_white",
+            "default",
+            "reset",
+            "orange",
+            "purple",
+            "teal",
+            "pink",
+        ])
+    });
+    NAMES.contains(s)
 }
 
+// Parse {dbg[:...]} (from: parse_dbg)
+fn parse_dbg(raw: String, rest: &str) -> Token {
+    // allow optional |%fmt for single-item debug
+    let (core, fmt) = {
+        let mut vv = rest.rsplitn(2, '|');
+        let right = vv.next().unwrap_or("");
+        let left = vv.next();
+        if let Some(l) = left {
+            (l, parse_format(right))
+        } else if right.starts_with('%') {
+            ("", parse_format(right))
+        } else {
+            (right, None)
+        }
+    };
+
+    if core.is_empty() {
+        return Token::Debug(DebugToken {
+            raw,
+            scope: DebugScope::All,
+            key: DebugKey::None,
+            fmt,
+        });
+    }
+
+    let mut segs = core.split(':');
+    match (segs.next(), segs.next()) {
+        (Some("v"), None) | (Some("var"), None) => Token::Debug(DebugToken {
+            raw,
+            scope: DebugScope::Global,
+            key: DebugKey::None,
+            fmt,
+        }),
+        (Some("rv"), None) | (Some("room"), None) => Token::Debug(DebugToken {
+            raw,
+            scope: DebugScope::Room,
+            key: DebugKey::None,
+            fmt,
+        }),
+        (Some("o"), None) | (Some("obj"), None) | (Some("object"), None) => Token::Debug(DebugToken {
+            raw,
+            scope: DebugScope::Object,
+            key: DebugKey::None,
+            fmt,
+        }),
+
+        (Some("v"), Some(k)) | (Some("var"), Some(k)) => Token::Debug(DebugToken {
+            raw,
+            scope: DebugScope::Global,
+            key: DebugKey::Var(k.to_string()),
+            fmt,
+        }),
+        (Some("rv"), Some(k)) | (Some("room"), Some(k)) => Token::Debug(DebugToken {
+            raw,
+            scope: DebugScope::Room,
+            key: DebugKey::Var(k.to_string()),
+            fmt,
+        }),
+        (Some("o"), Some(k)) | (Some("obj"), Some(k)) | (Some("object"), Some(k)) => {
+            if let Some((n, p)) = k.split_once('.') {
+                Token::Debug(DebugToken {
+                    raw,
+                    scope: DebugScope::Object,
+                    key: DebugKey::ObjectProp {
+                        name: n.to_string(),
+                        prop: p.to_string(),
+                    },
+                    fmt,
+                })
+            } else {
+                Token::Debug(DebugToken {
+                    raw,
+                    scope: DebugScope::Object,
+                    key: DebugKey::Object(k.to_string()),
+                    fmt,
+                })
+            }
+        }
+        _ => Token::Unknown(raw),
+    }
+}
+
+// (from: parse_format)
 fn parse_format(spec: &str) -> Option<VarFmt> {
-    // accepts: %s, %20s, %-20s, %d, %05d, %5d
+    // accepts: %s, %20s, %-20s, %*20s, %d, %05d, %5d
     if !spec.starts_with('%') {
         return None;
     }

@@ -5,13 +5,14 @@ use crate::input::shell::{handle_shell_cmd, parse_shell_cmd};
 use crate::lua::LuaJob;
 use crate::models::account::Account;
 use crate::models::room::RoomView;
-use crate::models::types::AccountId;
+use crate::models::types::{AccountId, RoomId, ZoneId};
 use crate::models::zone::ZoneContext;
+use crate::net::output::OutputHandle;
 use crate::services::ServiceError;
 use crate::state::session::{Cursor, Session};
 use crate::{Registry, ansi};
+use async_trait::async_trait;
 use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -25,13 +26,20 @@ mod go;
 mod login;
 mod logout;
 mod look;
+mod lua;
+mod open;
 mod playtest;
 mod register;
 mod search;
 mod take;
 mod who;
 
-pub type CommandResult<T> = Result<T, CommandError>;
+pub type CommandResult = Result<(), CommandError>;
+
+#[async_trait]
+pub trait Command {
+    async fn run(&self, ctx: Arc<CmdCtx>) -> CommandResult;
+}
 
 //noinspection RsExternalLinter
 #[derive(Debug, Error)]
@@ -72,14 +80,14 @@ pub enum CommandError {
 
 /// Command context passed to command handlers
 pub struct CmdCtx {
+    /// Output system
+    pub output: OutputHandle,
     /// Global service registry
     pub registry: Arc<Registry>,
     /// Channel to send jobs to the Lua thread
     pub lua_tx: mpsc::Sender<LuaJob>,
     /// Player session
     pub sess: Arc<RwLock<Session>>,
-    // /// Current zone context
-    // pub zone_ctx: Option<ZoneCtx>,
 }
 
 impl CmdCtx {
@@ -98,6 +106,14 @@ impl CmdCtx {
             .and_then(|opt| opt.ok_or(DomainError::NotLoggedIn))
     }
 
+    pub fn zone_id(&self) -> AppResult<ZoneId> {
+        self.zone_ctx().map(|z| z.zone.id)
+    }
+
+    pub fn room_id(&self) -> AppResult<RoomId> {
+        self.cursor().map(|c| c.room_view.blueprint.id)
+    }
+
     pub fn account(&self) -> AppResult<Account> {
         self.with_sess(|s| s.account.clone())
             .and_then(|opt| opt.ok_or(DomainError::NotLoggedIn))
@@ -109,12 +125,12 @@ impl CmdCtx {
 
     pub fn zone_ctx(&self) -> AppResult<ZoneContext> {
         self.with_sess(|s| s.zone_ctx.clone())
-            .and_then(|opt| opt.ok_or(DomainError::NotFound))
+            .and_then(|opt| opt.ok_or(DomainError::NoCurrentRoom))
     }
 
     pub fn cursor(&self) -> AppResult<Cursor> {
         self.with_sess(|s| s.cursor.clone())
-            .and_then(|opt| opt.ok_or(DomainError::NotFound))
+            .and_then(|opt| opt.ok_or(DomainError::NoCurrentRoom))
     }
 
     pub fn has_cursor(&self) -> bool {
@@ -126,82 +142,66 @@ impl CmdCtx {
     }
 }
 
-pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult<CommandOutput> {
+pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
     // See if we match a shell command, and handle it if so
     if let Some(shell) = parse_shell_cmd(raw) {
-        let out = handle_shell_cmd(shell, ctx.clone()).await?;
-        return Ok(out);
+        handle_shell_cmd(shell, ctx.clone()).await?;
+        return Ok(());
     }
-
-    let mut out = CommandOutput::new();
 
     let intent = parse_command(raw);
     match intent.verb {
         Verb::Close => {
-            out.append("Goodbye! Connection closed by user.\n");
-            out.success();
-            Ok(out)
+            ctx.output.system("Goodbye! Connection closed by user.").await;
+            Ok(())
         }
         Verb::Help => {
-            out.append(help_text().as_str());
-            out.success();
-            Ok(out)
+            ctx.output.system(help_text()).await;
+            Ok(())
         }
         Verb::Look => look::look(ctx.clone(), intent).await,
         Verb::Examine => examine::examine(ctx.clone(), intent).await,
         Verb::Search => search::search(ctx.clone(), intent).await,
         Verb::Take => take::take(ctx.clone(), intent).await,
         Verb::Drop => {
-            out.append("Drop command not implemented yet.\n");
-            out.failure();
-            Ok(out)
+            ctx.output.system("Drop command not implemented yet.").await;
+            Ok(())
         }
-        Verb::Open => {
-            out.append("Open command not implemented yet.\n");
-            out.failure();
-            Ok(out)
-        }
+        Verb::Open => open::open(ctx.clone(), intent).await,
         Verb::Unlock => {
-            out.append("Unlock command not implemented yet.\n");
-            out.failure();
-            Ok(out)
+            ctx.output.system("Unlock command not implemented yet.").await;
+            Ok(())
         }
         Verb::Lock => {
-            out.append("Lock command not implemented yet.\n");
-            out.failure();
-            Ok(out)
+            ctx.output.system("Lock command not implemented yet.").await;
+            Ok(())
         }
         Verb::Use => {
-            out.append("Use command not implemented yet.\n");
-            out.failure();
-            Ok(out)
+            ctx.output.system("Use command not implemented yet.").await;
+            Ok(())
         }
         Verb::Put => {
-            out.append("Put command not implemented yet.\n");
-            out.failure();
-            Ok(out)
+            ctx.output.system("Put command not implemented yet.").await;
+            Ok(())
         }
         Verb::Talk => {
-            out.append("Talk command not implemented yet.\n");
-            out.failure();
-            Ok(out)
+            ctx.output.system("Talk command not implemented yet.").await;
+            Ok(())
         }
         Verb::Go => go::go(ctx.clone(), intent).await,
         Verb::Inventory => {
-            out.append("Inventory command not implemented yet.\n");
-            out.failure();
-            Ok(out)
+            ctx.output.system("Inventory command not implemented yet.").await;
+            Ok(())
         }
         Verb::Quit => {
-            out.append("Goodbye! Connection closed by user.\n");
-            out.success();
-            Ok(out)
+            ctx.output.system("Goodbye! Connection closed by user.").await;
+            Ok(())
         }
         Verb::Who => who::who(ctx.clone()).await,
         Verb::Logout => logout::logout(ctx.clone(), intent).await,
         Verb::Login => login::login(ctx.clone(), intent).await,
         Verb::Register => register::register(ctx.clone(), intent).await,
-
+        Verb::LuaRepl => lua::repl(ctx.clone()).await,
         Verb::ScBlueprint => blueprint::blueprint(ctx.clone(), intent).await,
         Verb::ScPlaytest => playtest::playtest(ctx.clone(), intent).await,
         // Verb::ScScript => script::script(ctx.clone(), intent).await,
@@ -242,58 +242,58 @@ pub fn help_text() -> String {
     )
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum CmdStatus {
-    Success,
-    Failure,
-    Neutral,
-}
+// #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+// pub enum CmdStatus {
+//     Success,
+//     Failure,
+//     Neutral,
+// }
 
-pub struct CommandOutput {
-    pub status: CmdStatus,
-    pub lines: Vec<String>,
-    // more fields we might want later
-}
+// pub struct CommandOutput {
+//     pub status: CmdStatus,
+//     pub lines: Vec<String>,
+//     // more fields we might want later
+// }
 
-impl Default for CommandOutput {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// impl Default for CommandOutput {
+//     fn default() -> Self {
+//         Self::new()
+//     }
+// }
 
-impl CommandOutput {
-    pub fn new() -> Self {
-        Self {
-            status: CmdStatus::Neutral,
-            lines: Vec::new(),
-        }
-    }
-
-    pub fn append(&mut self, line: &str) {
-        self.lines.push(line.to_string());
-    }
-
-    pub fn success(&mut self) {
-        self.status = CmdStatus::Success;
-    }
-
-    pub fn failure(&mut self) {
-        self.status = CmdStatus::Failure;
-    }
-
-    pub fn failed(&self) -> bool {
-        self.status == CmdStatus::Failure
-    }
-
-    pub fn succeeded(&self) -> bool {
-        self.status == CmdStatus::Success
-    }
-
-    pub fn message(&self) -> String {
-        self.lines.join("")
-    }
-
-    pub fn messages(&self) -> Vec<String> {
-        self.lines.clone()
-    }
-}
+// impl CommandOutput {
+//     pub fn new() -> Self {
+//         Self {
+//             status: CmdStatus::Neutral,
+//             lines: Vec::new(),
+//         }
+//     }
+//
+//     pub fn append(&mut self, line: &str) {
+//         self.lines.push(line.to_string());
+//     }
+//
+//     pub fn success(&mut self) {
+//         self.status = CmdStatus::Success;
+//     }
+//
+//     pub fn failure(&mut self) {
+//         self.status = CmdStatus::Failure;
+//     }
+//
+//     pub fn failed(&self) -> bool {
+//         self.status == CmdStatus::Failure
+//     }
+//
+//     pub fn succeeded(&self) -> bool {
+//         self.status == CmdStatus::Success
+//     }
+//
+//     pub fn message(&self) -> String {
+//         self.lines.join("")
+//     }
+//
+//     pub fn messages(&self) -> Vec<String> {
+//         self.lines.clone()
+//     }
+// }

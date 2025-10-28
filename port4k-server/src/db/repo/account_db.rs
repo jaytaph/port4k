@@ -22,9 +22,7 @@ impl AccountRepo for AccountRepository {
         let stmt = client
             .prepare_cached(
                 r#"
-            SELECT id, username, email, password_hash, role, created_at, last_login,
-                zone_id, current_room_id, xp, health, coins,
-                inventory, flags
+            SELECT id, username, email, password_hash, role, created_at, last_login
             FROM accounts
             WHERE username = $1
             "#,
@@ -75,13 +73,13 @@ impl AccountRepo for AccountRepository {
                     &account.email,
                     &account.password_hash,
                     &account.role,
-                    &account.zone_id,
-                    &account.current_room_id,
-                    &(account.xp as i64),
-                    &(account.health as i64),
-                    &(account.coins as i64),
-                    &serde_json::to_value(&account.inventory)?,
-                    &serde_json::to_value(&account.flags)?,
+                    // &account.zone_id,
+                    // &account.current_room_id,
+                    // &(account.xp as i64),
+                    // &(account.health as i64),
+                    // &(account.coins as i64),
+                    // &serde_json::to_value(&account.inventory)?,
+                    // &serde_json::to_value(&account.flags)?,
                 ],
             )
             .await?;

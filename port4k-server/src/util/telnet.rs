@@ -22,6 +22,14 @@ pub enum TelnetIn {
     Naws { cols: u16, rows: u16 },
 }
 
+#[derive(Debug)]
+pub struct TelnetResponse {
+    /// Event to be processed (if any)
+    pub event: Option<TelnetIn>,
+    /// IAC response bytes to send back to client (if any)
+    pub response: Option<Vec<u8>>,
+}
+
 pub struct TelnetMachine {
     /// Are we in an IAC sequence?
     in_iac: bool,
@@ -72,19 +80,28 @@ impl TelnetMachine {
     }
 
     /// Feed one byte; respond to negotiations and produce `TelnetIn::Data` for your editor.
-    pub async fn push<W: AsyncWrite + Unpin>(&mut self, b: u8, w: &mut W) -> std::io::Result<Option<TelnetIn>> {
+    pub fn push(&mut self, b: u8) -> TelnetResponse {
         if !self.in_iac {
             if b == IAC {
                 self.in_iac = true;
-                return Ok(None);
+                return TelnetResponse {
+                    event: None,
+                    response: None,
+                };
             }
             // Normal data byte
             return if !self.in_sb {
-                Ok(Some(TelnetIn::Data(b)))
+                TelnetResponse {
+                    event: Some(TelnetIn::Data(b)),
+                    response: None,
+                }
             } else {
                 // Inside SB: collect until IAC SE
                 self.sb_buf.push(b);
-                Ok(None)
+                TelnetResponse {
+                    event: None,
+                    response: None,
+                }
             };
         }
 
@@ -95,23 +112,35 @@ impl TelnetMachine {
             IAC => {
                 // Escaped 0xFF in data
                 if !self.in_sb {
-                    Ok(Some(TelnetIn::Data(IAC)))
+                    TelnetResponse {
+                        event: Some(TelnetIn::Data(IAC)),
+                        response: None,
+                    }
                 } else {
                     self.sb_buf.push(IAC);
-                    Ok(None)
+                    TelnetResponse {
+                        event: None,
+                        response: None,
+                    }
                 }
             }
             DO | DONT | WILL | WONT => {
                 self.in_cmd = Some(b);
                 self.in_iac = true; // expect option next
-                Ok(None)
+                TelnetResponse {
+                    event: None,
+                    response: None,
+                }
             }
             SB => {
                 self.in_sb = true;
                 self.sb_buf.clear();
                 self.in_iac = true; // next should be the option byte
                 self.in_cmd = Some(SB);
-                Ok(None)
+                TelnetResponse {
+                    event: None,
+                    response: None,
+                }
             }
             SE => {
                 // End subnegotiation
@@ -123,66 +152,95 @@ impl TelnetMachine {
                     if opt == NAWS && data.len() >= 4 {
                         let cols = u16::from_be_bytes([data[0], data[1]]);
                         let rows = u16::from_be_bytes([data[2], data[3]]);
-                        return Ok(Some(TelnetIn::Naws { cols, rows }));
+                        return TelnetResponse {
+                            event: Some(TelnetIn::Naws { cols, rows }),
+                            response: None,
+                        };
                     }
                 }
-                Ok(None)
+                TelnetResponse {
+                    event: None,
+                    response: None,
+                }
             }
             opt => {
                 // This branch is hit when we were expecting an option byte after DO/DON'T/WILL/WON'T, or SB's option.
                 if let Some(cmd) = self.in_cmd.take() {
-                    match cmd {
+                    let response = match cmd {
                         DO => {
                             // Client requests we WILL <opt>
                             match opt {
-                                ECHO => send_will(w, ECHO).await?,         // We'll echo (client stops local echo)
-                                SGA => send_will(w, SGA).await?,           // We'll suppress go-ahead
-                                LINEMODE => send_wont(w, LINEMODE).await?, // We refuse LINEMODE
-                                NAWS => { /* client asking us to do NAWS is unusual; ignore */ }
-                                _ => send_wont(w, opt).await?,
+                                ECHO => Some(make_will(ECHO)),         // We'll echo (client stops local echo)
+                                SGA => Some(make_will(SGA)),           // We'll suppress go-ahead
+                                LINEMODE => Some(make_wont(LINEMODE)), // We refuse LINEMODE
+                                NAWS => None,
+                                _ => Some(make_wont(opt)), // We won't do any unknown options
                             }
                         }
                         DONT => {
                             // Client says DON'T <opt> (stop doing it)
                             match opt {
-                                ECHO | SGA | LINEMODE => send_wont(w, opt).await?,
-                                _ => { /* ignore */ }
+                                ECHO | SGA | LINEMODE => Some(make_wont(opt)),
+                                _ => None,
                             }
                         }
                         WILL => {
                             // Client will do <opt>
                             match opt {
-                                ECHO => send_do(w, ECHO).await?, // ok, you handle echo (we'd usually prefer we echo)
-                                SGA => send_do(w, SGA).await?,   // ok, you suppress go-ahead too
-                                LINEMODE => send_dont(w, LINEMODE).await?, // nope, please don't
-                                NAWS => send_do(w, NAWS).await?, // yes, please send SB NAWS
-                                TTYPE => send_do(w, TTYPE).await?, // yes, please send SB TTYPE
-                                _ => send_dont(w, opt).await?,
+                                ECHO => Some(make_do(ECHO)),           // ok, you handle echo (we'd usually prefer we echo)
+                                SGA => Some(make_do(SGA)),             // ok, you suppress go-ahead too
+                                LINEMODE => Some(make_dont(LINEMODE)), // nope, please don't
+                                NAWS => Some(make_do(NAWS)),           // yes, please send SB NAWS
+                                TTYPE => Some(make_do(TTYPE)),         // yes, please send SB TTYPE
+                                _ => Some(make_dont(opt)),
                             }
                         }
-                        WONT => { // Client refuses <opt>
-                            // Nothing to do; we might fall back if we relied on it
-                        }
+                        WONT => None,
                         SB => {
                             // This was SB option byte
                             self.sb_opt = opt;
-                            return Ok(None);
+                            return TelnetResponse {
+                                event: None,
+                                response: None,
+                            };
                         }
-                        _ => {}
-                    }
-                    return Ok(None);
+                        _ => None,
+                    };
+
+                    return TelnetResponse { event: None, response };
                 }
 
                 // Unexpected lone option byte; if in SB, treat as data start
                 if self.in_sb {
                     self.sb_opt = opt;
                 }
-                Ok(None)
+                TelnetResponse {
+                    event: None,
+                    response: None,
+                }
             }
         }
     }
 }
 
+// Helper functions to build IAC response bytes
+fn make_do(opt: u8) -> Vec<u8> {
+    vec![IAC, DO, opt]
+}
+
+fn make_dont(opt: u8) -> Vec<u8> {
+    vec![IAC, DONT, opt]
+}
+
+fn make_will(opt: u8) -> Vec<u8> {
+    vec![IAC, WILL, opt]
+}
+
+fn make_wont(opt: u8) -> Vec<u8> {
+    vec![IAC, WONT, opt]
+}
+
+// Keep these for initial negotiation
 async fn send3<W: AsyncWrite + Unpin>(w: &mut W, a: u8, b: u8, c: u8) -> std::io::Result<()> {
     w.write_all(&[a, b, c]).await
 }
@@ -196,6 +254,7 @@ async fn send_dont<W: AsyncWrite + Unpin>(w: &mut W, opt: u8) -> std::io::Result
 async fn send_will<W: AsyncWrite + Unpin>(w: &mut W, opt: u8) -> std::io::Result<()> {
     send3(w, IAC, WILL, opt).await
 }
+#[allow(unused)]
 async fn send_wont<W: AsyncWrite + Unpin>(w: &mut W, opt: u8) -> std::io::Result<()> {
     send3(w, IAC, WONT, opt).await
 }

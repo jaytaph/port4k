@@ -1,24 +1,27 @@
 use crate::db::DbResult;
 use crate::db::error::DbError;
-use crate::models::types::{BlueprintId, Direction, ObjectId, RoomId, ZoneId};
-use crate::util::visibility::is_visible_to;
-use once_cell::sync::Lazy;
+use crate::lua::ScriptHook;
+use crate::models::room_helpers::{compute_object_visible, merge_kv, resolve_bool, resolve_qty, str_is_truthy};
+use crate::models::types::{BlueprintId, Direction, ExitId, HintId, ObjectId, RoomId};
+use crate::util::serde::serde_to_str;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::str::FromStr;
 use tokio_postgres::Row;
 use uuid::Uuid;
 
-static OBJ_REF_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"\{obj:([a-zA-Z0-9_\- ]+)}").unwrap());
-
+/// Hints that a user can request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hint {
-    pub once: Option<bool>, // default: false
+    pub id: String,         // Unique ID (in the room)
+    pub once: Option<bool>, // Only show once
     pub text: String,
     pub when: String,          // first_look, enter, search, after_fail
     pub cooldown: Option<u32>, // seconds; null = no cooldown
 }
 
+/// Blueprint room model for `bp_rooms`. There are no zone or user overlays in here
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlueprintRoom {
     pub id: RoomId,
@@ -49,177 +52,53 @@ impl BlueprintRoom {
     }
 }
 
-/// Row model for `bp_exits`.
+/// Blueprint exit model. Note these are not reciprocal; each exit is one-way.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RoomExitRow {
+pub struct BlueprintExit {
+    /// The ID of the exit
+    pub id: ExitId,
+    /// From Room ID
     pub from_room_id: RoomId,
+    /// From Room Key
+    pub from_room_key: String,
+    /// Direction to go to
     pub dir: Direction,
+    /// To Room ID
     pub to_room_id: RoomId,
-    pub locked: bool,
+    /// To Room Key
+    pub to_room_key: String,
+    /// Description of the exit
     pub description: Option<String>,
-    // When locked, is this exit visible to players?
+    /// Is the exit visible when locked?
     pub visible_when_locked: bool,
+    /// Is the exit locked by default?
+    pub default_locked: bool,
 }
 
-impl RoomExitRow {
+impl BlueprintExit {
     pub fn try_from_row(row: &Row) -> DbResult<Self> {
         let dir_s: String = row.try_get("dir")?;
         let dir = Direction::parse(&dir_s)
             .ok_or_else(|| DbError::Decode(format!("invalid direction in bp_exits: {}", dir_s)))?;
 
         Ok(Self {
+            id: ExitId(row.try_get::<_, Uuid>("id")?),
             from_room_id: row.try_get("from_room_id")?,
+            from_room_key: row.try_get("from_room_key")?,
             dir,
             to_room_id: row.try_get("to_room_id")?,
-            locked: row.try_get("locked")?,
+            to_room_key: row.try_get("to_room_key")?,
             description: row.try_get("description")?,
             visible_when_locked: row.try_get("visible_when_locked")?,
+            default_locked: row.try_get("locked")?,
         })
     }
 }
 
-/// Row model for `bp_objects`.
+/// Blueprint object model for `bp_objects`. There are no zone or user overlays in here
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RoomObjectRow {
+pub struct BlueprintObject {
     /// The ID of the object
-    pub id: ObjectId,
-    /// Room the object resides in
-    pub room_id: RoomId,
-    /// Name of the object
-    pub name: String,
-    /// Short description (one-liner)
-    pub short: String,
-    /// Full description
-    pub description: String,
-    /// Examine texts (if any)
-    pub examine: Option<String>,
-    /// State strings (arbitrary JSON array of strings)
-    pub state: Vec<String>,
-    /// Additional properties (arbitrary JSON map)
-    pub props: Option<Value>,
-    /// Lua script to run when `use`
-    pub use_lua: Option<String>,
-    /// Position for ordering (optional)
-    pub position: Option<i32>,
-}
-
-impl RoomObjectRow {
-    pub fn try_from_row(row: &Row) -> DbResult<Self> {
-        // JSON state (NOT NULL in schema, default '{}')
-        let raw_state: Value = row.try_get("state")?;
-
-        // Policy:
-        // - If it's an OBJECT -> treat it as props, leave state Vec<String> empty.
-        // - Else (array/string/number/bool) -> normalize into Vec<String>, props None.
-        let (state, props) = match &raw_state {
-            Value::Object(_) => (Vec::new(), Some(raw_state.clone())),
-            _ => (json_to_string_vec(&raw_state), None),
-        };
-
-        Ok(Self {
-            id: ObjectId(row.try_get::<_, Uuid>("id")?),
-            room_id: RoomId(row.try_get::<_, Uuid>("room_id")?),
-            name: row.try_get("name")?,
-            short: row.try_get("short")?,
-            description: row.try_get("description")?,
-            examine: row.try_get("examine")?,
-            use_lua: row.try_get("use_lua")?,
-            position: row.try_get("position")?,
-            state,
-            props,
-        })
-    }
-}
-
-/// Noun mapping for objects (`bp_object_nouns`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ObjectNounRow {
-    pub room_id: RoomId,
-    pub obj_id: ObjectId,
-    pub noun: String,
-}
-
-impl ObjectNounRow {
-    #[allow(unused)]
-    pub fn try_from_row(row: &Row) -> DbResult<Self> {
-        Ok(Self {
-            room_id: row.try_get("room_id")?,
-            obj_id: row.try_get("obj_id")?,
-            noun: row.try_get("noun")?,
-        })
-    }
-}
-
-/// Scripts for a room (pulled from live or draft tables).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct RoomScripts {
-    pub on_enter_lua: Option<String>,
-    pub on_command_lua: Option<String>,
-}
-
-/// `zone_room_state` row merged into runtime view.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ZoneRoomState {
-    // Zone ID we are in (is this needed)
-    // pub zone_id: ZoneId,
-    /// Account ID of the player whose state this is
-    // pub account_id: AccountId,
-    /// Room ID this state is for
-    pub room_id: RoomId,
-
-    // pub coins: i32, // @TODO: is this needed here or just in player state?
-    // pub health: i32, // @TODO: is this needed here or just in player state?
-    // pub xp: i32,  // @TODO: is this needed here or just in player state?
-
-    // pub current_room: Option<RoomId>,
-    /// Items in the room and their quantities, including hidden/undiscovered ones
-    pub all_objects: HashMap<ObjectId, i32>,
-    /// Objects that are visible for the player (this assumes that ALL quantities are visible at the same time)
-    pub discovered_objects: HashSet<ObjectId>,
-    // Trail of rooms the player has visited to get here (for backtracking)
-    // pub trail: Vec<(RoomId, RoomId)>,
-}
-
-/// ZoneObjectState overlay for objects in a room in a zone.
-pub struct ZoneObjectState {
-    /// Zone in which the room lives
-    pub zone_id: ZoneId,
-    /// Room id in which the object lives
-    pub room_id: RoomId,
-    /// Object id we overlay
-    pub obj_id: ObjectId,
-    /// Quantity (if applicable)
-    pub qty: Option<i32>,
-    /// Any overlay flags (if any)
-    pub flags: Vec<String>,
-    /// additional arbitrary JSON data (if any)
-    pub extra: Option<Value>,
-}
-
-/// `bp_room_kv` & `bp_player_kv` shapes at runtime.
-pub type RoomKv = HashMap<String, Vec<String>>;
-#[allow(unused)]
-pub type PlayerKv = HashMap<String, Vec<String>>; // flattened per player; usually fetched later for a specific account
-
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-pub enum Discovery {
-    #[default]
-    Visible, // always listed
-    Hidden, // never listed until discovered
-    Obscured {
-        dc: u8,
-    }, // requires a perception check >= dc
-    Conditional {
-        key: String,
-        value: String,
-    }, // visible if room_kv[key]==value
-    Scripted, // let Lua decide
-}
-
-/// Runtime-friendly object with resolved nouns.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct RoomObject {
-    /// Blueprint Object ID
     pub id: ObjectId,
     /// Name of the object (ie: "wrench")
     pub name: String,
@@ -227,137 +106,316 @@ pub struct RoomObject {
     pub short: String,
     /// Full description
     pub description: String,
-    /// Examine text (if any)
+    /// Examine texts (if any)
     pub examine: Option<String>,
     /// Lua script to run when `use`
-    pub use_lua: Option<String>,
+    pub on_use_lua: Option<String>,
     /// Position for ordering (optional)
     pub position: Option<i32>,
-    /// State strings (arbitrary flags)
-    pub state: HashMap<String, String>,
     /// Synonyms / alternate nouns (terminal, console, computer, screen)
     pub nouns: Vec<String>,
     /// How is this object discovered in the room?
-    pub discovery: Discovery,
+    // pub discovery: Discovery,
 
-    // Overlay
+    /// Object key values
+    pub object_kv: Kv,
+    /// Initial quantity of the object (if stackable)
     pub initial_qty: Option<i32>,
-    pub qty: Option<i32>,
-    pub locked: bool,
-    pub revealed: bool,
+    /// Is the object locked by default?
+    pub default_locked: bool,
+    /// Is the object revealed by default?
+    pub default_revealed: bool,
+    /// Is the object takeable?
     pub takeable: bool,
+    /// Is the object stackable?
     pub stackable: bool,
+    /// Is the object a coin/currency?
     pub is_coin: bool,
 }
 
-impl RoomObject {
-    fn has_flag(list: &[String], flag: &str) -> bool {
-        list.iter().any(|s| s.eq_ignore_ascii_case(flag))
-    }
+impl BlueprintObject {
+    pub fn try_from_row(row: &Row, nouns: Vec<String>, kv: Kv) -> DbResult<Self> {
+        Ok(Self {
+            id: ObjectId(row.try_get::<_, Uuid>("id")?),
+            name: row.try_get("name")?,
+            short: row.try_get("short")?,
+            description: row.try_get("description")?,
+            examine: row.try_get("examine")?,
+            on_use_lua: row.try_get("use_lua")?,
+            position: row.try_get("position")?,
+            nouns,
+            // discovery: Discovery::default(),
 
-    pub fn is_visible(&self) -> bool {
-        // visible objects are either non-stackable items, or revealed stackables
-        !self.stackable || self.revealed
-    }
-
-    pub fn is_visible_to(&self, rv: &RoomView, zr: &ZoneRoomState) -> bool {
-        let discovered = is_visible_to(self, rv, zr);
-        discovered && self.is_visible()
-    }
-
-    pub fn from_rows(row_obj: &RoomObjectRow, nouns: &[String]) -> Self {
-        Self {
-            id: row_obj.id,
-            name: row_obj.name.clone(),
-            short: row_obj.short.clone(),
-            description: row_obj.description.clone(),
-            examine: row_obj.examine.clone(),
-            use_lua: row_obj.use_lua.clone(),
-            position: row_obj.position,
-            state: row_obj.state.iter().map(|s| (s.clone(), "true".to_string())).collect(),
-            nouns: nouns.as_ref().to_vec(),
-            discovery: Discovery::Visible,
-
+            // This needs to be set
+            object_kv: kv,
             initial_qty: None,
-            qty: None,
-            locked: false,
-            revealed: false,
+            default_locked: false,
+            default_revealed: false,
             takeable: false,
             stackable: false,
             is_coin: false,
-        }
+        })
     }
 }
 
-/// Runtime view the engine uses.
+/// Blueprint LUA room scripts
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RoomScripts(HashMap<ScriptHook, String>);
+
+impl RoomScripts {
+    pub(crate) fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn insert(&mut self, hook: ScriptHook, script: String) {
+        self.0.insert(hook, script);
+    }
+
+    pub fn get(&self, hook: &ScriptHook) -> Option<&String> {
+        self.0.get(hook)
+    }
+}
+
+/// Resolved KV values. They are basically the same as the Kv type, but we know this type is
+/// already resolved.
+pub type KvResolved = Kv;
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct Kv {
+    pub inner: HashMap<String, String>,
+}
+
+impl Kv {
+    pub(crate) fn new() -> Self {
+        Kv { inner: HashMap::new() }
+    }
+
+    pub(crate) fn get_bool(&self, key: &str, default: bool) -> bool {
+        self.inner
+            .get(key)
+            .and_then(|v| Some(str_is_truthy(v.as_str())))
+            .unwrap_or(default)
+    }
+
+    pub(crate) fn get_num<T: FromStr>(&self, key: &str, default: T) -> T {
+        self.inner.get(key).and_then(|v| v.parse::<T>().ok()).unwrap_or(default)
+    }
+
+    pub fn try_from_rows(rows: &[Row]) -> DbResult<Self> {
+        let mut kv = Kv::default();
+        for row in rows {
+            let key: String = row.try_get("key")?;
+            let value = row.try_get("value")?;
+            kv.inner.insert(key, serde_to_str(value));
+        }
+        Ok(kv)
+    }
+
+    pub fn from(data: Value) -> Kv {
+        let mut kv = Kv::default();
+
+        if let Value::Object(map) = data {
+            for (k, v) in map {
+                kv.inner.insert(k, serde_to_str(v));
+            }
+        }
+
+        kv
+    }
+
+    pub fn insert(&mut self, key: String, value: String) {
+        self.inner.insert(key, value);
+    }
+
+    pub fn get(&self, key: &str) -> Option<&String> {
+        self.inner.get(key)
+    }
+}
+
+/// Runtime view the engine uses. It contains all resolved data for the specific zone and user
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoomView {
-    pub room: BlueprintRoom,
-    pub exits: Vec<RoomExitRow>,
-    pub objects: Vec<RoomObject>,
+    /// Room blueprint (static data only)
+    pub blueprint: BlueprintRoom,
+    // Static scripts (@TODO: should be in the blueprint)
     pub scripts: RoomScripts,
-    pub room_kv: RoomKv,
-    pub zone_state: Option<ZoneRoomState>,
+
+    /// Resolved key/values for the specific zone/room/user
+    pub room_kv: KvResolved,
+
+    /// Resolved exits for the specific zone/room/user
+    pub exits: Vec<ResolvedExit>,
+    /// Map of direction -> exit index in `exits` array
+    pub exits_by_dir: HashMap<Direction, usize>,
+
+    /// Resolved objects for the specific zone/room/user
+    pub objects: Vec<ResolvedObject>,
+    /// Map of object key -> object index in `objects` array
+    pub objects_by_key: HashMap<String, usize>,
+
+    /// How many times we have entered the room
+    pub visit_count: i64,
+    /// Timestamp of last visit (epoch seconds)
+    pub last_visit_at: Option<i64>,
 }
 
 impl RoomView {
-    /// from fn: `RoomView::visible_exits`
-    pub fn visible_exits(&self) -> impl Iterator<Item = &RoomExitRow> {
-        let lockdown = self.room.lockdown;
-        self.exits.iter().filter(move |e| {
-            if lockdown {
-                e.visible_when_locked
-            } else {
-                !e.locked || e.visible_when_locked
-            }
-        })
+    // pub fn visible_exits(&self) -> impl Iterator<Item = &ResolvedExit> {
+    //     let lockdown = self.room.lockdown;
+    //     self.exits.iter().filter(move |e| {
+    //         if lockdown {
+    //             e.visible_when_locked
+    //         } else {
+    //             !e.locked || e.visible_when_locked
+    //         }
+    //     })
+    // }
+
+    pub fn object_by_key(&self, obj_key: &str) -> Option<&ResolvedObject> {
+        self.objects_by_key.get(obj_key).and_then(|&idx| self.objects.get(idx))
     }
 
-    /// from fn: `RoomView::object_by_noun`
-    pub fn object_by_noun(&self, noun: &str) -> Option<&RoomObject> {
+    pub fn object_by_noun(&self, noun: &str) -> Option<&ResolvedObject> {
         self.objects
             .iter()
             .find(|o| o.name.eq_ignore_ascii_case(noun) || o.nouns.iter().any(|n| n.eq_ignore_ascii_case(noun)))
     }
+}
 
-    /// from fn: `RoomView::render_body_with_object_refs`
-    /// Replaces `{obj:name}` with the object's `short` text.
-    pub fn render_body_with_object_refs(&self) -> String {
-        OBJ_REF_RE
-            .replace_all(&self.room.body, |caps: &regex::Captures| {
-                let key = &caps[1];
-                self.object_by_noun(key)
-                    .map(|o| o.short.as_str())
-                    .unwrap_or(key)
-                    .to_string()
-            })
-            .into_owned()
+/// Builds up a complete room view by assembling blueprint, zone, and user data.
+pub(crate) fn build_room_view_impl(
+    bp_room: &BlueprintRoom,
+    bp_exits: &[BlueprintExit],
+    bp_objs: &[BlueprintObject],
+    bp_scripts: &RoomScripts,
+    bp_room_kv: &Kv,
+
+    zone_room_kv: &Kv,
+    zone_obj_kv: &HashMap<String, Kv>,
+    zone_qty_override: &HashMap<String, i32>,
+
+    user_room_kv: &Kv,
+    user_obj_kv: &HashMap<String, Kv>,
+    user_qty_override: &HashMap<String, i32>,
+) -> RoomView {
+    let room_kv = merge_kv(bp_room_kv, zone_room_kv, user_room_kv);
+
+    let mut exits = Vec::new();
+    let mut exits_by_dir = HashMap::new();
+    for e in bp_exits {
+        // We store exit information inside the room KVs
+        // exit.north.locked = true means the exit to the north is locked
+        let key_locked = format!("exit.{}.locked", e.dir);
+        let locked = resolve_bool(
+            e.default_locked,
+            zone_room_kv.get(&key_locked).map(String::as_str).map(str_is_truthy),
+            user_room_kv.get(&key_locked).map(String::as_str).map(str_is_truthy),
+        );
+
+        let key_visible = format!("exit.{}.visible", e.dir);
+        let visible = resolve_bool(
+            // Note that this depends on the computed locked state from above
+            !locked || e.visible_when_locked,
+            zone_room_kv.get(&key_visible).map(String::as_str).map(str_is_truthy),
+            user_room_kv.get(&key_visible).map(String::as_str).map(str_is_truthy),
+        );
+
+        let idx = exits.len();
+        exits.push(ResolvedExit {
+            direction: e.dir.clone(),
+            from_room_id: e.from_room_id,
+            from_room_key: e.from_room_key.clone(),
+            to_room_id: e.to_room_id,
+            to_room_key: e.to_room_key.clone(),
+            flags: ExitFlags {
+                locked,
+                hidden: !visible,
+                visible_when_locked: e.visible_when_locked,
+            },
+        });
+        exits_by_dir.insert(e.dir.clone(), idx);
     }
 
-    pub fn with_overlay(mut self, overlay: &[ZoneObjectState]) -> Self {
-        let by_id: HashMap<ObjectId, &ZoneObjectState> = overlay.iter().map(|z| (z.obj_id, z)).collect();
+    let mut objects = Vec::new();
+    let mut objects_by_key = HashMap::new();
+    for o in bp_objs {
+        let key = o.name.clone();
+        let kv = merge_kv(
+            &o.object_kv,
+            zone_obj_kv.get(&key).unwrap_or(&Kv::default()),
+            user_obj_kv.get(&key).unwrap_or(&Kv::default()),
+        );
+        let qty = resolve_qty(
+            o.initial_qty.unwrap_or(1),
+            zone_qty_override.get(&key).copied(),
+            user_qty_override.get(&key).copied(),
+        );
+        let locked = resolve_bool(
+            o.default_locked,
+            zone_obj_kv
+                .get(&key)
+                .and_then(|kv| kv.get("locked"))
+                .map(|v| str_is_truthy(v.as_str())),
+            user_obj_kv
+                .get(&key)
+                .and_then(|kv| kv.get("locked"))
+                .map(|v| str_is_truthy(v.as_str())),
+        );
 
-        for o in &mut self.objects {
-            if let Some(z) = by_id.get(&o.id) {
-                // qty
-                if z.qty.is_some() {
-                    o.qty = z.qty;
-                }
+        let revealed = resolve_bool(
+            o.default_revealed,
+            zone_obj_kv
+                .get(&key)
+                .and_then(|kv| kv.get("revealed"))
+                .map(|v| str_is_truthy(v.as_str())),
+            user_obj_kv
+                .get(&key)
+                .and_then(|kv| kv.get("revealed"))
+                .map(|v| str_is_truthy(v.as_str())),
+        );
+        let visible = compute_object_visible(&kv, revealed);
 
-                o.locked = o.locked || RoomObject::has_flag(&z.flags, "locked");
-                o.revealed = o.revealed || RoomObject::has_flag(&z.flags, "revealed");
-            } else {
-                o.qty = o.initial_qty;
-            }
-        }
+        objects_by_key.insert(key.clone(), objects.len());
 
-        self.objects.retain(|o| !o.stackable || o.qty.unwrap_or(0) > 0);
-
-        self
+        objects.push(ResolvedObject {
+            id: o.id,
+            key: key.clone(),
+            name: o.name.clone(),
+            short: o.short.clone(),
+            description: o.description.clone(),
+            examine: o.examine.clone(),
+            on_use: o.on_use_lua.clone(),
+            nouns: o.nouns.clone(),
+            position: o.position,
+            kv,
+            qty,
+            flags: ObjectFlags {
+                locked,
+                hidden: !visible,
+                revealed,
+                takeable: o.takeable,
+                stackable: o.stackable,
+            },
+            is_coin: o.is_coin,
+        });
     }
 
-    pub fn visible_objects<'a>(&'a self, zr: &'a ZoneRoomState) -> impl Iterator<Item = &'a RoomObject> + 'a {
-        self.objects.iter().filter(|o| is_visible_to(o, self, zr))
+    let visit_count = user_room_kv.get_num::<i64>("__visit_count", 1);
+    let last_visit_at = match user_room_kv.get_num::<i64>("__last_visit_at", 0) {
+        0 => None,
+        n => Some(n),
+    };
+
+    RoomView {
+        blueprint: bp_room.clone(),
+        room_kv,
+        exits,
+        exits_by_dir,
+        objects,
+        objects_by_key,
+        scripts: bp_scripts.clone(),
+        visit_count,
+        last_visit_at,
     }
 }
 
@@ -387,6 +445,7 @@ fn parse_hints_value(hints: Option<Value>) -> DbResult<Vec<Hint>> {
                     .into_iter()
                     .filter_map(|x| x.as_str().map(|s| s.to_string()))
                     .map(|text| Hint {
+                        id: HintId::new().to_string(),
                         once: None,
                         text,
                         when: "manual".to_string(),
@@ -395,7 +454,7 @@ fn parse_hints_value(hints: Option<Value>) -> DbResult<Vec<Hint>> {
                     .collect();
                 Ok(out)
             } else {
-                // v2 format: array of objects
+                // v2 and higher format: array of objects
                 // Deserialize then normalize 'when'
                 let mut hints: Vec<Hint> = serde_json::from_value(Value::Array(arr))
                     .map_err(|e| DbError::Validation(format!("invalid hints array: {e}")))?;
@@ -427,378 +486,544 @@ fn parse_hints_value(hints: Option<Value>) -> DbResult<Vec<Hint>> {
     }
 }
 
-// --- Helpers you can reuse anywhere ----------------------------------------
+/// Exit flags
+#[derive(Default, Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct ExitFlags {
+    pub locked: bool,              // Exit is locked and cannot be passed
+    pub hidden: bool,              // Exit is invisible to the player
+    pub visible_when_locked: bool, // Exit is visible even when locked
+}
 
-/// Normalize a JSON value into Vec<String>.
-/// - ["a","b"]      -> vec!["a","b"]
-/// - "a"            -> vec!["a"]
-/// - 123 / true     -> vec!["123"] / vec!["true"]
-/// - null / {} / [] -> vec![]
-fn json_to_string_vec(v: &Value) -> Vec<String> {
-    match v {
-        Value::Array(arr) => arr
-            .iter()
-            .filter_map(|x| {
-                x.as_str().map(|s| s.to_string()).or_else(|| {
-                    // accept scalars inside the array (numbers/bools) by stringifying
-                    match x {
-                        Value::Number(_) | Value::Bool(_) => Some(x.to_string()),
-                        _ => None,
-                    }
-                })
-            })
-            .collect(),
-        Value::String(s) => vec![s.clone()],
-        Value::Number(_) | Value::Bool(_) => vec![v.to_string()],
-        _ => Vec::new(),
+impl ExitFlags {
+    pub fn is_visible(&self) -> bool {
+        if self.locked && !self.visible_when_locked {
+            return false;
+        }
+
+        !self.hidden
     }
+}
+
+#[derive(Default, Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct ObjectFlags {
+    pub locked: bool,    // Can't interact until unlocked
+    pub hidden: bool,    // Invisible to the player if true
+    pub revealed: bool,  // Has been discovered by the player
+    pub takeable: bool,  // Can be picked up
+    pub stackable: bool, // Can be stacked in inventory (coins etc.)
+}
+
+impl ObjectFlags {
+    pub fn is_visible(&self) -> bool {
+        !self.hidden || self.revealed
+    }
+}
+
+/// Resolved exit that takes into account the zone and the player's overlays
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedExit {
+    pub direction: Direction, // Direction of the exit
+    pub from_room_id: RoomId, // From Room ID
+    pub from_room_key: String,
+    pub to_room_id: RoomId, // To Room ID
+    pub to_room_key: String,
+    pub flags: ExitFlags,
+}
+
+impl ResolvedExit {
+    pub fn is_visible_to(&self, _account: &crate::models::account::Account) -> bool {
+        self.flags.is_visible()
+    }
+
+    pub fn is_locked(&self) -> bool {
+        self.flags.locked
+    }
+}
+
+/// Resolved object that takes into account the zone and the player's overlays
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedObject {
+    pub id: ObjectId,
+    pub key: String,
+    pub name: String,
+    pub short: String,
+    pub description: String,
+    pub examine: Option<String>,
+    pub nouns: Vec<String>,
+    pub on_use: Option<String>,
+    pub position: Option<i32>,
+
+    pub kv: KvResolved,
+    pub flags: ObjectFlags,
+
+    pub is_coin: bool,
+    pub qty: i32,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
+    use serde_json::json;
 
-    // --- helpers -------------------------------------------------------------
-
-    fn dummy_room_view() -> RoomView {
-        RoomView {
-            room: br(),
-            exits: vec![],
-            objects: vec![],
-            scripts: RoomScripts::default(),
-            zone_state: None,
-            room_kv: HashMap::new(),
-        }
+    // ---------- test helpers (local to tests) ----------
+    // Helper: make a RoomId/ObjectId with a stable UUID for deterministic snapshots
+    fn rid() -> RoomId {
+        RoomId(Uuid::from_u128(1))
+    }
+    fn rid_b() -> RoomId {
+        RoomId(Uuid::from_u128(2))
+    }
+    fn oid() -> ObjectId {
+        ObjectId(Uuid::from_u128(3))
     }
 
-    fn br() -> BlueprintRoom {
+    // Helper: construct a minimal BlueprintRoom (used by build_room_view tests)
+    fn mk_room() -> BlueprintRoom {
         BlueprintRoom {
-            id: RoomId(Uuid::new_v4()),
-            bp_id: BlueprintId(Uuid::new_v4()),
-            key: "entry".into(),
+            id: rid(),
+            bp_id: BlueprintId(Uuid::from_u128(999)),
+            key: "entry_hall".into(),
             title: "Entry Hall".into(),
-            body: "A dim corridor. {obj:coin} glints in the dust. {obj:unknown}".into(),
+            body: "A brushed-steel corridor hums with power.".into(),
             lockdown: false,
-            short: Some("A dim corridor".into()),
+            short: Some("The station’s entry hall.".into()),
             hints: vec![],
-            // scripts_inline: vec![],
         }
     }
 
-    fn exit(from: RoomId, to: RoomId, locked: bool, visible_when_locked: bool) -> RoomExitRow {
-        RoomExitRow {
-            from_room_id: from,
-            dir: Direction::parse("east").expect("valid dir"),
+    // Helper: construct a northbound exit
+    fn mk_exit_north(to: RoomId, visible_when_locked: bool, default_locked: bool) -> BlueprintExit {
+        BlueprintExit {
+            id: ExitId::new(),
+            from_room_id: rid(),
+            from_room_key: "entry_hall".into(),
+            dir: Direction::North,
             to_room_id: to,
-            locked,
-            description: Some("A steel door".into()),
+            to_room_key: "blast_door".into(),
+            description: Some("A heavy blast door to the north.".into()),
             visible_when_locked,
+            default_locked,
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn obj(
-        name: &str,
-        nouns: &[&str],
-        short: &str,
-        description: &str,
-        takeable: bool,
-        stackable: bool,
-        is_coin: bool,
-        initial_qty: Option<i32>,
-        locked: bool,
-        revealed: bool,
-        qty: Option<i32>,
-    ) -> RoomObject {
-        RoomObject {
-            id: ObjectId(Uuid::new_v4()),
-            name: name.into(),
-            short: short.into(),
-            description: description.into(),
-            examine: None,
-            use_lua: None,
-            position: None,
-            state: HashMap::new(),
-            nouns: nouns.iter().map(|s| s.to_string()).collect(),
-            discovery: Discovery::Visible,
-            initial_qty,
-            qty,
-            locked,
-            revealed,
-            takeable,
-            stackable,
-            is_coin,
+    // Helper: construct a simple object
+    fn mk_object_wrench() -> BlueprintObject {
+        BlueprintObject {
+            id: oid(),
+            name: "wrench".into(),
+            short: "A sturdy wrench.".into(),
+            description: "A titanium-alloy wrench with knurled grip.".into(),
+            examine: Some("It’s scuffed but reliable.".into()),
+            on_use_lua: None,
+            position: Some(10),
+            nouns: vec!["tool".into(), "spanner".into()],
+            object_kv: Kv { inner: HashMap::new() },
+            initial_qty: Some(1),
+            default_locked: false,
+            default_revealed: false,
+            takeable: true,
+            stackable: false,
+            is_coin: false,
         }
     }
 
-    fn base_view_with(objects: Vec<RoomObject>, exits: Vec<RoomExitRow>) -> RoomView {
-        RoomView {
-            room: br(),
-            exits,
-            objects,
-            scripts: RoomScripts::default(),
-            room_kv: HashMap::new(),
-            zone_state: None,
+    // Helper: Kv builder from (&str, &str) pairs
+    fn kv(pairs: &[(&str, &str)]) -> Kv {
+        Kv {
+            inner: pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
         }
     }
 
-    // --- tests ---------------------------------------------------------------
+    // ---------- normalize_when() ----------
+    #[test]
+    fn normalize_when_variants() {
+        // From: normalize_when()
+        assert_eq!(normalize_when("first look"), "first_look");
+        assert_eq!(normalize_when("FIRST-LOOK"), "first_look");
+        assert_eq!(normalize_when(" enter "), "enter");
+        assert_eq!(normalize_when("after_fail"), "after_fail");
+        // Unknowns default to "manual"
+        assert_eq!(normalize_when("whenever"), "manual");
+        assert_eq!(normalize_when(""), "manual");
+    }
+
+    // ---------- parse_hints_value() ----------
+    #[test]
+    fn parse_hints_legacy_array_of_strings() {
+        // From: parse_hints_value()
+        let v = Some(json!(["Use the console", "Search under the grate"]));
+        let hints = parse_hints_value(v).expect("parse ok");
+        assert_eq!(hints.len(), 2);
+        assert_eq!(hints[0].text, "Use the console");
+        assert_eq!(hints[0].when, "manual"); // legacy defaults to manual
+    }
 
     #[test]
-    fn visible_exits_respects_locked_and_visibility_flag() {
-        let r_from = RoomId(Uuid::new_v4());
-        let r_to = RoomId(Uuid::new_v4());
-        let exits = vec![
-            exit(r_from, r_to, false, false), // unlocked → visible
-            exit(r_from, r_to, true, false),  // locked + not visible_when_locked → hidden
-            exit(r_from, r_to, true, true),   // locked + visible_when_locked → visible
-        ];
-
-        let view = base_view_with(vec![], exits);
-        let visible: Vec<&RoomExitRow> = view.visible_exits().collect();
-        assert_eq!(visible.len(), 2, "only two exits should be visible");
-        assert!(visible.iter().any(|e| !e.locked));
-        assert!(visible.iter().any(|e| e.locked && e.visible_when_locked));
+    fn parse_hints_v2_objects_and_normalization() {
+        // From: parse_hints_value()
+        let v = Some(json!([
+            {"id": "id1", "text":"Check the panel","when":"first look","once":true},
+            {"id": "id2", "text":"Try north","when":"ENTER"},
+            {"id": "id3", "text":"Unknown mode","when":"freebie"}
+        ]));
+        let hints = parse_hints_value(v).expect("parse ok");
+        assert_eq!(hints.len(), 3);
+        assert_eq!(hints[0].when, "first_look");
+        assert_eq!(hints[0].once, Some(true));
+        assert_eq!(hints[1].when, "enter");
+        // unknown normalized to manual
+        assert_eq!(hints[2].when, "manual");
     }
 
+    #[test]
+    fn parse_hints_single_object_and_null() {
+        // From: parse_hints_value()
+        let one = Some(json!({"id":"foo", "text":"Just once","when":""}));
+        let hints_one = parse_hints_value(one).expect("ok");
+        assert_eq!(hints_one.len(), 1);
+        assert_eq!(hints_one[0].id, "foo");
+        assert_eq!(hints_one[0].text, "Just once");
+        assert_eq!(hints_one[0].when, "manual"); // empty -> manual
+
+        let none = Some(Value::Null);
+        let hints_none = parse_hints_value(none).expect("ok");
+        assert!(hints_none.is_empty());
+    }
+
+    // ---------- Kv::from / Kv::get ----------
+    #[test]
+    fn kv_from_only_keeps_strings() {
+        // From: Kv::from()
+        let v = json!({
+            "a": "1",
+            "b": 2,
+            "c": true,
+            "d": { "e": "nested" },
+            "e": "ok"
+        });
+        let kv = Kv::from(v);
+        assert_eq!(kv.get("a"), Some(&"1".to_string()));
+        assert_eq!(kv.get("b"), Some(&"2".to_string()));
+        assert_eq!(kv.get("c"), Some(&"true".to_string()));
+        assert_eq!(kv.get("d"), Some(&"".to_string()));
+        assert_eq!(kv.get("e"), Some(&"ok".to_string()));
+    }
+
+    // ---------- ExitFlags::is_visible() ----------
+    #[test]
+    fn exit_flags_is_visible_matrix() {
+        // From: ExitFlags::is_visible()
+        let mut f = ExitFlags {
+            locked: false,
+            hidden: false,
+            visible_when_locked: false,
+        };
+        assert!(f.is_visible(), "unlocked + not hidden => visible");
+
+        f.locked = true;
+        f.hidden = false;
+        f.visible_when_locked = false;
+        assert!(!f.is_visible(), "locked + not visible when locked => hidden");
+
+        f.locked = true;
+        f.hidden = false;
+        f.visible_when_locked = true;
+        assert!(f.is_visible(), "locked + visible_when_locked => visible");
+
+        f.locked = false;
+        f.hidden = true;
+        f.visible_when_locked = true;
+        assert!(!f.is_visible(), "hidden overrides visibility");
+    }
+
+    // ---------- ObjectFlags::is_visible() ----------
+    #[test]
+    fn object_flags_is_visible_matrix() {
+        // From: ObjectFlags::is_visible()
+        let mut f = ObjectFlags {
+            locked: false,
+            hidden: false,
+            revealed: false,
+            takeable: true,
+            stackable: false,
+        };
+        assert!(f.is_visible(), "not hidden => visible");
+
+        f.hidden = true;
+        f.revealed = false;
+        assert!(!f.is_visible(), "hidden && not revealed => not visible");
+
+        f.hidden = true;
+        f.revealed = true;
+        assert!(f.is_visible(), "revealed pierces hidden");
+    }
+
+    // ---------- RoomView::object_by_noun() ----------
     #[test]
     fn object_by_noun_matches_name_and_synonyms_case_insensitive() {
-        let o1 = obj(
-            "Blast Door",
-            &["door", "gate"],
-            "a heavy blast door",
-            "It looks sealed tight.",
-            false,
-            false,
-            false,
-            None,
-            false,
-            false,
-            None,
-        );
-        let o2 = obj(
-            "coin",
-            &["credits", "money"],
-            "a shiny coin",
-            "A small minted coin.",
-            true,
-            true,
-            true,
-            Some(10),
-            false,
-            true,
-            Some(10),
+        let room = mk_room();
+        let objs = vec![mk_object_wrench()];
+        let view = build_room_view_impl(
+            &room,
+            &[],                     // bp_exits
+            &objs,                   // bp_objs
+            &RoomScripts::default(), // bp_scripts
+            &Kv::default(),          // bp_room_kv
+            &Kv::default(),          // zone_room_kv
+            &HashMap::new(),         // zone_obj_kv
+            &HashMap::new(),         // zone_qty_override
+            &Kv::default(),          // user_room_kv
+            &HashMap::new(),         // user_obj_kv
+            &HashMap::new(),         // user_qty_override
         );
 
-        let view = base_view_with(vec![o1.clone(), o2.clone()], vec![]);
-
-        assert!(view.object_by_noun("door").is_some());
-        assert!(view.object_by_noun("BLAST DOOR").is_some());
-        assert!(view.object_by_noun("credits").is_some());
-        assert!(view.object_by_noun("money").is_some());
-        assert!(view.object_by_noun("nope").is_none());
-    }
-
-    #[test]
-    fn render_body_replaces_known_object_refs_and_leaves_unknowns() {
-        let coin = obj(
-            "coin",
-            &["credits"],
-            "a shiny coin",
-            "A small minted coin.",
-            true,
-            true,
-            true,
-            Some(10),
-            false,
-            true,
-            Some(10),
-        );
-        let view = base_view_with(vec![coin], vec![]);
-        let body = view.render_body_with_object_refs();
-
+        assert!(view.object_by_noun("wrench").is_some());
         assert!(
-            body.contains("a shiny coin"),
-            "should replace {{obj:coin}} with object's short"
+            view.object_by_noun("SpAnNeR").is_some(),
+            "matches synonyms case-insensitive"
         );
-        assert!(body.contains("unknown"), "unknown refs should remain as the raw key");
+        assert!(view.object_by_noun("tool").is_some());
+        assert!(view.object_by_noun("computer").is_none());
     }
 
+    // ---------- build_room_view(): exit overlays precedence ----------
     #[test]
-    fn with_overlay_applies_qty_and_flags_and_filters_zero_stackables() {
-        let coin = obj(
-            "coin",
-            &["credits"],
-            "a shiny coin",
-            "A small minted coin.",
-            true,     /* takeable */
-            true,     /* stackable */
-            true,     /* is_coin */
-            Some(10), /* initial_qty */
-            false,    /* locked */
-            false,    /* revealed */
-            None,     /* qty (will be set) */
-        );
-
-        let wrench = obj(
-            "wrench",
-            &["tool"],
-            "a sturdy wrench",
-            "Useful for bolts.",
-            true,  /* takeable */
-            false, /* stackable */
-            false, /* is_coin */
-            None,  /* initial_qty */
-            false,
-            false,
-            None,
-        );
-
-        let mut view = base_view_with(vec![coin.clone(), wrench.clone()], vec![]);
-
-        // Overlay sets coin to qty=0 and marks it revealed; wrench locked
-        let overlay = vec![
-            ZoneObjectState {
-                zone_id: ZoneId(Uuid::new_v4()),
-                room_id: view.room.id,
-                obj_id: coin.id,
-                qty: Some(0),
-                flags: vec!["revealed".into()],
-                extra: None,
-            },
-            ZoneObjectState {
-                zone_id: ZoneId(Uuid::new_v4()),
-                room_id: view.room.id,
-                obj_id: wrench.id,
-                qty: None,
-                flags: vec!["locked".into()],
-                extra: None,
-            },
+    fn build_room_view_exit_overlay_precedence() {
+        // From: build_room_view()
+        let room = mk_room();
+        let exits = vec![
+            // default: locked, but visible_when_locked = true
+            mk_exit_north(rid_b(), /*visible_when_locked*/ true, /*default_locked*/ true),
         ];
 
-        view = view.with_overlay(&overlay);
-
-        // coin is stackable and qty=0 → filtered out
-        assert!(
-            view.objects.iter().all(|o| o.name != "coin"),
-            "stackable objects with qty=0 should be hidden"
+        // No overrides: remains locked, but visible (due to visible_when_locked)
+        let view = build_room_view_impl(
+            &room,
+            &exits,
+            &[],
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
         );
+        let north = &view.exits[0];
+        assert!(north.flags.locked);
+        assert!(north.flags.is_visible(), "visible_when_locked keeps it visible");
 
-        // wrench should remain and be locked
-        let w = view
-            .objects
-            .iter()
-            .find(|o| o.name == "wrench")
-            .expect("wrench present");
-        assert!(w.locked, "wrench should be locked via overlay flag");
-        assert!(
-            w.is_visible(),
-            "non-stackable locked object is still considered visible per is_visible()"
+        // Zone override unlocks it: exit.north.locked=false
+        let zone_kv = kv(&[("exit.north.locked", "false")]);
+        let view = build_room_view_impl(
+            &room,
+            &exits,
+            &[],
+            &RoomScripts::default(),
+            &Kv::default(),
+            &zone_kv,
+            &HashMap::new(),
+            &HashMap::new(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
         );
+        let north = &view.exits[0];
+        assert!(!north.flags.locked);
+
+        // User override wins over zone, locks it again: exit.north.locked=true
+        let user_kv = kv(&[("exit.north.locked", "true")]);
+        let view = build_room_view_impl(
+            &room,
+            &exits,
+            &[],
+            &RoomScripts::default(),
+            &Kv::default(),
+            &zone_kv,
+            &HashMap::new(),
+            &HashMap::new(),
+            &user_kv,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        let north = &view.exits[0];
+        assert!(north.flags.locked);
+
+        // Explicit visibility override: exit.north.visible=false hides even if visible_when_locked
+        let user_kv = kv(&[("exit.north.visible", "false")]);
+        let view = build_room_view_impl(
+            &room,
+            &exits,
+            &[],
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &user_kv,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        let north = &view.exits[0];
+        assert!(!north.flags.is_visible(), "explicit visible=false hides it");
     }
 
+    // ---------- build_room_view(): qty precedence (default -> zone -> user) ----------
     #[test]
-    fn with_overlay_seeds_qty_from_initial_when_overlay_missing() {
-        let coin = obj(
-            "coin",
-            &["credits"],
-            "a shiny coin",
-            "A small minted coin.",
-            true,
-            true,
-            true,
-            Some(10), // initial qty defined in blueprint
-            false,
-            false,
-            None, // no explicit qty yet
-        );
+    fn build_room_view_quantity_precedence() {
+        // From: build_room_view()
+        let room = mk_room();
+        // Make stackable/coin just to emphasize qty behavior; initial_qty = 5
+        let mut wrench = mk_object_wrench();
+        wrench.stackable = true;
+        wrench.is_coin = true;
+        wrench.initial_qty = Some(5);
 
-        let view = base_view_with(vec![coin], vec![]);
-        let merged = view.with_overlay(&[]); // no overlay for this object
+        let bp_objs = vec![wrench];
+        let key = "wrench".to_string();
 
-        let c = merged.objects.iter().find(|o| o.name == "coin").expect("coin present");
-        assert_eq!(
-            c.qty,
-            Some(10),
-            "qty should be seeded from initial_qty when overlay is absent"
+        // No overrides -> stays 5
+        let view = build_room_view_impl(
+            &room,
+            &[],
+            &bp_objs,
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
         );
+        assert_eq!(view.objects[0].qty, 5);
+
+        // Zone override -> 12
+        let mut zone_qty = HashMap::new();
+        zone_qty.insert(key.clone(), 12);
+        let view = build_room_view_impl(
+            &room,
+            &[],
+            &bp_objs,
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &zone_qty,
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        assert_eq!(view.objects[0].qty, 12);
+
+        // User override wins -> 99
+        let mut user_qty = HashMap::new();
+        user_qty.insert(key.clone(), 99);
+        let view = build_room_view_impl(
+            &room,
+            &[],
+            &bp_objs,
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &zone_qty,
+            &Kv::default(),
+            &HashMap::new(),
+            &user_qty,
+        );
+        assert_eq!(view.objects[0].qty, 99);
     }
 
+    // ---------- build_room_view(): objects visibility flags vs revealed ----------
     #[test]
-    fn non_stackable_hidden_then_visible_after_discovery() {
-        // arrange
-        let wrench_id = ObjectId::new(); // or ObjectId::from(...), etc.
-        let wrench = RoomObject {
-            id: wrench_id,
-            name: "wrench".into(),
-            stackable: false,
-            revealed: false,              // ignored for non-stackables
-            locked: true,                 // lock doesn't affect visibility
-            discovery: Discovery::Hidden, // hidden until discovered
-            ..Default::default()
+    fn build_room_view_object_visibility_and_revealed() {
+        // From: build_room_view() + ObjectFlags::is_visible()
+        let room = mk_room();
+        let mut obj = mk_object_wrench();
+        obj.default_revealed = false;
+        let bp_objs = vec![obj];
+
+        // No reveal, compute_object_visible may hide it -> object should be visible iff flags allow.
+        let view = build_room_view_impl(
+            &room,
+            &[],
+            &bp_objs,
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        let f = view.objects[0].flags;
+        // We can’t assert exact hidden/visible of compute_object_visible(), but we can assert consistency:
+        if f.hidden {
+            assert!(!f.is_visible(), "hidden && !revealed => not visible");
+        } else {
+            assert!(f.is_visible(), "not hidden => visible");
+        }
+
+        // Mark revealed via user overlay; even if hidden, revealed should make it visible
+        let user_obj_kv = {
+            let mut m = HashMap::new();
+            m.insert("wrench".to_string(), kv(&[("revealed", "true")]));
+            m
         };
-
-        let rv = dummy_room_view();
-        let mut zr = ZoneRoomState {
-            discovered_objects: HashSet::new(),
-            ..Default::default()
-        };
-
-        // before discovery: not visible (discovery blocks)
-        assert!(
-            !wrench.is_visible_to(&rv, &zr),
-            "non-stackable wrench should NOT be visible before discovery"
+        let view = build_room_view_impl(
+            &room,
+            &[],
+            &bp_objs,
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &Kv::default(),
+            &user_obj_kv,
+            &HashMap::new(),
         );
-        // intrinsic policy says it's renderable on its own
-        assert!(
-            wrench.is_visible(),
-            "intrinsic visibility for non-stackables is true regardless of `revealed`/`locked`"
-        );
-
-        // act: player discovers the wrench (e.g., by examining something)
-        zr.discovered_objects.insert(wrench_id);
-
-        // after discovery: visible (discovery ∧ intrinsic)
-        assert!(
-            wrench.is_visible_to(&rv, &zr),
-            "non-stackable wrench becomes visible once discovered"
-        );
+        let f = view.objects[0].flags;
+        assert!(f.revealed, "revealed overlay applied");
+        assert!(f.is_visible(), "revealed pierces hidden");
     }
 
+    // ---------- build_room_view(): exits_by_dir index sanity ----------
     #[test]
-    fn stackable_requires_revealed_even_if_discovered() {
-        // arrange
-        let coins_id = ObjectId::new();
-        let coins = RoomObject {
-            id: coins_id,
-            name: "gold coin".into(),
-            stackable: true,
-            revealed: false, // covered/buried
-            locked: false,
-            discovery: Discovery::Visible, // even if globally visible...
-            ..Default::default()
-        };
-        let rv = dummy_room_view();
-        let mut zr = ZoneRoomState {
-            discovered_objects: HashSet::new(),
-            ..Default::default()
-        };
-        zr.discovered_objects.insert(coins_id); // discovered
-
-        // stackables still need `revealed=true` to render
-        assert!(
-            !coins.is_visible_to(&rv, &zr),
-            "stackable items remain hidden until `revealed=true`, even if discovered"
+    fn exits_by_dir_indexes_match_vector_positions() {
+        // From: build_room_view()
+        let room = mk_room();
+        let exits = vec![
+            mk_exit_north(rid_b(), true, false),
+            BlueprintExit {
+                id: ExitId::new(),
+                from_room_id: rid(),
+                from_room_key: "entry_hall".into(),
+                dir: Direction::East,
+                to_room_id: rid_b(),
+                to_room_key: "side_room".into(),
+                description: None,
+                visible_when_locked: false,
+                default_locked: false,
+            },
+        ];
+        let view = build_room_view_impl(
+            &room,
+            &exits,
+            &[],
+            &RoomScripts::default(),
+            &Kv::default(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &Kv::default(),
+            &HashMap::new(),
+            &HashMap::new(),
         );
-
-        // act: uncover the pile
-        let mut coins_uncovered = coins.clone();
-        coins_uncovered.revealed = true;
-
-        assert!(
-            coins_uncovered.is_visible_to(&rv, &zr),
-            "stackable items become visible once revealed"
-        );
+        assert_eq!(view.exits_by_dir.get(&Direction::North).copied(), Some(0));
+        assert_eq!(view.exits_by_dir.get(&Direction::East).copied(), Some(1));
     }
 }

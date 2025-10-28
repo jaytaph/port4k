@@ -1,14 +1,11 @@
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use std::sync::Arc;
 
-pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
-
+pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.len() < 3 {
-        out.append(super::USAGE);
-        out.failure();
-        return Ok(out);
+        ctx.output.system(super::USAGE).await;
+        return Ok(());
     }
 
     let bp = &intent.args[2];
@@ -22,12 +19,10 @@ pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutpu
         .new_blueprint(bp, title, account_id)
         .await?
     {
-        out.append(format!("[bp] created `{}`: {}\n", bp, title).as_str());
-        out.success();
+        ctx.output.system(format!("[bp] created `{}`: {}", bp, title)).await;
     } else {
-        out.append("[bp] already exists.\n");
-        out.failure();
+        ctx.output.system("[bp] already exists.").await;
     }
 
-    Ok(out)
+    Ok(())
 }

@@ -1,13 +1,8 @@
 use crate::config::Config;
 use crate::db::Db;
-use crate::db::repo::account::AccountRepo;
-use crate::db::repo::db_account::AccountRepository;
-use crate::db::repo::db_kv::KvRepository;
-use crate::db::repo::db_room::RoomRepository;
-use crate::db::repo::db_zone::ZoneRepository;
-use crate::db::repo::kv::KvRepo;
-use crate::db::repo::room::RoomRepo;
-use crate::db::repo::zone::ZoneRepo;
+use crate::db::repo::RoomRepo;
+use crate::db::repo::ZoneRepo;
+use crate::db::repo::{AccountRepo, AccountRepository, RoomRepository, UserRepo, UserRepository, ZoneRepository};
 use crate::models::account::Account;
 use crate::models::zone::{DbBackend, MemoryBackend, ZoneRouter};
 use crate::services::{
@@ -20,7 +15,7 @@ use std::sync::Arc;
 pub struct Repos {
     pub account: Arc<dyn AccountRepo>,
     pub room: Arc<dyn RoomRepo>,
-    pub kv: Arc<dyn KvRepo>,
+    pub user: Arc<dyn UserRepo>,
     pub zone: Arc<dyn ZoneRepo>,
 }
 
@@ -48,7 +43,7 @@ impl Registry {
         let repos = Arc::new(Repos {
             account: Arc::new(AccountRepository::new(db.clone())),
             room: Arc::new(RoomRepository::new(db.clone())),
-            kv: Arc::new(KvRepository::new(db.clone())),
+            user: Arc::new(UserRepository::new(db.clone())),
             zone: Arc::new(ZoneRepository::new(db.clone())),
         });
 
@@ -57,7 +52,11 @@ impl Registry {
         let zone_router = Arc::new(ZoneRouter::new(zone_db, zone_mem));
 
         let blueprint_service = Arc::new(BlueprintService::new(repos.room.clone()));
-        let room_service = Arc::new(RoomService::new(repos.kv.clone(), repos.room.clone()));
+        let room_service = Arc::new(RoomService::new(
+            repos.room.clone(),
+            repos.zone.clone(),
+            repos.user.clone(),
+        ));
 
         let services = Arc::new(Services {
             auth: Arc::new(AuthService::new(repos.account.clone())),
@@ -66,7 +65,7 @@ impl Registry {
             room: room_service.clone(),
             cursor: Arc::new(CursorService::new(zone_router.clone(), room_service.clone())),
             navigator: Arc::new(NavigatorService::new(zone_router.clone())),
-            zone: Arc::new(ZoneService::new(repos.zone.clone())),
+            zone: Arc::new(ZoneService::new(repos.zone.clone(), room_service.clone())),
         });
 
         Self {

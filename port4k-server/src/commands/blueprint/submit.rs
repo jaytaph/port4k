@@ -1,25 +1,21 @@
 //! @bp submit <bp>
 
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use std::sync::Arc;
 
-pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
+pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.is_empty() {
-        out.append(super::USAGE);
-        out.failure();
-        return Ok(out);
+        ctx.output.system(super::USAGE).await;
+        return Ok(());
     }
 
     let bp = &intent.args[0];
 
     if ctx.registry.services.blueprint.submit(bp).await? {
-        out.append("[bp] submitted for review.\n");
-        out.success();
+        ctx.output.system("[bp] submitted for review.").await;
     } else {
-        out.append("[bp] submission failed: ");
-        out.failure();
+        ctx.output.system("[bp] submission failed").await;
     }
-    Ok(out)
+    Ok(())
 }

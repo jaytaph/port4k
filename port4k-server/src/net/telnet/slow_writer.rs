@@ -7,14 +7,10 @@ use std::{
 use tokio::io::AsyncWrite;
 use tokio::time::{Sleep, sleep};
 
+#[allow(unused)]
 pub enum Pace {
-    #[allow(unused)]
-    PerChar {
-        delay: Duration,
-    },
-    PerWord {
-        delay: Duration,
-    },
+    PerChar { delay: Duration },
+    PerWord { delay: Duration },
 }
 
 pub struct SlowWriter<W> {
@@ -25,6 +21,7 @@ pub struct SlowWriter<W> {
 }
 
 impl<W> SlowWriter<W> {
+    #[allow(unused)]
     pub fn new(inner: W, pace: Pace) -> Self {
         Self {
             inner,
@@ -35,6 +32,7 @@ impl<W> SlowWriter<W> {
     }
 
     /// Enable/disable pacing globally.
+    #[allow(unused)]
     pub fn set_pacing(&mut self, enabled: bool) {
         self.pacing_enabled = enabled;
         if !enabled {

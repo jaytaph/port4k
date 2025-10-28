@@ -1,28 +1,29 @@
-version: 2
+version: 3
 id: observation_nook
 name: Observation Nook
 short: "A dim alcove with narrow viewports and a bench."
 description: |
-  The alcove widens just enough for a bench under a row of narrow viewports. Beyond the armored glass,
-  a starfield drifts past, broken by the dark geometry of station struts. A patchy {o:wall_map} is
-  bolted beside the bench, and a scuffed {o:storage_locker} sits half-tucked under it. A faint draft
-  whispers through a {o:vent_grille} near the floor. The brighter corridor lies {o:east_exit}.
-o: "Viewports above; {o:wall_map} and {o:storage_locker} by the bench; draft through {o:vent_grille}; exit {o:east_exit}."
+  The alcove widens just enough for a bench under a row of narrow viewports. Beyond the armored glass, a starfield drifts past, broken by the dark geometry of station struts. A patchy {o:wall_map} is bolted beside the bench, and a scuffed {o:storage_locker} sits half-tucked under it. A faint draft whispers through a {o:vent_grille} near the floor. The brighter corridor lies {o:east_exit}.
+
 kv:
   ambience: "quiet_hum"
   view: "starfield"
 
 hints:
-  - text: "Maps often hide route notes—try reading or tracing markings."
+  - id: map
+    text: "Maps often hide route notes—try reading or tracing markings."
     when: first_look
     once: true
-  - text: "Lockers may require codes, tools, or a lucky shove."
+  - id: locker
+    text: "Lockers may require codes, tools, or a lucky shove."
     when: enter
     cooldown: 2
-  - text: "A loose grille could conceal stashed items."
+  - id: grille
+    text: "A loose grille could conceal stashed items."
     when: search
     once: true
-  - text: "The viewport offers lore and orientation—try 'scan' here too."
+  - id: viewport
+    text: "The viewport offers lore and orientation—try 'scan' here too."
     when: manual
 
 objects:

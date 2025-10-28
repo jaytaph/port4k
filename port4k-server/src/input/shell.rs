@@ -1,4 +1,4 @@
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandResult};
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -42,8 +42,7 @@ pub fn parse_shell_cmd(input: &str) -> Option<ShellCmd> {
     }
 }
 
-pub async fn handle_shell_cmd(cmd: ShellCmd, ctx: Arc<CmdCtx>) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
+pub async fn handle_shell_cmd(cmd: ShellCmd, ctx: Arc<CmdCtx>) -> CommandResult {
     let result = match cmd {
         ShellCmd::Dbg(target) => match target {
             DbgTarget::RoomView => {
@@ -57,10 +56,9 @@ pub async fn handle_shell_cmd(cmd: ShellCmd, ctx: Arc<CmdCtx>) -> CommandResult<
         },
     };
 
-    out.append(result.as_str());
-    out.success();
+    ctx.output.system(result).await;
 
-    Ok(out)
+    Ok(())
 }
 
 async fn dump_json_or_debug<T: Serialize + core::fmt::Debug>(label: &str, value: &T) -> String {

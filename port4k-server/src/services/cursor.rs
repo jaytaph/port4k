@@ -1,10 +1,10 @@
 #![allow(unused)]
 
-use crate::db::repo::room::RoomRepo;
+use crate::db::repo::RoomRepo;
 use crate::error::AppResult;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::RoomView;
-use crate::models::types::{AccountId, ScriptSource};
+use crate::models::types::AccountId;
 use crate::models::zone::{DbBackend, ZoneContext, ZoneRouter};
 use crate::services::RoomService;
 use crate::state::session::Cursor;
@@ -26,12 +26,14 @@ impl CursorService {
         let zone_ctx = ZoneContext::ephemeral(account_id, bp.clone());
         let room_view = self
             .room_service
-            .build_room_view(self.router.clone(), &zone_ctx, account_id, bp.entry_room_id)
+            .build_room_view(&zone_ctx, account_id, bp.entry_room_id)
             .await?;
 
         Ok(Cursor {
-            zone_ctx,
+            zone_id: zone_ctx.zone.id,
             room_id: bp.entry_room_id,
+            account_id,
+            zone_ctx,
             room_view,
         })
     }

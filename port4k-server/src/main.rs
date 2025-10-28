@@ -69,7 +69,7 @@ fn init_tracing() {
     color_eyre::install().unwrap();
 
     tracing_subscriber::registry()
-        .with(EnvFilter::from_default_env().add_directive("port4k=debug".parse().unwrap()))
+        .with(EnvFilter::from_default_env().add_directive("debug".parse().unwrap()))
         .with(
             tracing_subscriber::fmt::layer()
                 .with_target(false)

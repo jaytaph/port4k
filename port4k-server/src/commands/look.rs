@@ -1,12 +1,9 @@
-use crate::commands::{CmdCtx, CommandOutput, CommandResult};
+use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use crate::renderer::RenderVars;
 use crate::renderer::room_view::render_room_view;
 use std::sync::Arc;
 
-pub async fn look(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutput> {
-    let mut out = CommandOutput::new();
-
+pub async fn look(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     let rv = ctx.room_view()?;
     if let Some(noun) = intent.direct {
         return if let Some(obj) = rv.object_by_noun(&noun.head) {
@@ -17,23 +14,22 @@ pub async fn look(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult<CommandOutp
             // }
 
             // 2. Fallback to static description
-            out.append(&obj.description);
-            out.success();
-            Ok(out)
+            ctx.output.system(&obj.description).await;
+            Ok(())
 
             // out.append(format!("You see nothing special about the {}.", noun));
             // out.success();
             // return Ok(out)
         } else {
-            out.append(format!("You don't see any '{}' here.", noun.head).as_str());
-            out.failure();
-            Ok(out)
+            ctx.output
+                .system(format!("You don't see any '{}' here.", noun.head))
+                .await;
+            Ok(())
         };
     }
 
     // No direct noun -> show room description
-    let vars = RenderVars::new(ctx.sess.clone(), Some(&rv));
-    out.append(render_room_view(&vars, 80).await.as_str());
-    out.success();
-    Ok(out)
+    // let vars = RenderVars::new(ctx.sess.clone(), Some(&rv));
+    ctx.output.line(render_room_view()).await;
+    Ok(())
 }
