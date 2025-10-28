@@ -11,11 +11,11 @@ use std::collections::{HashMap, HashSet};
 use std::{fs, path::Path};
 use tokio_postgres::Transaction;
 
-// ====== v3 YAML models ======
+// ====== v4 YAML models ======
 
 #[derive(Debug, Deserialize)]
 struct RoomYaml {
-    pub version: u8,  // must be 3
+    pub version: u8,  // must be 4
     pub id: String,   // "entry"
     pub name: String, // "Entry Hall"
     #[serde(default)]
@@ -47,6 +47,29 @@ struct HintYaml {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+struct FlagsYaml {
+    #[serde(default)]
+    pub hidden: Option<bool>,
+    #[serde(default)]
+    pub revealed: Option<bool>,
+    #[serde(default)]
+    pub takeable: Option<bool>,
+    #[serde(default)]
+    pub stackable: Option<bool>,
+}
+
+impl Default for FlagsYaml {
+    fn default() -> Self {
+        FlagsYaml {
+            hidden: Some(false),    // Not hidden from user
+            revealed: Some(true),   // The object is revealed
+            takeable: Some(false),  // Not takeable by user
+            stackable: Some(false), // Not stackable (multiple copies)
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 struct ObjectYaml {
     pub id: String, // object key (used as name)
     #[serde(default)]
@@ -56,12 +79,9 @@ struct ObjectYaml {
     #[serde(default)]
     pub examine: Option<String>,
     #[serde(default)]
-    pub flags: Vec<String>, // ["overlay","non_stackable"]
+    pub flags: Option<FlagsYaml>,
     #[serde(default)]
-    pub visible: Option<VisiblePolicy>, // always|when_revealed|when_unlocked|script
-
-    #[serde(default)]
-    pub state: HashMap<String, serde_json::Value>, // arbitrary map (locked, revealed, etc)
+    pub state: HashMap<String, serde_json::Value>, // arbitrary map (revealed, etc)
     #[serde(default)]
     pub controls: Vec<String>, // ["exit:north.locked","object:door.locked"]
 
@@ -69,18 +89,9 @@ struct ObjectYaml {
     pub loot: Option<serde_json::Value>, // {"items":[...],"credits":0,"once":true}
 
     #[serde(default)]
-    pub use_: Option<String>, // Lua (key "use" in YAML)
-    #[serde(rename = "use", default)]
-    pub _use_compat: Option<String>, // compat alias
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
-#[serde(rename_all = "snake_case")]
-enum VisiblePolicy {
-    Always,
-    WhenRevealed,
-    WhenUnlocked,
-    Script,
+    pub on_use_: Option<String>, // Lua (key "on_use" in YAML)
+    #[serde(rename = "on_use", default)]
+    pub _on_use_compat: Option<String>, // compat alias
 }
 
 #[derive(Debug, Deserialize)]
@@ -128,10 +139,10 @@ pub async fn import_blueprint_sub_dir(
         let text = fs::read_to_string(&path).map_err(InfraError::from)?;
         let mut room: RoomYaml = serde_yaml::from_str(&text)?;
 
-        // normalize "use"
+        // normalize "on_use"
         for o in &mut room.objects {
-            if o.use_.is_none() {
-                o.use_ = o._use_compat.take();
+            if o.on_use_.is_none() {
+                o.on_use_ = o._on_use_compat.take();
             }
         }
 
@@ -280,27 +291,18 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
 
     for (pos, o) in objects.iter().enumerate() {
         let state_json = &o.state;
-        let flags_json = serde_json::to_value(&o.flags)?;
+        let flags_json = serde_json::to_value(&o.flags.as_ref().unwrap_or(&FlagsYaml::default()))?;
         let controls_json = serde_json::to_value(&o.controls)?;
         let loot_json = serde_json::to_value(&o.loot)?;
-
-        // visible as text (enum) or NULL
-        let visible_txt: Option<&'static str> = match o.visible {
-            Some(VisiblePolicy::Always) => Some("always"),
-            Some(VisiblePolicy::WhenRevealed) => Some("when_revealed"),
-            Some(VisiblePolicy::WhenUnlocked) => Some("when_unlocked"),
-            Some(VisiblePolicy::Script) => Some("script"),
-            None => None,
-        };
 
         let row = tx
             .query_one(
                 r#"
                 INSERT INTO bp_objects
                     (room_id, name, short, description, examine, use_lua,
-                    position, flags, visible, controls, loot)
+                    position, flags, controls, loot)
                 VALUES
-                    ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10::jsonb,$11::jsonb)
+                    ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10::jsonb)
                 RETURNING id
                 "#,
                 &[
@@ -309,10 +311,9 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
                     &o.short,
                     &o.description,
                     &o.examine,
-                    &o.use_,
+                    &o.on_use_,
                     &(pos as i32),
                     &flags_json,
-                    &visible_txt,
                     &controls_json,
                     &loot_json,
                 ],
@@ -411,10 +412,10 @@ async fn upsert_exits(
 // ====== Validation & Lua compile ======
 
 fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
-    if room.version != 3 {
+    if room.version != 4 {
         return Err(DomainError::Validation {
             field: "room.version",
-            message: "unsupported room schema version; expected 3".into(),
+            message: "unsupported room schema version; expected 4".into(),
         });
     }
     if room.id.trim().is_empty() {
@@ -520,8 +521,8 @@ fn validate_lua_for_room(room: &RoomYaml) -> AppResult<()> {
 
     // Inline object `use` blocks
     for obj in &room.objects {
-        if let Some(code) = obj.use_.as_deref() {
-            compile_lua_chunk(&lua, &format!("room:{}:object:{}:use", room.id, obj.id), code)?;
+        if let Some(code) = obj.on_use_.as_deref() {
+            compile_lua_chunk(&lua, &format!("room:{}:object:{}:on_use", room.id, obj.id), code)?;
         }
     }
 

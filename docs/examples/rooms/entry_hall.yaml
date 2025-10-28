@@ -1,4 +1,4 @@
-version: 3
+version: 5
 id: entry
 name: Entry Hall
 short: "A small, quiet room lit by phosphor glow."
@@ -35,41 +35,37 @@ objects:
     nouns: ["door","blast door"]
     short: "sealed blast door"
     description: "A heavy composite barrier with old scoring along the seams."
-    flags: ["overlay","non_stackable"]   # keeps door visible even if another overlay exists
-    visible: always
     state:
       locked: true
       powered: true
-      revealed: true
     controls:
       - exit:north.locked                 # keep exit lock in sync with this door
     examine: "The locking mechanism is intact; manual overrides are scarred but functional."
-    use: |
+    on_use: |
       return function(ctx)
         local exit = "north"
-        port4k.say("DEBUG: Checking blast door use")
           
         if ctx.intent.verb == "open" then
-            if not ctx.room.exits[exit] then
-                port4k.say("There is no door here to open.")
+            if ctx.object.state.locked == true then
+                port4k.say("The blast door is locked tight.")
+                return true   
             end
-            if ctx.object.locked then
-                port4k.say("The door is locked tight.")
-                return true
-            end
-            if ctx.object.locked == false then
+      
+            if ctx.object.state.locked == false then
                 port4k.say("It's already open.")
                 return true
             end
+      
             port4k.say("Hydraulics hiss as the blast door slides open.")
             port4k.set_exit_locked(exit, false)
             return true
     
         elseif ctx.intent.verb == "close" then
-            if port4k.is_exit_locked(exit) == true then
+            if ctx.room.exits.north.locked == true then
                 port4k.say("It's already closed.")
                 return true
             end
+      
             port4k.say("The blast door rumbles shut.")
             port4k.set_exit_locked(exit, true)
             return true
@@ -82,22 +78,18 @@ objects:
     nouns: ["console","terminal","panel"]
     short: "flickering wall console"
     description: "A recessed maintenance terminal with a cracked display."
-    flags: []
-    visible: always
     state:
       powered: false
       code_required: "4312"
-      revealed: true
     examine: "Power is intermittent; a maintenance login prompt flickers in and out."
-    use: |
+    on_use: |
       -- Supported inputs:
       --   use console
       --   power console with <item>
       --   enter <code> on console
       return function(ctx)
-        local powered = ctx.object.state.powered
-        if not powered then
-          if verb == "power" and port4k.player_has_item("microcell") then
+        if ctx.object.state.powered == false then
+          if ctx.intent.verb == "power" and port4k.player_has_item("microcell") then
             port4k.set_object_state("wall_console","powered", true)
             port4k.consume_item("microcell")
             port4k.say("You slot the microcell. The console hums to life.")
@@ -108,9 +100,9 @@ objects:
           end
         end
 
-        if verb == "enter" and #args > 0 then
+        if ctx.intent.verb == "enter" and #args > 0 then
           local code = table.concat(args, " ")
-          local required = ctx.object.code_required or "4312"
+          local required = ctx.object.state.code_required or "4312"
           if code == required then
             port4k.say("Code accepted. Releasing blast door locks.")
             port4k.set_object_state("blast_door","locked", false)
@@ -133,9 +125,7 @@ objects:
     nouns: ["toolkit","tools","case"]
     short: "discarded toolkit"
     description: "A battered case; one latch is broken."
-    flags: []
-    visible: when_revealed
-    state:
+    flags:
       revealed: true
     examine: "Inside: a multi-spanner, fiber probe, and a microcell."
     loot:
@@ -150,9 +140,7 @@ objects:
     nouns: ["markings","symbols","etchings"]
     short: "etched markings"
     description: "Jagged symbols carved into the wall paint."
-    flags: []
-    visible: always
-    state:
+    flags:
       revealed: true
     examine: "The symbols loosely match hazard glyphs for 'pressure loss' and 'quarantine'."
 
@@ -166,31 +154,43 @@ exits:
 scripts:
   on_enter: |
     return function(ctx)
-      if not ctx.room.objects["wall_console"].state["powered"] then
+      if ctx.room.objects.wall_console.state.powered == false then
         port4k.say("The console flickers once and dies. It might need a power source.")
       end
       port4k.hint_consider("enter")    -- engine may surface an 'enter' hint
     end
   on_command: |
-    port4k.say("OnCommand")
     -- Allow "read markings"
-    return function(ctx, verb, args)
-      if verb == "read" and port4k.matches_noun(args, {"markings","symbols","etchings"}) then
+    return function(ctx)
+      if ctx.intent.verb == "read" and port4k.matches_noun(ctx.intent.args, {"markings","symbols","etchings"}) then
         port4k.say("The symbols resemble hazard glyphs: 'pressure loss' and 'quarantine'.")
         return true
       end
       return false
     end
 
-
-# Optional: inline item catalog (skip if you have a global one)
+# Items definitions. These are the items found in the zone (note that they should not be defined in other files)
 items_catalog:
   - id: multi_spanner
     name: "Multi-Spanner"
+    nouns: ["spanner", "multi-spanner", "tool", "wrench"]
+    short: "versatile multi-spanner"
+    description: "A worn but functional tool with multiple heads for various fasteners."
+    examine: "The spanner shows signs of heavy use but remains reliable. It could be useful for mechanical repairs."
     stackable: false
+
   - id: fiber_probe
     name: "Fiber Probe"
+    nouns: ["probe", "fiber-probe", "fiber", "cable-tester"]
+    short: "optical fiber probe"
+    description: "A slender diagnostic tool for testing optical connections."
+    examine: "The probe's tip glows faintly, indicating it's still charged and ready to test fiber-optic cables."
     stackable: false
+
   - id: microcell
     name: "Microcell"
+    nouns: ["microcell", "cell", "battery", "power-cell"]
+    short: "charged microcell"
+    description: "A compact power source, still holding a charge."
+    examine: "The indicator shows it's fully charged. It could power small devices."
     stackable: true

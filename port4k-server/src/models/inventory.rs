@@ -1,13 +1,62 @@
-pub struct InventoryItem {
-    /// Object ID of the item
-    pub object_id: String,
-    /// Quantity of the item
-    pub quantity: u32,
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Item {
+    pub id: String,
+    pub name: String,
+
+    #[serde(default)]
+    pub nouns: Vec<String>,
+
+    #[serde(default)]
+    pub short: Option<String>,
+
+    #[serde(default)]
+    pub description: Option<String>,
+
+    #[serde(default)]
+    pub examine: Option<String>,
+
+    #[serde(default)]
+    pub stackable: bool,
+
+    #[serde(default)]
+    pub weight: f32, // Optional: for inventory limits
+
+    #[serde(default)]
+    pub consumable: bool, // Optional: can be consumed on use
+
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>, // For custom properties
 }
 
-pub struct Inventory {
-    /// List of inventory items
-    pub items: Vec<InventoryItem>,
-    /// Maximum number of distinct item types (quantities) allowed. This means that 1 box with 10 items count as 11 (10 items + 1 box)
-    pub max_item_count: u32,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemInstance {
+    pub item_id: String, // Reference to Item definition
+    pub quantity: i32,   // For stackable items
+    pub location: ItemLocation,
+
+    #[serde(default)]
+    pub state: HashMap<String, serde_json::Value>, // Instance-specific state
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ItemLocation {
+    Room {
+        zone_id: String,
+        room_id: String,
+    },
+    Object {
+        zone_id: String,
+        room_id: String,
+        object_id: String,
+    }, // Inside toolkit
+    Player {
+        user_id: String,
+    },
+    Dropped {
+        zone_id: String,
+        room_id: String,
+    }, // On floor
 }

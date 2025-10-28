@@ -1,7 +1,7 @@
 use anyhow::Context;
 use clap::Parser;
 use port4k_server::config;
-use port4k_server::import::import_blueprint_sub_dir;
+use port4k_server::import_blueprint::import_blueprint_sub_dir;
 use port4k_server::models::types::BlueprintId;
 use std::path::PathBuf;
 use std::sync::Arc;
