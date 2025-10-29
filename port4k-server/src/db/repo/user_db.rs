@@ -2,7 +2,7 @@ use crate::db::error::DbError;
 use crate::db::repo::UserRepo;
 use crate::db::{Db, DbResult};
 use crate::models::room::Kv;
-use crate::models::types::{AccountId, ExitId, RoomId, ZoneId};
+use crate::models::types::{AccountId, ExitId, ObjectId, RoomId, ZoneId};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -118,6 +118,24 @@ impl UserRepo for UserRepository {
         Ok(())
     }
 
+    async fn set_object_kv(&self, zone_id: ZoneId, account_id: AccountId, object_id: ObjectId, key: &str, value: &Value) -> DbResult<()> {
+        let client = self.db.get_client().await?;
+
+        client
+            .execute(
+                r#"
+                INSERT INTO user_object_kv (zone_id, account_id, object_id, key, value)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (zone_id, account_id, object_id, key)
+                DO UPDATE SET value = EXCLUDED.value
+                "#,
+                &[&zone_id, &account_id, &object_id, &key, &value],
+            )
+            .await?;
+
+        Ok(())
+    }
+
     async fn set_exit_locked(
         &self,
         zone_id: ZoneId,
@@ -141,5 +159,22 @@ impl UserRepo for UserRepository {
             .await?;
 
         Ok(())
+    }
+
+    async fn is_exit_locked(&self, zone_id: ZoneId, room_id: RoomId, account_id: AccountId, exit_id: ExitId) -> DbResult<bool> {
+        let client = self.db.get_client().await?;
+
+        let row = client
+            .query_one(
+                r#"
+                SELECT locked FROM user_exits
+                WHERE zone_id = $1 AND room_id = $2 AND account_id = $3 AND exit_id = $4
+                "#,
+                &[&zone_id, &room_id, &account_id, &exit_id],
+            )
+            .await?;
+
+        let locked: bool = row.get("locked");
+        Ok(locked)
     }
 }

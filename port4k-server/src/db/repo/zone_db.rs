@@ -2,10 +2,11 @@ use crate::db::error::DbError;
 use crate::db::repo::zone::ZoneRepo;
 use crate::db::{Db, DbResult};
 use crate::models::room::Kv;
-use crate::models::types::{ExitId, RoomId, ZoneId};
+use crate::models::types::{ExitId, ObjectId, RoomId, ZoneId};
 use crate::models::zone::Zone;
 use std::collections::HashMap;
 use std::sync::Arc;
+use serde_json::Value;
 
 pub struct ZoneRepository {
     db: Arc<Db>,
@@ -77,6 +78,24 @@ impl ZoneRepo for ZoneRepository {
         }
 
         Ok(map)
+    }
+
+    async fn set_object_kv(&self, zone_id: ZoneId, object_id: ObjectId, key: &str, value: &Value) -> DbResult<()> {
+        let client = self.db.get_client().await?;
+
+        client
+            .execute(
+                r#"
+                INSERT INTO zone_object_kv (zone_id, object_id, key, value)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (zone_id, account_id, object_id, key)
+                DO UPDATE SET value = EXCLUDED.value
+                "#,
+                &[&zone_id, &object_id, &key, &value],
+            )
+            .await?;
+
+        Ok(())
     }
 
     async fn set_exit_locked(&self, zone_id: ZoneId, room_id: RoomId, exit_id: ExitId, locked: bool) -> DbResult<()> {

@@ -3,7 +3,7 @@ use crate::db::repo::{RoomRepo, UserRepo, ZoneRepo};
 use crate::error::{AppResult, DomainError};
 use crate::lua::{LUA_CMD_TIMEOUT, LuaJob, LuaResult, ScriptHook};
 use crate::models::room::{RoomView, build_room_view_impl};
-use crate::models::types::{AccountId, Direction, ExitId, RoomId, ZoneId};
+use crate::models::types::{AccountId, Direction, ExitId, ObjectId, RoomId, ZoneId};
 use crate::models::zone::ZoneContext;
 use crate::state::session::Cursor;
 use rand::seq::IndexedRandom;
@@ -262,6 +262,24 @@ impl RoomService {
         }
     }
 
+    pub async fn is_exit_locked(
+        &self,
+        zone_id: ZoneId,
+        room_id: RoomId,
+        account_id: AccountId,
+        exit_dir: Direction,
+    ) -> AppResult<bool> {
+        match self.exit_by_direction(room_id, exit_dir).await? {
+            Some(exit_id) => {
+                let locked = self.user_repo
+                    .is_exit_locked(zone_id, room_id, account_id, exit_id)
+                    .await?;
+                Ok(locked)
+            }
+            None => Err(DomainError::NotFound("Exit not found".into())),
+        }
+    }
+
     pub async fn set_exit_locked_shared(
         &self,
         zone_id: ZoneId,
@@ -321,4 +339,28 @@ impl RoomService {
 
         Ok(rv)
     }
+
+    pub async fn set_object_state(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        object_id: ObjectId,
+        key: &str,
+        val: &serde_json::Value
+    ) -> AppResult<()> {
+        self.user_repo.set_object_kv(zone_id, account_id, object_id, key, val).await?;
+        Ok(())
+    }
+
+    pub async fn set_object_state_shared(
+        &self,
+        zone_id: ZoneId,
+        object_id: ObjectId,
+        key: &str,
+        val: &serde_json::Value,
+    ) -> AppResult<()> {
+        self.zone_repo.set_object_kv(zone_id, object_id, key, val).await?;
+        Ok(())
+    }
+
 }

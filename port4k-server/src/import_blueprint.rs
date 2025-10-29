@@ -11,11 +11,11 @@ use std::collections::{HashMap, HashSet};
 use std::{fs, path::Path};
 use tokio_postgres::Transaction;
 
-// ====== v4 YAML models ======
+// ====== v5 YAML models ======
 
 #[derive(Debug, Deserialize)]
 struct RoomYaml {
-    pub version: u8,  // must be 4
+    pub version: u8,  // must be 5
     pub id: String,   // "entry"
     pub name: String, // "Entry Hall"
     #[serde(default)]
@@ -32,6 +32,20 @@ struct RoomYaml {
     pub exits: Vec<ExitYaml>,
     #[serde(default)]
     pub scripts: ScriptYaml,
+    #[serde(default)]
+    pub items_catalog: Vec<ItemCatalogYaml>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct ItemCatalogYaml {
+    pub id: String,
+    pub name: String,
+    pub nouns: Vec<String>,
+    pub short: String,
+    pub description: String,
+    #[serde(default)]
+    pub examine: Option<String>,
+    pub stackable: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -70,6 +84,19 @@ impl Default for FlagsYaml {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+struct LootYaml {
+    pub items: Vec<String>,
+    #[serde(default)]
+    pub credits: i32,
+    #[serde(default = "default_true")]
+    pub once: bool,
+    #[serde(default)]
+    pub shared: bool,  // NEW: false = per-player, true = global
+}
+
+fn default_true() -> bool { true }
+
+#[derive(Debug, Deserialize, Serialize)]
 struct ObjectYaml {
     pub id: String, // object key (used as name)
     #[serde(default)]
@@ -86,7 +113,7 @@ struct ObjectYaml {
     pub controls: Vec<String>, // ["exit:north.locked","object:door.locked"]
 
     #[serde(default)]
-    pub loot: Option<serde_json::Value>, // {"items":[...],"credits":0,"once":true}
+    pub loot: Option<LootYaml>,
 
     #[serde(default)]
     pub on_use_: Option<String>, // Lua (key "on_use" in YAML)
@@ -151,6 +178,7 @@ pub async fn import_blueprint_sub_dir(
         println!("    • {} exit(s)", room.exits.len());
         println!("    • {} hint(s)", room.hints.len());
         println!("    • {} script hook(s)", room.scripts.0.len());
+        println!("    • {} item(s) in catalog", room.items_catalog.len());
 
         print!("  🔍 Validating semantics...");
         validate_room_semantics(&room)?;
@@ -162,6 +190,48 @@ pub async fn import_blueprint_sub_dir(
 
         rooms.push(room);
     }
+
+    // NEW: Collect all items from all rooms in this blueprint
+    println!("\n📦 Collecting items catalog from all rooms...");
+    let mut all_items: HashMap<String, ItemCatalogYaml> = HashMap::new();
+
+    for room in &rooms {
+        for item in &room.items_catalog {
+            if let Some(existing) = all_items.get(&item.id) {
+                // Verify consistency: same item_key must have identical definition
+                if existing.name != item.name
+                    || existing.short != item.short
+                    || existing.description != item.description
+                    || existing.stackable != item.stackable {
+                    return Err(DomainError::Validation {
+                        field: "items_catalog",
+                        message: format!(
+                            "Item '{}' has inconsistent definitions across rooms. All definitions must match.",
+                            item.id
+                        ),
+                    });
+                }
+                // Verify nouns match
+                let mut existing_nouns = existing.nouns.clone();
+                let mut item_nouns = item.nouns.clone();
+                existing_nouns.sort();
+                item_nouns.sort();
+                if existing_nouns != item_nouns {
+                    return Err(DomainError::Validation {
+                        field: "items_catalog",
+                        message: format!(
+                            "Item '{}' has different nouns across rooms. All definitions must match.",
+                            item.id
+                        ),
+                    });
+                }
+            } else {
+                all_items.insert(item.id.clone(), item.clone());
+            }
+        }
+    }
+
+    println!("  ✓ Found {} unique item(s) across all rooms", all_items.len());
 
     println!("\n💾 Starting database transaction...");
     let mut client = db.pool.get().await.map_err(DbError::from)?;
@@ -177,8 +247,14 @@ pub async fn import_blueprint_sub_dir(
         println!(" ✓ ({})", room_id);
     }
 
-    // Pass 2: kv, objects, scripts
-    println!("\n🔧 Pass 2: Adding objects, state, and scripts...");
+    if !all_items.is_empty() {
+        println!("\n📦 Pass 1b: Registering blueprint-level items catalog...");
+        upsert_blueprint_items_catalog(&tx, blueprint_id, &all_items).await?;
+        println!("  ✓ Registered {} item(s)", all_items.len());
+    }
+
+    // Pass 2: kv, objects, scripts, items_catalog
+    println!("\n🔧 Pass 2: Adding objects, items, state, and scripts...");
     for (idx, r) in rooms.iter().enumerate() {
         let room_id = *room_ids.get(&r.id).expect("room id present");
         println!("  [{}/{}] Processing room '{}'...", idx + 1, rooms.len(), r.id);
@@ -274,8 +350,8 @@ async fn upsert_room_kv(
             "#,
             &[&room_id, k, v],
         )
-        .await
-        .map_err(DbError::from)?;
+            .await
+            .map_err(DbError::from)?;
     }
     Ok(())
 }
@@ -332,8 +408,8 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
                 "#,
                 &[&obj_id, k, v],
             )
-            .await
-            .map_err(DbError::from)?;
+                .await
+                .map_err(DbError::from)?;
         }
 
         // nouns
@@ -346,8 +422,63 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
                 "#,
                 &[&room_id, &obj_id, n],
             )
+                .await
+                .map_err(DbError::from)?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn upsert_blueprint_items_catalog(
+    tx: &Transaction<'_>,
+    bp_id: BlueprintId,
+    items: &HashMap<String, ItemCatalogYaml>,
+) -> AppResult<()> {
+    // Delete existing items for this blueprint
+    tx.execute("DELETE FROM bp_item_nouns WHERE bp_id = $1", &[&bp_id])
+        .await
+        .map_err(DbError::from)?;
+    tx.execute("DELETE FROM bp_items_catalog WHERE bp_id = $1", &[&bp_id])
+        .await
+        .map_err(DbError::from)?;
+
+    // Insert all items
+    for item in items.values() {
+        let row = tx
+            .query_one(
+                r#"
+                INSERT INTO bp_items_catalog
+                    (bp_id, item_key, name, short, description, examine, stackable)
+                VALUES
+                    ($1, $2, $3, $4, $5, $6, $7)
+                RETURNING id
+                "#,
+                &[
+                    &bp_id,
+                    &item.id,
+                    &item.name,
+                    &item.short,
+                    &item.description,
+                    &item.examine,
+                    &item.stackable,
+                ],
+            )
             .await
             .map_err(DbError::from)?;
+        let item_id: uuid::Uuid = row.get(0);
+
+        // Insert nouns for this item
+        for noun in &item.nouns {
+            tx.execute(
+                r#"
+                INSERT INTO bp_item_nouns (bp_id, item_id, noun)
+                VALUES ($1, $2, $3)
+                "#,
+                &[&bp_id, &item_id, noun],
+            )
+                .await
+                .map_err(DbError::from)?;
         }
     }
 
@@ -365,8 +496,8 @@ async fn upsert_room_scripts(tx: &Transaction<'_>, room_id: uuid::Uuid, scripts:
             "#,
             &[&room_id, &hook.as_str(), &script],
         )
-        .await
-        .map_err(DbError::from)?;
+            .await
+            .map_err(DbError::from)?;
     }
     Ok(())
 }
@@ -403,8 +534,8 @@ async fn upsert_exits(
                 &ex.visible_when_locked,
             ],
         )
-        .await
-        .map_err(DbError::from)?;
+            .await
+            .map_err(DbError::from)?;
     }
     Ok(())
 }
@@ -412,10 +543,10 @@ async fn upsert_exits(
 // ====== Validation & Lua compile ======
 
 fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
-    if room.version != 4 {
+    if room.version != 5 {
         return Err(DomainError::Validation {
             field: "room.version",
-            message: "unsupported room schema version; expected 4".into(),
+            message: "unsupported room schema version; expected 5".into(),
         });
     }
     if room.id.trim().is_empty() {
@@ -449,8 +580,81 @@ fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
         });
     }
 
+    // Validate items_catalog
+    let mut item_ids = HashSet::new();
+    let mut item_nouns = HashSet::new();
+    for item in &room.items_catalog {
+        if item.id.trim().is_empty() {
+            return Err(DomainError::Validation {
+                field: "items_catalog",
+                message: "item with empty id".into(),
+            });
+        }
+        if !item_ids.insert(&item.id) {
+            return Err(DomainError::Validation {
+                field: "items_catalog",
+                message: format!("duplicate item id: {}", item.id),
+            });
+        }
+        if item.name.trim().is_empty() {
+            return Err(DomainError::Validation {
+                field: "items_catalog",
+                message: format!("item '{}' has empty name", item.id),
+            });
+        }
+        if item.nouns.is_empty() {
+            return Err(DomainError::Validation {
+                field: "items_catalog",
+                message: format!("item '{}' has no nouns", item.id),
+            });
+        }
+        for noun in &item.nouns {
+            if noun.trim().is_empty() {
+                return Err(DomainError::Validation {
+                    field: "items_catalog",
+                    message: format!("item '{}' has empty noun", item.id),
+                });
+            }
+            if !item_nouns.insert(noun) {
+                return Err(DomainError::Validation {
+                    field: "items_catalog",
+                    message: format!("duplicate item noun: {}", noun),
+                });
+            }
+        }
+        if item.short.trim().is_empty() {
+            return Err(DomainError::Validation {
+                field: "items_catalog",
+                message: format!("item '{}' has empty short description", item.id),
+            });
+        }
+        if item.description.trim().is_empty() {
+            return Err(DomainError::Validation {
+                field: "items_catalog",
+                message: format!("item '{}' has empty description", item.id),
+            });
+        }
+    }
+
+    // Validate that loot references valid items from catalog
+    for obj in &room.objects {
+        if let Some(loot) = &obj.loot {
+            for item_id in &loot.items {
+                if !item_ids.contains(item_id) {
+                    return Err(DomainError::Validation {
+                        field: "object.loot",
+                        message: format!(
+                            "Object '{}' references item '{}' in loot, but this item is not defined in items_catalog",
+                            obj.id, item_id
+                        ),
+                    });
+                }
+            }
+        }
+    }   
+
     // object ids unique
-    let mut ids = HashSet::new();
+    let mut obj_ids = HashSet::new();
     for o in &room.objects {
         if o.id.trim().is_empty() {
             return Err(DomainError::Validation {
@@ -458,7 +662,7 @@ fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
                 message: "object with empty id".into(),
             });
         }
-        if !ids.insert(&o.id) {
+        if !obj_ids.insert(&o.id) {
             return Err(DomainError::Validation {
                 field: "object",
                 message: format!("duplicate object id: {}", o.id),
@@ -482,7 +686,7 @@ fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
     for src in [room.full_desc.as_str()].into_iter() {
         for cap in re.captures_iter(src) {
             let id = cap[1].to_string();
-            if !ids.contains(&id) {
+            if !obj_ids.contains(&id) {
                 return Err(DomainError::Validation {
                     field: "description",
                     message: format!("text references unknown object id: {}", id),

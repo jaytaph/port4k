@@ -33,5 +33,5 @@ psql "$DATABASE_URL" -f ./port4k-server/seeds/seed.sql
 
 echo "* Importing 'the hub' blueprint..."
 cd port4k-server
-cargo run --bin import-yaml -- --bp-key hub --owner system --subdir rooms --entry-room entry
+cargo run --bin import-yaml -- --bp-key hub --owner system --subdir rooms --entry-room cell_block
 

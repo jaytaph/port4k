@@ -1,13 +1,11 @@
 use crate::config::Config;
 use crate::db::Db;
-use crate::db::repo::RoomRepo;
+use crate::db::repo::{InventoryRepo, InventoryRepository, RoomRepo};
 use crate::db::repo::ZoneRepo;
 use crate::db::repo::{AccountRepo, AccountRepository, RoomRepository, UserRepo, UserRepository, ZoneRepository};
 use crate::models::account::Account;
 use crate::models::zone::{DbBackend, MemoryBackend, ZoneRouter};
-use crate::services::{
-    AccountService, AuthService, BlueprintService, CursorService, NavigatorService, RoomService, ZoneService,
-};
+use crate::services::{AccountService, AuthService, BlueprintService, CursorService, InventoryService, NavigatorService, RoomService, ZoneService};
 use parking_lot::RwLock;
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -17,6 +15,7 @@ pub struct Repos {
     pub room: Arc<dyn RoomRepo>,
     pub user: Arc<dyn UserRepo>,
     pub zone: Arc<dyn ZoneRepo>,
+    pub inventory: Arc<dyn InventoryRepo>,
 }
 
 pub struct Services {
@@ -27,6 +26,7 @@ pub struct Services {
     pub cursor: Arc<CursorService>,
     pub navigator: Arc<NavigatorService>,
     pub zone: Arc<ZoneService>,
+    pub inventory: Arc<InventoryService>
 }
 
 pub struct Registry {
@@ -45,6 +45,7 @@ impl Registry {
             room: Arc::new(RoomRepository::new(db.clone())),
             user: Arc::new(UserRepository::new(db.clone())),
             zone: Arc::new(ZoneRepository::new(db.clone())),
+            inventory: Arc::new(InventoryRepository::new(db.clone())),
         });
 
         let zone_db = Arc::new(DbBackend::new(db.clone()));
@@ -62,6 +63,7 @@ impl Registry {
             auth: Arc::new(AuthService::new(repos.account.clone())),
             account: Arc::new(AccountService::new(repos.account.clone())),
             blueprint: blueprint_service.clone(),
+            inventory: Arc::new(InventoryService::new(repos.inventory.clone())),
             room: room_service.clone(),
             cursor: Arc::new(CursorService::new(zone_router.clone(), room_service.clone())),
             navigator: Arc::new(NavigatorService::new(zone_router.clone())),

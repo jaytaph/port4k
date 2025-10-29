@@ -1,0 +1,179 @@
+version: 5
+id: engineering_bay
+name: Engineering Bay
+short: "The ship's compact engineering section, cramped and oil-stained."
+description: |
+  Banks of diagnostic equipment line the walls, half of them dark or flickering. A dented {o:workbench} sits beneath a failing light strip, scattered with loose fasteners and cut wire. Against the far bulkhead, an {o:auxiliary_generator} hums feebly beside a {o:charging_rack}. The corridor back west is the only exit.
+
+state:
+  ambience: "shop_hum"
+  smell: "oil_metal"
+  bay_status: "partially_functional"
+
+hints:
+  - id: power
+    text: "If you need power, a generator or charger might help."
+    when: first_look
+    once: true
+  - id: microcell
+    text: "A charged microcell could wake up dead consoles elsewhere."
+    when: enter
+    cooldown: 2
+  - id: benches
+    text: "Benches often hide compartments—check the workbench carefully."
+    when: search
+    once: true
+  - id: machine
+    text: "Some machines only start once the coolant valves are open or panels are seated."
+    when: manual
+
+objects:
+  - id: workbench
+    nouns: ["bench", "workbench", "table"]
+    short: "dented workbench"
+    description: "A metal bench scarred by plasma burns and drill marks."
+    state:
+      panel_open: false
+      cache_taken: false
+    examine: "Scratches form a rectangle—there might be a sliding panel underneath."
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+        
+        if (verb == "open" or verb == "search") and not ctx.object.state.panel_open then
+          port4k.set_object_state("workbench", "panel_open", true)
+          port4k.say("You pry at the seam—a thin panel slides aside revealing a shallow compartment.")
+          return true
+        end
+        
+        if verb == "loot" or verb == "take" then
+          if not ctx.object.state.panel_open then
+            port4k.say("You find nothing obvious. Perhaps there's a hidden panel to open first.")
+            return true
+          end
+          
+          if ctx.object.state.cache_taken then
+            port4k.say("The compartment is empty—someone beat you to it.")
+            return true
+          end
+          
+          port4k.set_object_state("workbench", "cache_taken", true)
+          port4k.give_item("microcell")
+          port4k.give_credits(15)
+          port4k.say("You recover a **microcell** and some loose credits from the compartment.")
+          return true
+        end
+        
+        return false
+      end
+
+  - id: auxiliary_generator
+    nouns: ["generator", "genset", "aux", "auxiliary generator"]
+    short: "auxiliary generator"
+    description: "A compact unit with a manual starter and coolant lines."
+    state:
+      primed: false
+      running: false
+    controls:
+      - object:charging_rack.powered
+    examine: "A handwritten note reads: 'Prime first. Pull twice. Watch the coolant pressure.'"
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+        
+        if verb == "prime" then
+          port4k.set_object_state("auxiliary_generator", "primed", true)
+          port4k.say("You cycle the primer; the fuel line burbles.")
+          return true
+        end
+        
+        if verb == "start" or verb == "pull" then
+          if not ctx.object.state.primed then
+            port4k.say("It coughs and dies. Maybe prime it first.")
+            return true
+          end
+          
+          if ctx.object.state.running then
+            port4k.say("The generator is already running, a steady hum filling the bay.")
+            return true
+          end
+          
+          port4k.set_object_state("auxiliary_generator", "running", true)
+          port4k.emit_room("The generator catches with a rattling roar, settling into a steady hum.")
+          port4k.set_object_state("charging_rack", "powered", true)
+          return true
+        end
+        
+        if verb == "stop" or verb == "kill" then
+          port4k.set_object_state("auxiliary_generator", "running", false)
+          port4k.set_object_state("charging_rack", "powered", false)
+          port4k.emit_room("The generator spins down into silence.")
+          return true
+        end
+        
+        return false
+      end
+
+  - id: charging_rack
+    nouns: ["charger", "rack", "charging rack", "charging"]
+    short: "rack-mounted charger"
+    description: "Multiple cradles for microcells and tool batteries."
+    state:
+      powered: false
+      occupied: false
+    examine: "LEDs are dark unless external power is present."
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+        
+        local generator = ctx.room.objects.auxiliary_generator
+        local powered = ctx.object.state.powered or generator.state.running
+        
+        if verb == "use" or verb == "charge" then
+          if not powered then
+            port4k.say("The charger is dead—bring the generator online first.")
+            return true
+          end
+          
+          if port4k.player_has_item("microcell_depleted") then
+            port4k.consume_item("microcell_depleted")
+            port4k.give_item("microcell")
+            port4k.say("You slot the depleted cell. After a brief whine, it recharges with a green blink.")
+            return true
+          end
+          
+          port4k.say("You have nothing here that fits the charging cradle.")
+          return true
+        end
+        
+        return false
+      end
+
+  - id: west_exit
+    nouns: ["west", "corridor", "hallway"]
+    short: "way west"
+    description: "A narrow hatch back to the corridor."
+    examine: "Scuffed boot marks suggest frequent traffic."
+
+exits:
+  - dir: west
+    to: "maintenance_corridor"
+    description: "Return to the maintenance corridor."
+    locked: false
+    visible_when_locked: true
+
+scripts:
+  on_enter: |
+    return function(ctx)
+      local generator = ctx.room.objects.auxiliary_generator
+      
+      if generator.state.running then
+        port4k.set_object_state("charging_rack", "powered", true)
+        port4k.say("The generator hums steadily; the charging rack LEDs glow a reassuring green.")
+      else
+        port4k.say("The bay smells of hot metal and oil. A silent generator sits idle in the corner.")
+      end
+    end

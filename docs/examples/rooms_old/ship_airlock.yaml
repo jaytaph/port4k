@@ -1,0 +1,231 @@
+version: 5
+id: ship_airlock
+name: Ship Airlock
+short: "The ship's outer airlock, pressurized and waiting."
+description: |
+  The airlock is a cramped cylinder lined with pressure seals and warning stripes. Through the reinforced porthole in the outer hatch, you glimpse the warm glow of Port4K's docking ring—so close, yet sealed away.
+  
+  A {o:docking_interface} panel beside the hatch blinks amber. The {o:outer_hatch} itself is a massive composite door with hydraulic clamps. Emergency protocols have it locked from the inside. A small {o:diagnostic_port} sits at knee height, and overhead, a {o:status_display} cycles through system checks.
+  
+  The way {o:south_exit} leads back into your ship's corridor.
+
+kv:
+  ambience: "pressurization_hiss"
+  pressure: "nominal"
+
+hints:
+  - id: interface_offline
+    text: "The docking interface needs power before it can sync with the station."
+    when: first_look
+    once: true
+  - id: multi_system
+    text: "Station airlocks require multiple systems: power, diagnostics, and authorization."
+    when: enter
+    cooldown: 3
+  - id: fragments
+    text: "Aurelite fragments are known to bypass certain authorization protocols..."
+    when: examine_hatch
+    once: true
+
+objects:
+  - id: docking_interface
+    nouns: ["interface", "panel", "docking panel", "console"]
+    short: "docking interface panel"
+    description: "A control panel with status lights and a touchscreen displaying synchronization protocols."
+    state:
+      powered: false
+      synced: false
+    examine: "The screen is dark. It needs a power cell to initialize the docking handshake."
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+      
+        -- Power the interface with energy_cell
+        if verb == "power" or (verb == "use" and ctx:matches_noun(args, {"cell", "energy"})) then
+          if ctx:get_object_state("docking_interface", "powered") then
+            ctx:say("The interface is already online, its screen glowing softly.")
+            return true
+          end
+      
+          if ctx:has_item("energy_cell") then
+            ctx:consume_item("energy_cell")
+            ctx:set_object_state("docking_interface", "powered", true)
+            ctx:emit_room("The interface hums to life. The touchscreen flickers: {c:cyan}STATION SYNC REQUIRED{c}")
+            return true
+          else
+            ctx:say("You need an energy cell to power this interface.")
+            return true
+          end
+        end
+      
+        -- Sync with station (requires powered + diagnostic_port connected)
+        if verb == "sync" or verb == "connect" then
+          if not ctx:get_object_state("docking_interface", "powered") then
+            ctx:say("The interface is offline. Power it first.")
+            return true
+          end
+      
+          if not ctx:get_object_state("diagnostic_port", "connected") then
+            ctx:say("ERROR: Diagnostic link not established. Check the diagnostic port.")
+            return true
+          end
+      
+          if ctx:get_object_state("docking_interface", "synced") then
+            ctx:say("The interface already shows: {c:green}SYNC COMPLETE{c}")
+            return true
+          end
+      
+          ctx:set_object_state("docking_interface", "synced", true)
+          ctx:emit_room("Data streams across the screen. After a moment: {c:green}STATION HANDSHAKE COMPLETE{c}")
+          ctx:say("The docking clamps report ready. Only authorization remains.")
+          return true
+        end
+      
+        return false
+      end
+
+  - id: diagnostic_port
+    nouns: ["port", "diagnostic port", "diagnostic", "socket"]
+    short: "diagnostic port"
+    description: "A recessed socket for fiber-optic diagnostics probes."
+    state:
+      connected: false
+    examine: "Standard maintenance port. A fiber probe would establish the link to station systems."
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+      
+        if verb == "connect" or verb == "use" or (verb == "insert" and ctx:matches_noun(args, {"probe", "fiber"})) then
+          if ctx:get_object_state("diagnostic_port", "connected") then
+            ctx:say("The fiber probe is already connected, its tip glowing steadily.")
+            return true
+          end
+      
+          if ctx:has_item("fiber_probe") then
+            ctx:consume_item("fiber_probe")  -- stays inserted
+            ctx:set_object_state("diagnostic_port", "connected", true)
+            ctx:say("You insert the fiber probe. Diagnostic telemetry begins streaming.")
+            return true
+          else
+            ctx:say("You need a fiber probe to establish the diagnostic link.")
+            return true
+          end
+        end
+      
+        return false
+      end
+
+  - id: outer_hatch
+    nouns: ["hatch", "outer hatch", "door", "airlock door"]
+    short: "massive outer hatch"
+    description: "The final barrier between your ship and Port4K station."
+    state:
+      locked: true
+      authorized: false
+    controls:
+      - exit:north.locked
+    examine: |
+      "Through the porthole you see docking ring lights. A security indicator glows red: {c:red}AUTHORIZATION REQUIRED{c}"
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+      
+        -- Authorize with aurelite_fragment
+        if verb == "authorize" or (verb == "use" and ctx:matches_noun(args, {"fragment", "aurelite"})) then
+          if ctx:get_object_state("outer_hatch", "authorized") then
+            ctx:say("The hatch is already authorized; security indicator shows green.")
+            return true
+          end
+      
+          if not ctx:has_item("aurelite_fragment") then
+            ctx:say("You need an authorization token. Perhaps something rare...")
+            return true
+          end
+      
+          ctx:consume_item("aurelite_fragment")
+          ctx:set_object_state("outer_hatch", "authorized", true)
+          ctx:emit_room("You slot the Aurelite fragment into a hidden receptor. It pulses once, then the security indicator shifts to {c:green}AUTHORIZED{c}.")
+          return true
+        end
+      
+        -- Open the hatch (requires all systems ready)
+        if verb == "open" or verb == "unlock" then
+          local powered = ctx:get_object_state("docking_interface", "powered")
+          local synced = ctx:get_object_state("docking_interface", "synced")
+          local authorized = ctx:get_object_state("outer_hatch", "authorized")
+      
+          if not powered then
+            ctx:say("The hatch controls are dead. Power the docking interface first.")
+            return true
+          end
+      
+          if not synced then
+            ctx:say("ERROR: Station sync incomplete. Establish the diagnostic link and sync the interface.")
+            return true
+          end
+      
+          if not authorized then
+            ctx:say("SECURITY LOCKOUT: Authorization token required.")
+            return true
+          end
+      
+          -- ALL SYSTEMS GO
+          ctx:set_object_state("outer_hatch", "locked", false)
+          ctx:set_exit_locked("north", false)
+          ctx:emit_room("{c:bright_green}*** ALL SYSTEMS NOMINAL ***{c}")
+          ctx:emit_room("Hydraulics groan. The outer hatch's seals break with a hiss of equalizing pressure.")
+          ctx:emit_room("Warm air rushes in from Port4K. Through the opening, you hear distant voices, machinery, life.")
+          ctx:say("\n{c:yellow}The way north is now open. Your ship prison has become a doorway.{c}")
+          return true
+        end
+      
+        return false
+      end
+
+  - id: status_display
+    nouns: ["display", "status display", "screen", "monitor"]
+    short: "overhead status display"
+    description: "A strip monitor showing system status in real-time."
+    examine: |
+      return function(ctx)
+        local powered = ctx:get_object_state("docking_interface", "powered")
+        local connected = ctx:get_object_state("diagnostic_port", "connected")
+        local synced = ctx:get_object_state("docking_interface", "synced")
+        local authorized = ctx:get_object_state("outer_hatch", "authorized")
+      
+        local status = {}
+        table.insert(status, "{c:cyan}=== AIRLOCK STATUS ==={c}")
+        table.insert(status, "POWER: " .. (powered and "{c:green}ONLINE{c}" or "{c:red}OFFLINE{c}"))
+        table.insert(status, "DIAGNOSTIC LINK: " .. (connected and "{c:green}CONNECTED{c}" or "{c:red}DISCONNECTED{c}"))
+        table.insert(status, "STATION SYNC: " .. (synced and "{c:green}COMPLETE{c}" or "{c:yellow}PENDING{c}"))
+        table.insert(status, "AUTHORIZATION: " .. (authorized and "{c:green}GRANTED{c}" or "{c:red}DENIED{c}"))
+        table.insert(status, "{c:cyan}==================={c}")
+      
+        ctx:say(table.concat(status, "\n"))
+      end
+    on_use: |
+      return function(ctx)
+        if ctx.intent.verb == "read" or ctx.intent.verb == "check" then
+          return ctx.room.objects.status_display:examine(ctx)
+        end
+        return false
+      end
+
+  - id: south_exit
+    nouns: ["south", "corridor", "ship"]
+    short: "corridor south"
+    description: "Back into your ship's interior."
+    examine: "The emergency lighting still strobes faintly down the corridor."
+
+exits:
+  - dir: south
+    to: "hallway_1"
+    description: "Return to the reinforced hallway."
+    locked: false
+    visible_when_locked: true
+
+  - dir: north
+    to: "port4k_docking_ring

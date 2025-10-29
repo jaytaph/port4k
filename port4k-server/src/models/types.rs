@@ -91,6 +91,7 @@ define_id!(ObjectId);
 define_id!(ExitId);
 define_id!(LootId);
 define_id!(HintId);
+define_id!(ItemId);
 
 /// Directions as used in `bp_exits.dir`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

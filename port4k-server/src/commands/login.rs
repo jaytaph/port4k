@@ -89,7 +89,7 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     // Either we have a blueprint/room specified in the user account, or we use the default one.
     let zone_key = "hub";
     let bp_key = "hub";
-    let room_key = "entry";
+    let room_key = "cell_block";
 
     let zone_ctx = match create_zone_context(ctx.clone(), zone_key, bp_key).await {
         Ok(z) => z,

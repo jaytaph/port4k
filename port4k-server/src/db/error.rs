@@ -6,7 +6,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum DbError {
     /// Record not found
-    #[error("not found")]
+    #[error("record not found")]
     NotFound,
 
     /// Unique constraint violation
@@ -18,7 +18,7 @@ pub enum DbError {
     ForeignKey,
 
     /// Timeout error
-    #[error("timeout")]
+    #[error("database timeout")]
     Timeout,
 
     #[error(transparent)]
@@ -39,6 +39,9 @@ pub enum DbError {
     #[error("row decode error: {0}")]
     Decode(String),
 
-    #[error("input error: {0}")]
+    #[error("validation error: {0}")]
     Validation(String),
+
+    #[error("data error: {0}")]
+    DataError(String),
 }

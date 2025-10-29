@@ -1,4 +1,4 @@
-version: 4
+version: 5
 id: hallway_1
 name: Reinforced Hallway
 short: "A narrow corridor with ribbed plating and emergency beacons."
@@ -146,6 +146,12 @@ exits:
   - dir: west
     to: "observation_nook"
     description: "A dim alcove with viewport slits."
+    locked: false
+    visible_when_locked: true
+
+  - dir: north
+    to: "ship_airlock"
+    description: "The corridor continues to the ship's airlock."
     locked: false
     visible_when_locked: true
 
