@@ -1,4 +1,4 @@
-use port4k_server::renderer::{
+use port4k::renderer::{
     MissingVarPolicy, RenderOptions, RenderVars, render_template, render_template_with_opts,
 };
 

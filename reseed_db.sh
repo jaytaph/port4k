@@ -24,14 +24,13 @@ psql "$DATABASE_URL" -t -A -c "
 " | psql "$DATABASE_URL"
 
 echo "* Running migrations..."
-~/.cargo/bin/refinery migrate -p ./port4k-server/migrations -e DATABASE_URL
+~/.cargo/bin/refinery migrate -p ./migrations -e DATABASE_URL
 
 
 echo "* Seeding the database..."
-psql "$DATABASE_URL" -f ./port4k-server/seeds/seed.sql
+psql "$DATABASE_URL" -f ./seeds/seed.sql
 
 
 echo "* Importing 'the hub' blueprint..."
-cd port4k-server
 cargo run --bin import-yaml -- --bp-key hub --owner system --subdir rooms --entry-room cell_block
 

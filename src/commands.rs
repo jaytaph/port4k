@@ -206,10 +206,8 @@ pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
         Verb::ScPlaytest => playtest::playtest(ctx.clone(), intent).await,
         // Verb::ScScript => script::script(ctx.clone(), intent).await,
         Verb::ScDebug => debug_cmd::debug_cmd(ctx.clone(), intent).await,
-
         // Fallback (e.g., playtest Lua on_command)
-        Verb::Unknown => fallback::fallback(ctx.clone(), intent).await,
-        // _ => Ok(failure!("Unknown command. Try `help`.\n".to_string())),
+        Verb::Custom(_) => fallback::fallback(ctx.clone(), intent).await,
     }
 }
 
@@ -241,59 +239,3 @@ pub fn help_text() -> String {
         reset = ansi::RESET,
     )
 }
-
-// #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-// pub enum CmdStatus {
-//     Success,
-//     Failure,
-//     Neutral,
-// }
-
-// pub struct CommandOutput {
-//     pub status: CmdStatus,
-//     pub lines: Vec<String>,
-//     // more fields we might want later
-// }
-
-// impl Default for CommandOutput {
-//     fn default() -> Self {
-//         Self::new()
-//     }
-// }
-
-// impl CommandOutput {
-//     pub fn new() -> Self {
-//         Self {
-//             status: CmdStatus::Neutral,
-//             lines: Vec::new(),
-//         }
-//     }
-//
-//     pub fn append(&mut self, line: &str) {
-//         self.lines.push(line.to_string());
-//     }
-//
-//     pub fn success(&mut self) {
-//         self.status = CmdStatus::Success;
-//     }
-//
-//     pub fn failure(&mut self) {
-//         self.status = CmdStatus::Failure;
-//     }
-//
-//     pub fn failed(&self) -> bool {
-//         self.status == CmdStatus::Failure
-//     }
-//
-//     pub fn succeeded(&self) -> bool {
-//         self.status == CmdStatus::Success
-//     }
-//
-//     pub fn message(&self) -> String {
-//         self.lines.join("")
-//     }
-//
-//     pub fn messages(&self) -> Vec<String> {
-//         self.lines.clone()
-//     }
-// }

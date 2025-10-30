@@ -3,7 +3,7 @@ pub mod table;
 use std::str::FromStr;
 use crate::Registry;
 use crate::error::{AppResult, DomainError};
-use crate::input::parser::{Intent, Preposition, Quantifier};
+use crate::input::parser::{Intent, NounPhrase, Preposition, Quantifier};
 use crate::lua::table::format_lua_value;
 use crate::models::account::Account;
 use crate::models::room::{ResolvedExit, ResolvedObject, RoomView};
@@ -729,7 +729,6 @@ fn create_lua_intent_table(lua: &Lua, intent: &Intent) -> mlua::Result<Table> {
 
     t.set("verb", intent.verb.as_str())?;
     t.set("original", intent.original.as_str())?;
-    t.set("raw_verb", intent.raw_verb.as_deref())?;
 
     let args_tbl = lua.create_table()?;
     for (i, a) in intent.args.iter().enumerate() {
@@ -737,12 +736,37 @@ fn create_lua_intent_table(lua: &Lua, intent: &Intent) -> mlua::Result<Table> {
     }
     t.set("args", args_tbl)?;
 
-    t.set("direction", intent.direction.as_ref().map(Direction::as_str))?;
+    if let Some(direct) = intent.direct.as_ref() {
+        t.set("direct", create_nounphrase_table(lua, direct)?)?;
+    }
+    if let Some(target) = intent.target.as_ref() {
+        t.set("target", create_nounphrase_table(lua, target)?)?;
+    }
+    if let Some(instrument) = intent.instrument.as_ref() {
+        t.set("instrument", create_nounphrase_table(lua, instrument)?)?;
+    }
     t.set("preposition", intent.preposition.as_ref().map(Preposition::as_str))?;
+    t.set("direct_raw", intent.direct.as_ref().map(|np| np.raw.as_str()))?;
+    t.set("direction", intent.direction.as_ref().map(Direction::as_str))?;
     t.set("quantifier", intent.quantifier.as_ref().map(Quantifier::as_str))?;
 
     _ = set_lua_table_readonly!(t, lua);
     Ok(t)
+}
+
+fn create_nounphrase_table(lua: &Lua, np: &NounPhrase) -> mlua::Result<Table> {
+    let tbl = lua.create_table()?;
+
+    tbl.set("raw", np.raw.to_string())?;
+    tbl.set("head", np.head.to_string())?;
+    let args_tbl = lua.create_table()?;
+    for (i, a) in np.adjectives.iter().enumerate() {
+        args_tbl.set(i + 1, a.as_str())?;
+    }
+    tbl.set("adjectives", args_tbl)?;
+    tbl.set("quoted", np.quoted)?;
+
+    Ok(tbl)
 }
 
 fn handle_room_script(lua: &Lua, ctx: &LuaArgContext, hook: ScriptHook, reply: Sender<LuaResult>) {

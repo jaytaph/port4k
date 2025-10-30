@@ -1,8 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::runtime::Handle;
-
-use port4k_server::{
+use port4k::{
     Registry, config, db,
     lua::start_lua_worker,
     net::{http, telnet},

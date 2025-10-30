@@ -173,7 +173,7 @@ scripts:
 items_catalog:
   - id: energy_cell
     name: "Energy Cell"
-    nouns: ["energy cell", "power cell"]
+    nouns: ["energy cell", "cell", "power cell", "battery"]
     short: "standard energy cell"
     description: "A medium-capacity power cell, fully charged."
     examine: "The indicator shows a full charge. Perfect for powering larger systems."

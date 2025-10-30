@@ -431,7 +431,9 @@ pub struct InventorySummaryItem {
 // EXAMPLES
 // ============================================================================
 
+
 #[cfg(test)]
+#[allow(unused)]
 mod example_usage {
     use super::*;
 

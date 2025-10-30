@@ -37,11 +37,7 @@ CREATE TABLE bp_item_nouns (
     bp_id UUID NOT NULL REFERENCES blueprints(id) ON DELETE CASCADE,
     item_id UUID NOT NULL REFERENCES bp_items_catalog(id) ON DELETE CASCADE,
     noun VARCHAR(64) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    -- Ensure each noun is unique within a blueprint
-    -- (prevents "spanner" from referring to multiple items)
-    CONSTRAINT uq_bp_item_nouns_bp_noun UNIQUE(bp_id, noun)
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Indexes for blueprint catalog lookups

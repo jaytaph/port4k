@@ -1,14 +1,13 @@
 use anyhow::Context;
 use clap::Parser;
-use port4k_server::config;
-use port4k_server::import_blueprint::import_blueprint_sub_dir;
-use port4k_server::models::types::BlueprintId;
+use port4k::config;
+use port4k::import_blueprint::import_blueprint_sub_dir;
+use port4k::models::types::BlueprintId;
 use std::path::PathBuf;
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// Adjust this to however you construct your Db wrapper.
-use port4k_server::db::Db;
+use port4k::db::Db;
 
 #[derive(Debug, Parser)]
 #[command(name = "import-yaml", version, about = "Import YAML rooms into a blueprint")]

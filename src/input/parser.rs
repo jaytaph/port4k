@@ -16,7 +16,7 @@
 use crate::models::types::Direction;
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Verb {
     Look,
     Examine,
@@ -39,13 +39,12 @@ pub enum Verb {
     Logout,
     LuaRepl,
     Register,
-    /// Unrecognized; keep the raw verb so Lua/room handlers can try.
-    Unknown,
     /// Special commands starting with '@'
     ScBlueprint,
     ScPlaytest,
-    // ScScript,
     ScDebug,
+    /// Custom verb not in our known list
+    Custom(String),
 }
 
 impl Verb {
@@ -72,11 +71,10 @@ impl Verb {
             Verb::Logout => "logout",
             Verb::Register => "register",
             Verb::LuaRepl => "lua",
-            Verb::Unknown => "unknown",
             Verb::ScBlueprint => "@bp",
             Verb::ScPlaytest => "@playtest",
-            // Verb::ScScript => "@script",
             Verb::ScDebug => "@debug",
+            Verb::Custom(s) => s.as_str(),
         }
     }
 }
@@ -151,6 +149,9 @@ pub struct Intent {
     pub instrument: Option<NounPhrase>,
     pub preposition: Option<Preposition>,
 
+    // Raw direct data (for number, codes etc)
+    pub direct_raw: Option<String>,
+
     // Movement / special
     pub direction: Option<Direction>,
 
@@ -159,9 +160,6 @@ pub struct Intent {
 
     /// Optional list of objects (e.g. "take coin, screwdriver and key")
     pub objects: Vec<NounPhrase>,
-
-    /// If we couldn't canonicalize the verb, keep it here for scripting.
-    pub raw_verb: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -178,17 +176,17 @@ pub fn parse_command(input: &str) -> Intent {
     // Short-circuit: blank input
     if tokens.is_empty() {
         return Intent {
-            verb: Verb::Unknown,
+            verb: Verb::Custom("".to_string()),
             args: vec![],
             original: normalized,
             direct: None,
+            direct_raw: None,
             target: None,
             instrument: None,
             preposition: None,
             direction: None,
             quantifier: None,
             objects: vec![],
-            raw_verb: None,
         };
     }
 
@@ -199,18 +197,18 @@ pub fn parse_command(input: &str) -> Intent {
             args: vec![],
             original: normalized,
             direct: None,
+            direct_raw: None,
             target: None,
             instrument: None,
             preposition: None,
             direction: Some(dir),
             quantifier: None,
             objects: vec![],
-            raw_verb: None,
         };
     }
 
     // Identify verb (phrasal first, then single)
-    let (verb, consumed, forced_prep, raw_verb) = detect_verb(&tokens);
+    let (verb, consumed, forced_prep, _raw_verb) = detect_verb(&tokens);
 
     // Movement form "go north"
     if verb == Verb::Go {
@@ -221,13 +219,13 @@ pub fn parse_command(input: &str) -> Intent {
             args: tokens.iter().map(|t| t.lower.clone()).collect(),
             original: normalized,
             direct: None,
+            direct_raw: None,
             target: None,
             instrument: None,
             preposition: None,
             direction: dir,
             quantifier: None,
             objects: vec![],
-            raw_verb,
         };
     }
 
@@ -248,6 +246,12 @@ pub fn parse_command(input: &str) -> Intent {
 
     // Quantifier (e.g., "all") typically sits before the direct object
     let quantifier = extract_quantifier(&mut pre_slot);
+
+    let direct_raw = if !pre_slot.is_empty() && is_raw_data(&pre_slot) {
+        Some(pre_slot.iter().map(|t| t.raw.as_str()).collect::<Vec<_>>().join(" "))
+    } else {
+        None
+    };
 
     // Build noun phrases
     let direct_objects = if list_friendly {
@@ -270,6 +274,7 @@ pub fn parse_command(input: &str) -> Intent {
         args: tokens.iter().map(|t| t.lower.clone()).collect(),
         original: normalized,
         direct,
+        direct_raw,
         target,
         instrument,
         preposition: forced_prep,
@@ -277,8 +282,21 @@ pub fn parse_command(input: &str) -> Intent {
         quantifier,
         // If there were multiple objects for verbs like "take", keep them here
         objects: direct_objects,
-        raw_verb,
     }
+}
+
+// Helper to detect if tokens look like raw data (numbers, codes)
+fn is_raw_data(tokens: &[Token]) -> bool {
+    if tokens.is_empty() {
+        return false;
+    }
+
+    // Check if it's all digits/numbers
+    let all_numeric = tokens.iter().all(|t| {
+        t.raw.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '.')
+    });
+
+    all_numeric
 }
 
 //
@@ -357,8 +375,6 @@ fn tokenize(s: &str) -> Vec<Token> {
 //
 
 fn detect_verb(tokens: &[Token]) -> (Verb, usize, Option<Preposition>, Option<String>) {
-    // let mut raw_verb: Option<String> = None;
-
     // Phrasal verbs (2-word) that imply a preposition or canonical verb
     if tokens.len() >= 2 {
         let a = tokens[0].lower.as_str();
@@ -371,7 +387,7 @@ fn detect_verb(tokens: &[Token]) -> (Verb, usize, Option<Preposition>, Option<St
             ("put", "in") | ("put", "into") => return (Verb::Put, 2, Some(Preposition::In), None),
             ("put", "on") | ("put", "onto") => return (Verb::Put, 2, Some(Preposition::On), None),
             ("talk", "to") => return (Verb::Talk, 2, Some(Preposition::To), None),
-            ("give", "to") => return (Verb::Use, 2, Some(Preposition::To), None), // map to Use/Give later if needed
+            ("give", "to") => return (Verb::Use, 2, Some(Preposition::To), None),
             _ => {}
         }
     }
@@ -379,14 +395,13 @@ fn detect_verb(tokens: &[Token]) -> (Verb, usize, Option<Preposition>, Option<St
     // Single-word verbs (with synonyms)
     let verb_map = verb_map();
     let a = tokens[0].lower.as_str();
-    if let Some(v) = verb_map.get(a).copied() {
-        return (v, 1, None, None);
+    if let Some(v) = verb_map.get(a) {
+        return (v.clone(), 1, None, None);
     }
 
-    // "go <direction>" typed as "north" is handled earlier; here "go" already mapped if needed.
-    // Unknown verb: pass the raw string upward
-    let raw_verb = Some(tokens[0].raw.clone());
-    (Verb::Unknown, 1, None, raw_verb)
+    // Custom/unknown verb: pass as Custom variant
+    let raw_verb = tokens[0].raw.clone();
+    (Verb::Custom(raw_verb.clone()), 1, None, Some(raw_verb))
 }
 
 fn verb_map() -> HashMap<&'static str, Verb> {
@@ -747,8 +762,8 @@ mod tests {
     #[test]
     fn t_unknown_verb_kept_raw() {
         let i = parse_command("frobnicate lever");
-        assert_eq!(i.verb, Verb::Unknown);
-        assert_eq!(i.raw_verb.as_deref(), Some("frobnicate"));
+        assert_eq!(i.verb, Verb::Custom("frobnicate".to_string()));
+        assert_eq!(i.direct_raw.as_deref(), None);
         assert_eq!(i.direct.unwrap().head, "lever");
     }
 
@@ -893,5 +908,465 @@ mod tests {
         assert_eq!(i.verb, Verb::Look);
         assert_eq!(i.preposition, Some(Preposition::At));
         assert_eq!(i.direct.unwrap().head, "markings");
+    }
+
+    #[test]
+    fn t_enter_code_on_panel() {
+        let i = parse_command("enter 1234 on panel");
+        assert_eq!(i.verb, Verb::Custom("enter".to_string()));
+        assert_eq!(i.direct_raw.as_deref(), Some("1234"));
+        assert_eq!(i.preposition, Some(Preposition::On));
+        assert_eq!(i.target.unwrap().head, "panel");
+    }
+
+    #[test]
+    fn t_shatter_with_hammer() {
+        let i = parse_command("shatter glass door with hammer");
+        assert_eq!(i.verb, Verb::Custom("shatter".to_string()));
+        assert_eq!(i.direct.as_ref().unwrap().raw, "glass door");
+        assert_eq!(i.preposition, Some(Preposition::With));
+        assert_eq!(i.instrument.unwrap().head, "hammer");
+    }
+
+    #[test]
+    fn t_custom_verb_simple() {
+        let i = parse_command("dance");
+        assert_eq!(i.verb, Verb::Custom("dance".to_string()));
+        assert!(i.direct.is_none());
+        assert!(i.direct_raw.is_none());
+    }
+
+    #[test]
+    fn t_custom_verb_with_object() {
+        let i = parse_command("kick ball");
+        assert_eq!(i.verb, Verb::Custom("kick".to_string()));
+        assert_eq!(i.direct.unwrap().head, "ball");
+    }
+
+    #[test]
+    fn t_custom_verb_with_prep() {
+        let i = parse_command("climb on ladder");
+        assert_eq!(i.verb, Verb::Custom("climb".to_string()));
+        assert_eq!(i.preposition, Some(Preposition::On));
+        assert_eq!(i.target.unwrap().head, "ladder");
+    }
+
+    #[test]
+    fn t_custom_verb_multiword_object() {
+        let i = parse_command("break wooden crate with crowbar");
+        assert_eq!(i.verb, Verb::Custom("break".to_string()));
+        assert_eq!(i.direct.as_ref().unwrap().raw, "wooden crate");
+        assert_eq!(i.direct.as_ref().unwrap().head, "crate");
+        assert_eq!(i.direct.as_ref().unwrap().adjectives, vec!["wooden"]);
+        assert_eq!(i.preposition, Some(Preposition::With));
+        assert_eq!(i.instrument.unwrap().head, "crowbar");
+    }
+
+    // ---- Raw data tests ----
+
+    #[test]
+    fn t_enter_simple_code() {
+        let i = parse_command("enter 4312");
+        dbg!(&i);
+        assert_eq!(i.verb, Verb::Custom("enter".to_string()));
+        assert_eq!(i.direct_raw.as_deref(), Some("4312"));
+        assert!(i.direct.unwrap().head == "4312");
+    }
+
+    #[test]
+    fn t_type_code_with_dashes() {
+        let i = parse_command("type 123-456");
+        assert_eq!(i.verb, Verb::Custom("type".to_string()));
+        assert_eq!(i.direct_raw.as_deref(), Some("123-456"));
+    }
+
+    #[test]
+    fn t_input_decimal() {
+        let i = parse_command("input 3.14 into console");
+        assert_eq!(i.verb, Verb::Custom("input".to_string()));
+        assert_eq!(i.direct_raw.as_deref(), Some("3.14"));
+        assert_eq!(i.preposition, Some(Preposition::In));
+        assert_eq!(i.target.unwrap().head, "console");
+    }
+
+    #[test]
+    fn t_dial_number() {
+        let i = parse_command("dial 555-1234 on phone");
+        assert_eq!(i.verb, Verb::Custom("dial".to_string()));
+        assert_eq!(i.direct_raw.as_deref(), Some("555-1234"));
+        assert_eq!(i.preposition, Some(Preposition::On));
+        assert_eq!(i.target.unwrap().head, "phone");
+    }
+
+    // ---- Preposition edge cases ----
+
+    #[test]
+    fn t_multiple_preps_first_wins() {
+        let i = parse_command("put coin in box on table");
+        assert_eq!(i.verb, Verb::Put);
+        assert_eq!(i.direct.unwrap().head, "coin");
+        assert_eq!(i.preposition, Some(Preposition::In));
+        // "box on table" becomes the target
+        assert_eq!(i.target.as_ref().unwrap().raw, "box on table");
+    }
+
+    #[test]
+    fn t_preposition_at_start_no_object() {
+        let i = parse_command("look at");
+        assert_eq!(i.verb, Verb::Look);
+        assert_eq!(i.preposition, Some(Preposition::At));
+        assert!(i.direct.is_none());
+    }
+
+    #[test]
+    fn t_using_synonym_for_with() {
+        let i = parse_command("cut rope using knife");
+        assert_eq!(i.verb, Verb::Custom("cut".to_string()));
+        assert_eq!(i.direct.unwrap().head, "rope");
+        assert_eq!(i.preposition, Some(Preposition::With));
+        assert_eq!(i.instrument.unwrap().head, "knife");
+    }
+
+    #[test]
+    fn t_into_vs_in() {
+        let i = parse_command("pour water into glass");
+        assert_eq!(i.verb, Verb::Custom("pour".to_string()));
+        assert_eq!(i.direct.unwrap().head, "water");
+        assert_eq!(i.preposition, Some(Preposition::In));
+        assert_eq!(i.target.unwrap().head, "glass");
+    }
+
+    #[test]
+    fn t_onto_vs_on() {
+        let i = parse_command("jump onto platform");
+        assert_eq!(i.verb, Verb::Custom("jump".to_string()));
+        assert_eq!(i.preposition, Some(Preposition::On));
+        assert_eq!(i.target.unwrap().head, "platform");
+    }
+
+    // ---- Quoted strings ----
+
+    #[test]
+    fn t_single_quoted_string() {
+        let i = parse_command("read 'warning sign'");
+        assert_eq!(i.verb, Verb::Custom("read".to_string()));
+        let np = i.direct.unwrap();
+        assert_eq!(np.raw, "warning sign");
+        assert_eq!(np.head, "sign");
+        assert!(np.quoted);
+    }
+
+    #[test]
+    fn t_quoted_with_preposition() {
+        let i = parse_command(r#"put "rusty key" in "metal box""#);
+        assert_eq!(i.verb, Verb::Put);
+        assert_eq!(i.direct.as_ref().unwrap().raw, "rusty key");
+        assert!(i.direct.as_ref().unwrap().quoted);
+        assert_eq!(i.preposition, Some(Preposition::In));
+        assert_eq!(i.target.as_ref().unwrap().raw, "metal box");
+        assert!(i.target.as_ref().unwrap().quoted);
+    }
+
+    #[test]
+    fn t_mixed_quoted_unquoted() {
+        let i = parse_command(r#"use "red keycard" on scanner"#);
+        assert_eq!(i.verb, Verb::Use);
+        assert_eq!(i.direct.as_ref().unwrap().raw, "red keycard");
+        assert!(i.direct.as_ref().unwrap().quoted);
+        assert_eq!(i.preposition, Some(Preposition::On));
+        assert_eq!(i.target.as_ref().unwrap().head, "scanner");
+        assert!(!i.target.as_ref().unwrap().quoted);
+    }
+
+    // ---- Quantifiers ----
+
+    #[test]
+    fn t_all_with_preposition() {
+        let i = parse_command("take all items from chest");
+        assert_eq!(i.verb, Verb::Take);
+        assert_eq!(i.quantifier, Some(Quantifier::All));
+        assert_eq!(i.direct.as_ref().unwrap().head, "items");
+        assert_eq!(i.preposition, Some(Preposition::From));
+        assert_eq!(i.target.unwrap().head, "chest");
+    }
+
+    #[test]
+    fn t_everything_no_object() {
+        let i = parse_command("drop everything");
+        assert_eq!(i.verb, Verb::Drop);
+        assert_eq!(i.quantifier, Some(Quantifier::All));
+        assert!(i.direct.is_none());
+    }
+
+    // ---- Complex noun phrases ----
+
+    #[test]
+    fn t_three_word_noun() {
+        let i = parse_command("examine old rusty lock");
+        assert_eq!(i.verb, Verb::Examine);
+        let np = i.direct.unwrap();
+        assert_eq!(np.raw, "old rusty lock");
+        assert_eq!(np.head, "lock");
+        assert_eq!(np.adjectives, vec!["old", "rusty"]);
+    }
+
+    #[test]
+    fn t_determiners_stripped() {
+        let i = parse_command("take the big red ball");
+        assert_eq!(i.verb, Verb::Take);
+        let np = i.direct.unwrap();
+        assert_eq!(np.raw, "big red ball");
+        assert_eq!(np.head, "ball");
+        assert_eq!(np.adjectives, vec!["big", "red"]);
+    }
+
+    #[test]
+    fn t_possessive_stripped() {
+        let i = parse_command("open my old wooden chest");
+        assert_eq!(i.verb, Verb::Open);
+        let np = i.direct.unwrap();
+        assert_eq!(np.raw, "old wooden chest");
+        assert_eq!(np.head, "chest");
+    }
+
+    // ---- List parsing ----
+
+    #[test]
+    fn t_list_no_and() {
+        let i = parse_command("drop coin, key, rope");
+        assert_eq!(i.verb, Verb::Drop);
+        assert_eq!(i.objects.len(), 3);
+        assert_eq!(i.objects[0].head, "coin");
+        assert_eq!(i.objects[1].head, "key");
+        assert_eq!(i.objects[2].head, "rope");
+    }
+
+    #[test]
+    fn t_list_multiword_items() {
+        let i = parse_command("take red key, blue card and green gem");
+        assert_eq!(i.verb, Verb::Take);
+        assert_eq!(i.objects.len(), 3);
+        assert_eq!(i.objects[0].raw, "red key");
+        assert_eq!(i.objects[1].raw, "blue card");
+        assert_eq!(i.objects[2].raw, "green gem");
+    }
+
+    #[test]
+    fn t_list_with_oxford_comma() {
+        let i = parse_command("get hammer, nails, and screwdriver");
+        assert_eq!(i.verb, Verb::Take);
+        assert_eq!(i.objects.len(), 3);
+    }
+
+    // ---- Direction tests ----
+
+    #[test]
+    fn t_all_cardinal_directions() {
+        let dirs = vec![
+            ("n", Direction::North),
+            ("s", Direction::South),
+            ("e", Direction::East),
+            ("w", Direction::West),
+            ("ne", Direction::Northeast),
+            ("nw", Direction::Northwest),
+            ("se", Direction::Southeast),
+            ("sw", Direction::Southwest),
+        ];
+
+        for (cmd, expected_dir) in dirs {
+            let i = parse_command(cmd);
+            assert_eq!(i.verb, Verb::Go);
+            assert_eq!(i.direction, Some(expected_dir));
+        }
+    }
+
+    #[test]
+    fn t_up_down() {
+        let i = parse_command("up");
+        assert_eq!(i.verb, Verb::Go);
+        assert_eq!(i.direction, Some(Direction::Up));
+
+        let i = parse_command("down");
+        assert_eq!(i.verb, Verb::Go);
+        assert_eq!(i.direction, Some(Direction::Down));
+    }
+
+    #[test]
+    fn t_go_with_direction() {
+        let i = parse_command("go northeast");
+        assert_eq!(i.verb, Verb::Go);
+        assert_eq!(i.direction, Some(Direction::Northeast));
+    }
+
+    // ---- Edge cases ----
+
+    #[test]
+    fn t_empty_string() {
+        let i = parse_command("");
+        assert!(matches!(i.verb, Verb::Custom(_)));
+        assert!(i.args.is_empty());
+    }
+
+    #[test]
+    fn t_whitespace_only() {
+        let i = parse_command("   \t  \n  ");
+        assert!(matches!(i.verb, Verb::Custom(_)));
+        assert!(i.args.is_empty());
+    }
+
+    #[test]
+    fn t_single_word_unknown() {
+        let i = parse_command("xyzzy");
+        assert_eq!(i.verb, Verb::Custom("xyzzy".to_string()));
+        assert!(i.direct.is_none());
+    }
+
+    #[test]
+    fn t_case_insensitive() {
+        let i = parse_command("OPEN THE DOOR");
+        assert_eq!(i.verb, Verb::Open);
+        assert_eq!(i.direct.unwrap().head, "door");
+    }
+
+    #[test]
+    fn t_mixed_case() {
+        let i = parse_command("TaKe ReD kEy");
+        assert_eq!(i.verb, Verb::Take);
+        assert_eq!(i.direct.as_ref().unwrap().raw, "red key");
+    }
+
+    #[test]
+    fn t_extra_spaces() {
+        let i = parse_command("  look   at    the     panel  ");
+        assert_eq!(i.verb, Verb::Look);
+        assert_eq!(i.preposition, Some(Preposition::At));
+        assert_eq!(i.direct.unwrap().head, "panel");
+    }
+
+    // ---- Phrasal verb tests ----
+
+    #[test]
+    fn t_pick_up_multiword() {
+        let i = parse_command("pick up rusty screwdriver");
+        assert_eq!(i.verb, Verb::Take);
+        let np = i.direct.unwrap();
+        assert_eq!(np.raw, "rusty screwdriver");
+        assert_eq!(np.head, "screwdriver");
+    }
+
+    #[test]
+    fn t_turn_on_off() {
+        let i = parse_command("turn on generator");
+        assert_eq!(i.verb, Verb::Use);
+        assert_eq!(i.preposition, Some(Preposition::On));
+        assert_eq!(i.direct.unwrap().head, "generator");
+
+        let i = parse_command("turn off lights");
+        assert_eq!(i.verb, Verb::Use);
+        assert_eq!(i.preposition, Some(Preposition::Off));
+        assert_eq!(i.direct.unwrap().head, "lights");
+    }
+
+    // ---- Special commands ----
+
+    #[test]
+    fn t_help_with_question_mark() {
+        let i = parse_command("?");
+        assert_eq!(i.verb, Verb::Help);
+    }
+
+    #[test]
+    fn t_inventory_shortcuts() {
+        for cmd in ["i", "inv", "inventory"] {
+            let i = parse_command(cmd);
+            assert_eq!(i.verb, Verb::Inventory);
+        }
+    }
+
+    #[test]
+    fn t_examine_shortcuts() {
+        for cmd in ["x door", "examine door", "inspect door"] {
+            let i = parse_command(cmd);
+            assert_eq!(i.verb, Verb::Examine);
+            assert_eq!(i.direct.as_ref().unwrap().head, "door");
+        }
+    }
+
+    #[test]
+    fn t_special_commands() {
+        let i = parse_command("@bp");
+        assert_eq!(i.verb, Verb::ScBlueprint);
+
+        let i = parse_command("@playtest");
+        assert_eq!(i.verb, Verb::ScPlaytest);
+
+        let i = parse_command("@debug");
+        assert_eq!(i.verb, Verb::ScDebug);
+    }
+
+    // ---- Args field tests ----
+
+    #[test]
+    fn t_args_preserved() {
+        let i = parse_command("open the red door");
+        assert_eq!(i.args, vec!["open", "the", "red", "door"]);
+    }
+
+    #[test]
+    fn t_args_with_preposition() {
+        let i = parse_command("put coin in box");
+        assert_eq!(i.args, vec!["put", "coin", "in", "box"]);
+    }
+
+    #[test]
+    fn t_args_with_quotes() {
+        let i = parse_command(r#"take "red card""#);
+        assert_eq!(i.args, vec!["take", "red card"]);
+    }
+
+    // ---- Real-world scenarios ----
+
+    #[test]
+    fn t_scenario_keypad() {
+        let i = parse_command("enter 4312 on keypad");
+        assert_eq!(i.verb, Verb::Custom("enter".to_string()));
+        assert_eq!(i.direct_raw.as_deref(), Some("4312"));
+        assert_eq!(i.preposition, Some(Preposition::On));
+        assert_eq!(i.target.unwrap().head, "keypad");
+    }
+
+    #[test]
+    fn t_scenario_lockpick() {
+        let i = parse_command("unlock door with lockpick");
+        assert_eq!(i.verb, Verb::Unlock);
+        assert_eq!(i.direct.unwrap().head, "door");
+        assert_eq!(i.preposition, Some(Preposition::With));
+        assert_eq!(i.instrument.unwrap().head, "lockpick");
+    }
+
+    #[test]
+    fn t_scenario_container() {
+        let i = parse_command("search old wooden chest");
+        assert_eq!(i.verb, Verb::Search);
+        let np = i.direct.unwrap();
+        assert_eq!(np.raw, "old wooden chest");
+        assert_eq!(np.head, "chest");
+    }
+
+    #[test]
+    fn t_scenario_talk() {
+        let i = parse_command("talk to old man");
+        assert_eq!(i.verb, Verb::Talk);
+        assert_eq!(i.preposition, Some(Preposition::To));
+        assert_eq!(i.direct.as_ref().unwrap().raw, "old man");
+    }
+
+    #[test]
+    fn t_scenario_throw() {
+        let i = parse_command("throw rock at window");
+        assert_eq!(i.verb, Verb::Custom("throw".to_string()));
+        assert_eq!(i.direct.unwrap().head, "rock");
+        assert_eq!(i.preposition, Some(Preposition::At));
+        assert_eq!(i.target.unwrap().head, "window");
     }
 }

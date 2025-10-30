@@ -5,7 +5,7 @@ short: "A narrow detention cell with failing systems."
 description: |
   The cell is cramped and utilitarian, its walls lined with reinforced panels that hum faintly with residual charge. A flickering {o:force_field} crackles across the doorway to the north, its emitters sputtering as power fluctuates. The air is stale and metallic.
   
-  A {o:guard_console} beside the field blinks weakly, its screen fractured. In the corner, a {o:maintenance_kit} lies discarded—perhaps left behind when the guards evacuated. Scratched into the wall are crude {o:markings}.
+  A {o:guard_console} beside the field blinks weakly, its screen fractured. In the corner, a {o:maintenance_kit} lies discarded - perhaps left behind when the guards evacuated. Scratched into the wall are crude {o:markings}.
 
 state:
   ambience: "low_hum"
@@ -85,7 +85,7 @@ objects:
       powered: false
       unlocked: false
       code_required: "4312"
-    examine: "The screen flickers: {c:red}LOCKDOWN ACTIVE{c}. It needs power to accept commands."
+    examine: "The screen flickers: {c:bright_white:bright_red}LOCKDOWN ACTIVE{c}. It needs power to accept commands."
     on_use: |
       return function(ctx)
         local verb = ctx.intent.verb
@@ -175,10 +175,18 @@ scripts:
     
   on_command: |
     return function(ctx)
-      if ctx.intent.verb == "read" and port4k.matches_noun(ctx.intent.args, {"markings", "scratches", "graffiti", "symbols"}) then
-        port4k.say("Among the desperate tallies, you clearly read: '4-3-1-2' and 'GUARDS GONE - POWER FAILURE'.")
-        return true
+      local noun = ctx.intent.args[2] or ""
+      local valid_nouns = {"markings", "scratches", "graffiti", "symbols"}
+      
+      if ctx.intent.args[1] == "read" then
+        for _, valid in ipairs(valid_nouns) do
+          if noun == valid then
+            port4k.say("Among the desperate tallies, you clearly read: '4-3-1-2' and 'GUARDS GONE - POWER FAILURE'.")
+            return true
+          end
+        end
       end
+      
       return false
     end
 
