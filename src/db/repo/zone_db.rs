@@ -4,9 +4,9 @@ use crate::db::{Db, DbResult};
 use crate::models::room::Kv;
 use crate::models::types::{ExitId, ObjectId, RoomId, ZoneId};
 use crate::models::zone::Zone;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde_json::Value;
 
 pub struct ZoneRepository {
     db: Arc<Db>,

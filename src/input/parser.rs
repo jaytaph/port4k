@@ -292,9 +292,9 @@ fn is_raw_data(tokens: &[Token]) -> bool {
     }
 
     // Check if it's all digits/numbers
-    let all_numeric = tokens.iter().all(|t| {
-        t.raw.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '.')
-    });
+    let all_numeric = tokens
+        .iter()
+        .all(|t| t.raw.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '.'));
 
     all_numeric
 }

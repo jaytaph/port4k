@@ -91,10 +91,12 @@ struct LootYaml {
     #[serde(default = "default_true")]
     pub once: bool,
     #[serde(default)]
-    pub shared: bool,  // NEW: false = per-player, true = global
+    pub shared: bool, // NEW: false = per-player, true = global
 }
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ObjectYaml {
@@ -202,7 +204,8 @@ pub async fn import_blueprint_sub_dir(
                 if existing.name != item.name
                     || existing.short != item.short
                     || existing.description != item.description
-                    || existing.stackable != item.stackable {
+                    || existing.stackable != item.stackable
+                {
                     return Err(DomainError::Validation {
                         field: "items_catalog",
                         message: format!(
@@ -350,8 +353,8 @@ async fn upsert_room_kv(
             "#,
             &[&room_id, k, v],
         )
-            .await
-            .map_err(DbError::from)?;
+        .await
+        .map_err(DbError::from)?;
     }
     Ok(())
 }
@@ -408,8 +411,8 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
                 "#,
                 &[&obj_id, k, v],
             )
-                .await
-                .map_err(DbError::from)?;
+            .await
+            .map_err(DbError::from)?;
         }
 
         // nouns
@@ -422,8 +425,8 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
                 "#,
                 &[&room_id, &obj_id, n],
             )
-                .await
-                .map_err(DbError::from)?;
+            .await
+            .map_err(DbError::from)?;
         }
     }
 
@@ -477,8 +480,8 @@ async fn upsert_blueprint_items_catalog(
                 "#,
                 &[&bp_id, &item_id, noun],
             )
-                .await
-                .map_err(DbError::from)?;
+            .await
+            .map_err(DbError::from)?;
         }
     }
 
@@ -496,8 +499,8 @@ async fn upsert_room_scripts(tx: &Transaction<'_>, room_id: uuid::Uuid, scripts:
             "#,
             &[&room_id, &hook.as_str(), &script],
         )
-            .await
-            .map_err(DbError::from)?;
+        .await
+        .map_err(DbError::from)?;
     }
     Ok(())
 }
@@ -534,8 +537,8 @@ async fn upsert_exits(
                 &ex.visible_when_locked,
             ],
         )
-            .await
-            .map_err(DbError::from)?;
+        .await
+        .map_err(DbError::from)?;
     }
     Ok(())
 }
@@ -651,7 +654,7 @@ fn validate_room_semantics(room: &RoomYaml) -> AppResult<()> {
                 }
             }
         }
-    }   
+    }
 
     // object ids unique
     let mut obj_ids = HashSet::new();

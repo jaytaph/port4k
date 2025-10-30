@@ -1,8 +1,8 @@
-use crate::db::{Db, DbResult, DbError};
-use crate::models::inventory::{Item, ItemInstance, ItemLocation};
-use crate::models::types::{AccountId, ItemId, ZoneId, ObjectId, RoomId, BlueprintId};
-use std::sync::Arc;
 use crate::db::repo::inventory::InventoryRepo;
+use crate::db::{Db, DbError, DbResult};
+use crate::models::inventory::{Item, ItemInstance, ItemLocation};
+use crate::models::types::{AccountId, BlueprintId, ItemId, ObjectId, RoomId, ZoneId};
+use std::sync::Arc;
 
 pub struct InventoryRepository {
     db: Arc<Db>,
@@ -25,7 +25,6 @@ impl InventoryRepository {
 
 #[async_trait::async_trait]
 impl InventoryRepo for InventoryRepository {
-
     // ========================================================================
     // CATALOG QUERIES
     // ========================================================================
@@ -150,17 +149,20 @@ impl InventoryRepo for InventoryRepository {
             )
             .await?;
 
-        Ok(rows.into_iter().map(|row| Item {
-            id: row.get(0),
-            bp_id: row.get(1),
-            item_key: row.get(2),
-            name: row.get(3),
-            short: row.get(4),
-            description: row.get(5),
-            examine: row.get(6),
-            stackable: row.get(7),
-            nouns: row.get(8),
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| Item {
+                id: row.get(0),
+                bp_id: row.get(1),
+                item_key: row.get(2),
+                name: row.get(3),
+                short: row.get(4),
+                description: row.get(5),
+                examine: row.get(6),
+                stackable: row.get(7),
+                nouns: row.get(8),
+            })
+            .collect())
     }
 
     // ========================================================================
@@ -189,12 +191,8 @@ impl InventoryRepo for InventoryRepository {
             )
             .await?;
 
-        let location = ItemLocation::from_db_columns(
-            row.get(3),
-            row.get(4),
-            row.get(5),
-            row.get(6),
-        ).map_err(|e| DbError::DataError(e))?;
+        let location = ItemLocation::from_db_columns(row.get(3), row.get(4), row.get(5), row.get(6))
+            .map_err(|e| DbError::DataError(e))?;
 
         Ok(ItemInstance {
             instance_id: row.get(0),
@@ -302,35 +300,38 @@ impl InventoryRepo for InventoryRepository {
             )
             .await?;
 
-        rows.into_iter().map(|row| {
-            let location = ItemLocation::from_db_columns(
-                row.get(3),
-                row.get(4),
-                row.get(5),
-                row.get(6),
-            ).map_err(|e| DbError::DataError(e))?;
+        rows.into_iter()
+            .map(|row| {
+                let location = ItemLocation::from_db_columns(row.get(3), row.get(4), row.get(5), row.get(6))
+                    .map_err(|e| DbError::DataError(e))?;
 
-            Ok(ItemInstance {
-                instance_id: row.get(0),
-                zone_id: row.get(1),
-                catalog_id: row.get(2),
-                location,
-                quantity: row.get(7),
-                condition: row.get(8),
-                created_at: row.get(9),
-                updated_at: row.get(10),
-                item_key: row.get(11),
-                name: row.get(12),
-                short: row.get(13),
-                description: row.get(14),
-                examine: row.get(15),
-                stackable: row.get(16),
-                nouns: row.get(17),
+                Ok(ItemInstance {
+                    instance_id: row.get(0),
+                    zone_id: row.get(1),
+                    catalog_id: row.get(2),
+                    location,
+                    quantity: row.get(7),
+                    condition: row.get(8),
+                    created_at: row.get(9),
+                    updated_at: row.get(10),
+                    item_key: row.get(11),
+                    name: row.get(12),
+                    short: row.get(13),
+                    description: row.get(14),
+                    examine: row.get(15),
+                    stackable: row.get(16),
+                    nouns: row.get(17),
+                })
             })
-        }).collect()
+            .collect()
     }
 
-    async fn find_item_in_player_inventory(&self, zone_id: ZoneId, account_id: AccountId, noun: &str) -> DbResult<Option<ItemInstance>> {
+    async fn find_item_in_player_inventory(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        noun: &str,
+    ) -> DbResult<Option<ItemInstance>> {
         let client = self.db.pool.get().await?;
 
         let row = client
@@ -355,12 +356,8 @@ impl InventoryRepo for InventoryRepository {
             .await?;
 
         row.map(|r| {
-            let location = ItemLocation::from_db_columns(
-                r.get(3),
-                r.get(4),
-                r.get(5),
-                r.get(6),
-            ).map_err(|e| DbError::DataError(e))?;
+            let location = ItemLocation::from_db_columns(r.get(3), r.get(4), r.get(5), r.get(6))
+                .map_err(|e| DbError::DataError(e))?;
 
             Ok(ItemInstance {
                 instance_id: r.get(0),
@@ -379,10 +376,16 @@ impl InventoryRepo for InventoryRepository {
                 stackable: r.get(16),
                 nouns: r.get(17),
             })
-        }).transpose()
+        })
+        .transpose()
     }
 
-    async fn find_item_by_key_in_inventory(&self, zone_id: ZoneId, account_id: AccountId, item_key: &str) -> DbResult<Option<ItemInstance>> {
+    async fn find_item_by_key_in_inventory(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        item_key: &str,
+    ) -> DbResult<Option<ItemInstance>> {
         let client = self.db.pool.get().await?;
 
         let row = client
@@ -406,12 +409,8 @@ impl InventoryRepo for InventoryRepository {
             .await?;
 
         row.map(|r| {
-            let location = ItemLocation::from_db_columns(
-                r.get(3),
-                r.get(4),
-                r.get(5),
-                r.get(6),
-            ).map_err(|e| DbError::DataError(e))?;
+            let location = ItemLocation::from_db_columns(r.get(3), r.get(4), r.get(5), r.get(6))
+                .map_err(|e| DbError::DataError(e))?;
 
             Ok(ItemInstance {
                 instance_id: r.get(0),
@@ -430,7 +429,8 @@ impl InventoryRepo for InventoryRepository {
                 stackable: r.get(16),
                 nouns: r.get(17),
             })
-        }).transpose()
+        })
+        .transpose()
     }
 
     // ========================================================================
@@ -460,32 +460,30 @@ impl InventoryRepo for InventoryRepository {
             )
             .await?;
 
-        rows.into_iter().map(|row| {
-            let location = ItemLocation::from_db_columns(
-                row.get(3),
-                row.get(4),
-                row.get(5),
-                row.get(6),
-            ).map_err(|e| DbError::DataError(e))?;
+        rows.into_iter()
+            .map(|row| {
+                let location = ItemLocation::from_db_columns(row.get(3), row.get(4), row.get(5), row.get(6))
+                    .map_err(|e| DbError::DataError(e))?;
 
-            Ok(ItemInstance {
-                instance_id: row.get(0),
-                zone_id: row.get(1),
-                catalog_id: row.get(2),
-                location,
-                quantity: row.get(7),
-                condition: row.get(8),
-                created_at: row.get(9),
-                updated_at: row.get(10),
-                item_key: row.get(11),
-                name: row.get(12),
-                short: row.get(13),
-                description: row.get(14),
-                examine: row.get(15),
-                stackable: row.get(16),
-                nouns: row.get(17),
+                Ok(ItemInstance {
+                    instance_id: row.get(0),
+                    zone_id: row.get(1),
+                    catalog_id: row.get(2),
+                    location,
+                    quantity: row.get(7),
+                    condition: row.get(8),
+                    created_at: row.get(9),
+                    updated_at: row.get(10),
+                    item_key: row.get(11),
+                    name: row.get(12),
+                    short: row.get(13),
+                    description: row.get(14),
+                    examine: row.get(15),
+                    stackable: row.get(16),
+                    nouns: row.get(17),
+                })
             })
-        }).collect()
+            .collect()
     }
 
     async fn find_item_in_room(&self, zone_id: ZoneId, room_id: RoomId, noun: &str) -> DbResult<Option<ItemInstance>> {
@@ -513,12 +511,8 @@ impl InventoryRepo for InventoryRepository {
             .await?;
 
         row.map(|r| {
-            let location = ItemLocation::from_db_columns(
-                r.get(3),
-                r.get(4),
-                r.get(5),
-                r.get(6),
-            ).map_err(|e| DbError::DataError(e))?;
+            let location = ItemLocation::from_db_columns(r.get(3), r.get(4), r.get(5), r.get(6))
+                .map_err(|e| DbError::DataError(e))?;
 
             Ok(ItemInstance {
                 instance_id: r.get(0),
@@ -537,7 +531,8 @@ impl InventoryRepo for InventoryRepository {
                 stackable: r.get(16),
                 nouns: r.get(17),
             })
-        }).transpose()
+        })
+        .transpose()
     }
 
     // ========================================================================
@@ -567,35 +562,38 @@ impl InventoryRepo for InventoryRepository {
             )
             .await?;
 
-        rows.into_iter().map(|row| {
-            let location = ItemLocation::from_db_columns(
-                row.get(3),
-                row.get(4),
-                row.get(5),
-                row.get(6),
-            ).map_err(|e| DbError::DataError(e))?;
+        rows.into_iter()
+            .map(|row| {
+                let location = ItemLocation::from_db_columns(row.get(3), row.get(4), row.get(5), row.get(6))
+                    .map_err(|e| DbError::DataError(e))?;
 
-            Ok(ItemInstance {
-                instance_id: row.get(0),
-                zone_id: row.get(1),
-                catalog_id: row.get(2),
-                location,
-                quantity: row.get(7),
-                condition: row.get(8),
-                created_at: row.get(9),
-                updated_at: row.get(10),
-                item_key: row.get(11),
-                name: row.get(12),
-                short: row.get(13),
-                description: row.get(14),
-                examine: row.get(15),
-                stackable: row.get(16),
-                nouns: row.get(17),
+                Ok(ItemInstance {
+                    instance_id: row.get(0),
+                    zone_id: row.get(1),
+                    catalog_id: row.get(2),
+                    location,
+                    quantity: row.get(7),
+                    condition: row.get(8),
+                    created_at: row.get(9),
+                    updated_at: row.get(10),
+                    item_key: row.get(11),
+                    name: row.get(12),
+                    short: row.get(13),
+                    description: row.get(14),
+                    examine: row.get(15),
+                    stackable: row.get(16),
+                    nouns: row.get(17),
+                })
             })
-        }).collect()
+            .collect()
     }
 
-    async fn find_item_in_object(&self, zone_id: ZoneId, object_id: ObjectId, noun: &str) -> DbResult<Option<ItemInstance>> {
+    async fn find_item_in_object(
+        &self,
+        zone_id: ZoneId,
+        object_id: ObjectId,
+        noun: &str,
+    ) -> DbResult<Option<ItemInstance>> {
         let client = self.db.pool.get().await?;
 
         let row = client
@@ -620,12 +618,8 @@ impl InventoryRepo for InventoryRepository {
             .await?;
 
         row.map(|r| {
-            let location = ItemLocation::from_db_columns(
-                r.get(3),
-                r.get(4),
-                r.get(5),
-                r.get(6),
-            ).map_err(|e| DbError::DataError(e))?;
+            let location = ItemLocation::from_db_columns(r.get(3), r.get(4), r.get(5), r.get(6))
+                .map_err(|e| DbError::DataError(e))?;
 
             Ok(ItemInstance {
                 instance_id: r.get(0),
@@ -644,14 +638,20 @@ impl InventoryRepo for InventoryRepository {
                 stackable: r.get(16),
                 nouns: r.get(17),
             })
-        }).transpose()
+        })
+        .transpose()
     }
 
     // ========================================================================
     // LOOT STATE
     // ========================================================================
 
-    async fn is_loot_instantiated(&self, zone_id: ZoneId, object_id: ObjectId, account_id: Option<AccountId>) -> DbResult<bool> {
+    async fn is_loot_instantiated(
+        &self,
+        zone_id: ZoneId,
+        object_id: ObjectId,
+        account_id: Option<AccountId>,
+    ) -> DbResult<bool> {
         let client = self.db.pool.get().await?;
 
         let row = client
@@ -669,11 +669,16 @@ impl InventoryRepo for InventoryRepository {
 
         match row {
             Ok(r) => Ok(r.get(0)),
-            Err(_) => Ok(false),  // Not found = not instantiated
+            Err(_) => Ok(false), // Not found = not instantiated
         }
     }
 
-    async fn mark_loot_instantiated(&self, zone_id: ZoneId, object_id: ObjectId, account_id: Option<AccountId>) -> DbResult<()> {
+    async fn mark_loot_instantiated(
+        &self,
+        zone_id: ZoneId,
+        object_id: ObjectId,
+        account_id: Option<AccountId>,
+    ) -> DbResult<()> {
         let client = self.db.pool.get().await?;
 
         client
@@ -710,7 +715,15 @@ impl InventoryRepo for InventoryRepository {
         let row = client
             .query_one(
                 "SELECT spawn_item($1, $2, $3, $4, $5, $6, $7)",
-                &[&zone_id, &item_key, &room_id, &account_id, &object_id, &container_item_id, &quantity],
+                &[
+                    &zone_id,
+                    &item_key,
+                    &room_id,
+                    &account_id,
+                    &object_id,
+                    &container_item_id,
+                    &quantity,
+                ],
             )
             .await?;
 

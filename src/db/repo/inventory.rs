@@ -1,10 +1,9 @@
 use crate::db::DbResult;
 use crate::models::inventory::{Item, ItemInstance, ItemLocation};
-use crate::models::types::{AccountId, ItemId, ZoneId, ObjectId, RoomId};
+use crate::models::types::{AccountId, ItemId, ObjectId, RoomId, ZoneId};
 
 #[async_trait::async_trait]
 pub trait InventoryRepo: Send + Sync {
-
     // ========================================================================
     // CATALOG QUERIES (Blueprint-level item definitions)
     // ========================================================================
@@ -45,10 +44,20 @@ pub trait InventoryRepo: Send + Sync {
     async fn get_player_inventory(&self, zone_id: ZoneId, account_id: AccountId) -> DbResult<Vec<ItemInstance>>;
 
     /// Find item in player inventory by noun
-    async fn find_item_in_player_inventory(&self, zone_id: ZoneId, account_id: AccountId, noun: &str) -> DbResult<Option<ItemInstance>>;
+    async fn find_item_in_player_inventory(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        noun: &str,
+    ) -> DbResult<Option<ItemInstance>>;
 
     /// Find item in player inventory by item_key
-    async fn find_item_by_key_in_inventory(&self, zone_id: ZoneId, account_id: AccountId, item_key: &str) -> DbResult<Option<ItemInstance>>;
+    async fn find_item_by_key_in_inventory(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        item_key: &str,
+    ) -> DbResult<Option<ItemInstance>>;
 
     // ========================================================================
     // ROOM QUERIES
@@ -68,7 +77,12 @@ pub trait InventoryRepo: Send + Sync {
     async fn get_object_items(&self, zone_id: ZoneId, object_id: ObjectId) -> DbResult<Vec<ItemInstance>>;
 
     /// Find item in object by noun
-    async fn find_item_in_object(&self, zone_id: ZoneId, object_id: ObjectId, noun: &str) -> DbResult<Option<ItemInstance>>;
+    async fn find_item_in_object(
+        &self,
+        zone_id: ZoneId,
+        object_id: ObjectId,
+        noun: &str,
+    ) -> DbResult<Option<ItemInstance>>;
 
     // ========================================================================
     // LOOT STATE
@@ -76,10 +90,20 @@ pub trait InventoryRepo: Send + Sync {
 
     /// Check if object's loot has been instantiated
     /// account_id is None for shared/global loot, Some for per-player loot
-    async fn is_loot_instantiated(&self, zone_id: ZoneId, object_id: ObjectId, account_id: Option<AccountId>) -> DbResult<bool>;
+    async fn is_loot_instantiated(
+        &self,
+        zone_id: ZoneId,
+        object_id: ObjectId,
+        account_id: Option<AccountId>,
+    ) -> DbResult<bool>;
 
     /// Mark object's loot as instantiated
-    async fn mark_loot_instantiated(&self, zone_id: ZoneId, object_id: ObjectId, account_id: Option<AccountId>) -> DbResult<()>;
+    async fn mark_loot_instantiated(
+        &self,
+        zone_id: ZoneId,
+        object_id: ObjectId,
+        account_id: Option<AccountId>,
+    ) -> DbResult<()>;
 
     // ========================================================================
     // ITEM SPAWNING
@@ -125,12 +149,14 @@ pub trait InventoryRepo: Send + Sync {
     // ========================================================================
 
     /// Add item to player inventory (spawn + move)
-    async fn add_item(&self, zone_id: ZoneId, account_id: AccountId, item_key: &str, quantity: i32) -> DbResult<ItemId> {
-        self.spawn_item(
-            zone_id,
-            item_key,
-            ItemLocation::Player(account_id),
-            quantity,
-        ).await
+    async fn add_item(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        item_key: &str,
+        quantity: i32,
+    ) -> DbResult<ItemId> {
+        self.spawn_item(zone_id, item_key, ItemLocation::Player(account_id), quantity)
+            .await
     }
 }

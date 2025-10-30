@@ -143,4 +143,3 @@ impl ItemLocation {
         matches!(self, ItemLocation::Room(id) if *id == room_id)
     }
 }
-

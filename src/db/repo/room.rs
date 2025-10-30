@@ -19,7 +19,8 @@ pub trait RoomRepo: Send + Sync {
     async fn room_kv(&self, room_id: RoomId) -> DbResult<Kv>;
 
     async fn set_entry(&self, key: &BlueprintAndRoomKey) -> DbResult<bool>;
-    async fn add_exit(&self, from_key: &BlueprintAndRoomKey, dir: &str, to_key: &BlueprintAndRoomKey) -> DbResult<bool>;
+    async fn add_exit(&self, from_key: &BlueprintAndRoomKey, dir: &str, to_key: &BlueprintAndRoomKey)
+    -> DbResult<bool>;
     async fn set_locked(&self, key: &BlueprintAndRoomKey, locked: bool) -> DbResult<bool>;
     async fn insert_blueprint(&self, bp_key: &str, title: &str, account_id: AccountId) -> DbResult<bool>;
     async fn insert_room(&self, key: &BlueprintAndRoomKey, title: &str, body: &str) -> DbResult<bool>;

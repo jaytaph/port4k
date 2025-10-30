@@ -1,11 +1,14 @@
 use crate::config::Config;
 use crate::db::Db;
-use crate::db::repo::{InventoryRepo, InventoryRepository, RoomRepo};
 use crate::db::repo::ZoneRepo;
 use crate::db::repo::{AccountRepo, AccountRepository, RoomRepository, UserRepo, UserRepository, ZoneRepository};
+use crate::db::repo::{InventoryRepo, InventoryRepository, RoomRepo};
 use crate::models::account::Account;
 use crate::models::zone::{DbBackend, MemoryBackend, ZoneRouter};
-use crate::services::{AccountService, AuthService, BlueprintService, CursorService, InventoryService, NavigatorService, RoomService, ZoneService};
+use crate::services::{
+    AccountService, AuthService, BlueprintService, CursorService, InventoryService, NavigatorService, RoomService,
+    ZoneService,
+};
 use parking_lot::RwLock;
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -26,7 +29,7 @@ pub struct Services {
     pub cursor: Arc<CursorService>,
     pub navigator: Arc<NavigatorService>,
     pub zone: Arc<ZoneService>,
-    pub inventory: Arc<InventoryService>
+    pub inventory: Arc<InventoryService>,
 }
 
 pub struct Registry {

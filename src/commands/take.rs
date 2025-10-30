@@ -1,7 +1,7 @@
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use std::sync::Arc;
 use rand::Rng;
+use std::sync::Arc;
 
 pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.is_empty() {

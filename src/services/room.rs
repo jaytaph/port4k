@@ -271,7 +271,8 @@ impl RoomService {
     ) -> AppResult<bool> {
         match self.exit_by_direction(room_id, exit_dir).await? {
             Some(exit_id) => {
-                let locked = self.user_repo
+                let locked = self
+                    .user_repo
                     .is_exit_locked(zone_id, room_id, account_id, exit_id)
                     .await?;
                 Ok(locked)
@@ -346,9 +347,11 @@ impl RoomService {
         account_id: AccountId,
         object_id: ObjectId,
         key: &str,
-        val: &serde_json::Value
+        val: &serde_json::Value,
     ) -> AppResult<()> {
-        self.user_repo.set_object_kv(zone_id, account_id, object_id, key, val).await?;
+        self.user_repo
+            .set_object_kv(zone_id, account_id, object_id, key, val)
+            .await?;
         Ok(())
     }
 
@@ -362,5 +365,4 @@ impl RoomService {
         self.zone_repo.set_object_kv(zone_id, object_id, key, val).await?;
         Ok(())
     }
-
 }

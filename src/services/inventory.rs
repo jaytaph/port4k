@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use crate::db::repo::InventoryRepo;
 use crate::error::{AppResult, DomainError};
 use crate::models::inventory::{Item, ItemInstance, ItemLocation};
-use crate::models::types::{AccountId, ItemId, ZoneId, ObjectId, RoomId};
+use crate::models::types::{AccountId, ItemId, ObjectId, RoomId, ZoneId};
+use std::sync::Arc;
 
 pub struct InventoryService {
     repo: Arc<dyn InventoryRepo>,
@@ -80,14 +80,19 @@ impl InventoryService {
     }
 
     /// Get player inventory grouped by item type (for display)
-    pub async fn get_player_inventory_summary(&self, zone_id: ZoneId, account_id: AccountId) -> AppResult<Vec<InventorySummaryItem>> {
+    pub async fn get_player_inventory_summary(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+    ) -> AppResult<Vec<InventorySummaryItem>> {
         let instances = self.get_player_inventory(zone_id, account_id).await?;
 
         // Group by catalog_id
         let mut summary: std::collections::HashMap<ItemId, InventorySummaryItem> = std::collections::HashMap::new();
 
         for instance in instances {
-            summary.entry(instance.catalog_id)
+            summary
+                .entry(instance.catalog_id)
                 .and_modify(|e| e.quantity += instance.quantity)
                 .or_insert(InventorySummaryItem {
                     catalog_id: instance.catalog_id,
@@ -103,8 +108,16 @@ impl InventoryService {
     }
 
     /// Find specific item in player inventory by noun
-    pub async fn find_in_inventory(&self, zone_id: ZoneId, account_id: AccountId, noun: &str) -> AppResult<Option<ItemInstance>> {
-        let instance = self.repo.find_item_in_player_inventory(zone_id, account_id, noun).await?;
+    pub async fn find_in_inventory(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        noun: &str,
+    ) -> AppResult<Option<ItemInstance>> {
+        let instance = self
+            .repo
+            .find_item_in_player_inventory(zone_id, account_id, noun)
+            .await?;
         Ok(instance)
     }
 
@@ -135,7 +148,12 @@ impl InventoryService {
     }
 
     /// Find item inside object by noun
-    pub async fn find_in_object(&self, zone_id: ZoneId, object_id: ObjectId, noun: &str) -> AppResult<Option<ItemInstance>> {
+    pub async fn find_in_object(
+        &self,
+        zone_id: ZoneId,
+        object_id: ObjectId,
+        noun: &str,
+    ) -> AppResult<Option<ItemInstance>> {
         let items = self.repo.find_item_in_object(zone_id, object_id, noun).await?;
         Ok(items)
     }
@@ -145,7 +163,12 @@ impl InventoryService {
     // ========================================================================
 
     /// Check if object's loot has been instantiated for a player (or globally)
-    pub async fn is_loot_instantiated(&self, zone_id: ZoneId, object_id: ObjectId, account_id: Option<AccountId>) -> AppResult<bool> {
+    pub async fn is_loot_instantiated(
+        &self,
+        zone_id: ZoneId,
+        object_id: ObjectId,
+        account_id: Option<AccountId>,
+    ) -> AppResult<bool> {
         let b = self.repo.is_loot_instantiated(zone_id, object_id, account_id).await?;
         Ok(b)
     }
@@ -164,9 +187,9 @@ impl InventoryService {
     ) -> AppResult<LootInstantiationResult> {
         // Determine account_id for state tracking
         let state_account_id = if loot_config.shared {
-            None  // Global loot
+            None // Global loot
         } else {
-            Some(account_id)  // Per-player loot
+            Some(account_id) // Per-player loot
         };
 
         // Check if already instantiated
@@ -186,18 +209,19 @@ impl InventoryService {
                 ItemLocation::Player(account_id)
             };
 
-            let instance_id = self.spawn_item(
-                zone_id,
-                item_key,
-                location,
-                1,  // quantity
-            ).await?;
+            let instance_id = self
+                .spawn_item(
+                    zone_id, item_key, location, 1, // quantity
+                )
+                .await?;
 
             spawned_items.push(instance_id);
         }
 
         // Mark as instantiated
-        self.repo.mark_loot_instantiated(zone_id, object_id, state_account_id).await?;
+        self.repo
+            .mark_loot_instantiated(zone_id, object_id, state_account_id)
+            .await?;
 
         Ok(LootInstantiationResult::Instantiated {
             items: spawned_items,
@@ -340,19 +364,30 @@ impl InventoryService {
     // ========================================================================
 
     /// Add item to player inventory by item_key
-    pub async fn add_item(&self, zone_id: ZoneId, account_id: AccountId, item_key: &str, quantity: i32) -> AppResult<ItemId> {
-        self.spawn_item(
-            zone_id,
-            item_key,
-            ItemLocation::Player(account_id),
-            quantity,
-        ).await
+    pub async fn add_item(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        item_key: &str,
+        quantity: i32,
+    ) -> AppResult<ItemId> {
+        self.spawn_item(zone_id, item_key, ItemLocation::Player(account_id), quantity)
+            .await
     }
 
     /// Remove item from player inventory by item_key
-    pub async fn remove_item_by_key(&self, zone_id: ZoneId, account_id: AccountId, item_key: &str, quantity: i32) -> AppResult<()> {
+    pub async fn remove_item_by_key(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        item_key: &str,
+        quantity: i32,
+    ) -> AppResult<()> {
         // Find item in inventory
-        let item = self.repo.find_item_by_key_in_inventory(zone_id, account_id, item_key).await?
+        let item = self
+            .repo
+            .find_item_by_key_in_inventory(zone_id, account_id, item_key)
+            .await?
             .ok_or_else(|| DomainError::NotFound(format!("Item '{}' not found in inventory", item_key)))?;
 
         if item.quantity < quantity {
@@ -375,7 +410,8 @@ impl InventoryService {
     pub async fn get_item_count(&self, zone_id: ZoneId, account_id: AccountId, item_key: &str) -> AppResult<i32> {
         let inventory = self.get_player_inventory(zone_id, account_id).await?;
 
-        let total = inventory.iter()
+        let total = inventory
+            .iter()
             .filter(|item| item.item_key == item_key)
             .map(|item| item.quantity)
             .sum();
@@ -384,7 +420,13 @@ impl InventoryService {
     }
 
     /// Check if player has minimum quantity of item
-    pub async fn has_minimum_quantity(&self, zone_id: ZoneId, account_id: AccountId, item_key: &str, min_quantity: i32) -> AppResult<bool> {
+    pub async fn has_minimum_quantity(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        item_key: &str,
+        min_quantity: i32,
+    ) -> AppResult<bool> {
         let count = self.get_item_count(zone_id, account_id, item_key).await?;
         Ok(count >= min_quantity)
     }
@@ -397,10 +439,10 @@ impl InventoryService {
 /// Configuration for object loot
 #[derive(Debug, Clone)]
 pub struct LootConfig {
-    pub items: Vec<String>,      // item_keys from catalog
+    pub items: Vec<String>, // item_keys from catalog
     pub credits: i32,
-    pub once: bool,               // Can only be looted once
-    pub shared: bool,             // false = per-player, true = global
+    pub once: bool,   // Can only be looted once
+    pub shared: bool, // false = per-player, true = global
 }
 
 /// Result of loot instantiation
@@ -430,7 +472,6 @@ pub struct InventorySummaryItem {
 // ============================================================================
 // EXAMPLES
 // ============================================================================
-
 
 #[cfg(test)]
 #[allow(unused)]
@@ -489,24 +530,26 @@ mod example_usage {
             items: vec!["multi_spanner".to_string(), "fiber_probe".to_string()],
             credits: 50,
             once: true,
-            shared: false,  // Per-player
+            shared: false, // Per-player
         };
 
         // Player examines object - instantiate loot
-        let result = service.instantiate_loot(
-            zone_id,
-            object_id,
-            account_id,
-            &loot_config,
-        ).await?;
+        let result = service
+            .instantiate_loot(zone_id, object_id, account_id, &loot_config)
+            .await?;
 
         match result {
             LootInstantiationResult::Instantiated { items, credits, shared } => {
-                println!("Spawned {} items and {} credits (shared: {})", items.len(), credits, shared);
-            },
+                println!(
+                    "Spawned {} items and {} credits (shared: {})",
+                    items.len(),
+                    credits,
+                    shared
+                );
+            }
             LootInstantiationResult::AlreadyInstantiated => {
                 println!("Loot already taken");
-            },
+            }
         }
 
         Ok(())

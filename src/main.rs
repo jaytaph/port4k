@@ -1,11 +1,11 @@
-use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::runtime::Handle;
 use port4k::{
     Registry, config, db,
     lua::start_lua_worker,
     net::{http, telnet},
 };
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::runtime::Handle;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

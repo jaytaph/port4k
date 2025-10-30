@@ -118,7 +118,14 @@ impl UserRepo for UserRepository {
         Ok(())
     }
 
-    async fn set_object_kv(&self, zone_id: ZoneId, account_id: AccountId, object_id: ObjectId, key: &str, value: &Value) -> DbResult<()> {
+    async fn set_object_kv(
+        &self,
+        zone_id: ZoneId,
+        account_id: AccountId,
+        object_id: ObjectId,
+        key: &str,
+        value: &Value,
+    ) -> DbResult<()> {
         let client = self.db.get_client().await?;
 
         client
@@ -161,7 +168,13 @@ impl UserRepo for UserRepository {
         Ok(())
     }
 
-    async fn is_exit_locked(&self, zone_id: ZoneId, room_id: RoomId, account_id: AccountId, exit_id: ExitId) -> DbResult<bool> {
+    async fn is_exit_locked(
+        &self,
+        zone_id: ZoneId,
+        room_id: RoomId,
+        account_id: AccountId,
+        exit_id: ExitId,
+    ) -> DbResult<bool> {
         let client = self.db.get_client().await?;
 
         let row = client

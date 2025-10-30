@@ -1,6 +1,5 @@
 pub mod table;
 
-use std::str::FromStr;
 use crate::Registry;
 use crate::error::{AppResult, DomainError};
 use crate::input::parser::{Intent, NounPhrase, Preposition, Quantifier};
@@ -10,11 +9,12 @@ use crate::models::room::{ResolvedExit, ResolvedObject, RoomView};
 use crate::models::types::{Direction, ItemId};
 use crate::net::output::OutputHandle;
 use crate::state::session::Cursor;
+use mlua::prelude::LuaError;
 use mlua::{Function, Lua, Table};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use mlua::prelude::LuaError;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot::Sender;
@@ -360,7 +360,8 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
 
     // port4k.say(text)
     let ctx = arg_ctx.clone();
-    port4k.set("say",
+    port4k.set(
+        "say",
         lua.create_function(move |_, msg: String| -> mlua::Result<()> {
             let ctx = ctx.clone();
             ctx.rt_handle.spawn(async move {
@@ -372,7 +373,8 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
 
     // port4k.debug(var)
     let ctx = arg_ctx.clone();
-    port4k.set("debug",
+    port4k.set(
+        "debug",
         lua.create_function(move |_, v: mlua::Value| {
             let ctx = ctx.clone();
             ctx.rt_handle.spawn(async move {
@@ -385,7 +387,8 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
 
     // port4k.broadcast(text)
     let ctx = arg_ctx.clone();
-    port4k.set("broadcast",
+    port4k.set(
+        "broadcast",
         lua.create_function(move |_, msg: String| -> mlua::Result<()> {
             let ctx = ctx.clone();
             ctx.rt_handle.spawn(async move {
@@ -397,9 +400,11 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
 
     // port4k.set_exit_locked(exit: str, locked: bool)
     let ctx = arg_ctx.clone();
-    port4k.set("set_exit_locked",
+    port4k.set(
+        "set_exit_locked",
         lua.create_function(move |_, (dir, locked): (String, bool)| -> mlua::Result<()> {
-            let dir = Direction::from_str(&dir).map_err(|_| LuaError::external(format!("Invalid direction: {}", dir)))?;
+            let dir =
+                Direction::from_str(&dir).map_err(|_| LuaError::external(format!("Invalid direction: {}", dir)))?;
 
             let zone_id = ctx.cursor.as_ref().unwrap().zone_ctx.zone.id;
             let room_id = ctx.cursor.as_ref().unwrap().room_view.blueprint.id;
@@ -408,20 +413,24 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
             let ctx = ctx.clone();
 
             rt_handle.block_on(async {
-                ctx.registry.services.room
+                ctx.registry
+                    .services
+                    .room
                     .set_exit_locked(zone_id, room_id, account_id, dir, locked)
                     .await
                     .map_err(|e| LuaError::external(format!("Failed to set exit lock: {}", e)))
             })?;
             Ok(())
-        })?
+        })?,
     )?;
 
     // port4k.is_exit_locked(exit: str) -> bool
     let ctx = arg_ctx.clone();
-    port4k.set("is_exit_locked",
+    port4k.set(
+        "is_exit_locked",
         lua.create_function(move |_, dir: String| -> mlua::Result<mlua::Value> {
-            let dir = Direction::from_str(&dir).map_err(|_| LuaError::external(format!("Invalid direction: {}", dir)))?;
+            let dir =
+                Direction::from_str(&dir).map_err(|_| LuaError::external(format!("Invalid direction: {}", dir)))?;
 
             let zone_id = ctx.cursor.as_ref().unwrap().zone_ctx.zone.id;
             let account_id = ctx.account.as_ref().unwrap().id;
@@ -430,7 +439,9 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
             let ctx = ctx.clone();
 
             let is_locked = rt_handle.block_on(async {
-                ctx.registry.services.room
+                ctx.registry
+                    .services
+                    .room
                     .is_exit_locked(zone_id, room_id, account_id, dir)
                     .await
                     .map_err(|e| LuaError::external(format!("Failed to check exit lock: {}", e)))
@@ -440,7 +451,6 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
         })?,
     )?;
 
-
     // figure out:
     //   port4k.set_object_state("wrench", "damanged", true)        // Stores boolean
     //   port4k.set_object_state("wrench", "damanged", "true")      // Stores string
@@ -449,7 +459,8 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
     // Sets object state for the player
     let ctx = arg_ctx.clone();
     let lua_clone = lua.clone();
-    port4k.set("set_object_state",
+    port4k.set(
+        "set_object_state",
         lua.create_function(move |_, (obj_key, k, v): (String, String, mlua::Value)| {
             let rv = &ctx.cursor.as_ref().unwrap().room_view;
             let zone_id = ctx.cursor.as_ref().unwrap().zone_ctx.zone.id;
@@ -458,12 +469,15 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
             let ctx = ctx.clone();
 
             rt_handle.block_on(async {
-                let obj = rv.object_by_key(&obj_key)
+                let obj = rv
+                    .object_by_key(&obj_key)
                     .ok_or_else(|| LuaError::external(format!("Object not found: {}", obj_key)))?;
 
                 let json_value = lua_value_to_json(&lua_clone, &v)?;
 
-                ctx.registry.services.room
+                ctx.registry
+                    .services
+                    .room
                     .set_object_state(zone_id, account_id, obj.id, &k, &json_value)
                     .await
                     .map_err(|e| LuaError::external(format!("Failed to set object state: {}", e)))?;
@@ -476,7 +490,8 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
     // port4k.set_object_state_shared(key: str, value: str) -> bool
     // Sets object state for the entire zone (shared across all players)
     let ctx = arg_ctx.clone();
-    port4k.set("set_object_state_shared",
+    port4k.set(
+        "set_object_state_shared",
         lua.create_function(move |lua, (obj_key, k, v): (String, String, mlua::Value)| {
             let rv = &ctx.cursor.as_ref().unwrap().room_view;
             let zone_id = ctx.cursor.as_ref().unwrap().zone_ctx.zone.id;
@@ -484,12 +499,15 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
             let ctx = ctx.clone();
 
             rt_handle.block_on(async {
-                let obj = rv.object_by_key(&obj_key)
+                let obj = rv
+                    .object_by_key(&obj_key)
                     .ok_or_else(|| LuaError::external(format!("Object not found: {}", obj_key)))?;
 
                 let json_value = lua_value_to_json(&lua, &v)?;
 
-                ctx.registry.services.room
+                ctx.registry
+                    .services
+                    .room
                     .set_object_state_shared(zone_id, obj.id, &k, &json_value)
                     .await
                     .map_err(|e| LuaError::external(format!("Failed to set object state: {}", e)))?;
@@ -501,7 +519,8 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
 
     // port4k.hint_trigger(hint_type: str) -> bool
     let ctx = arg_ctx.clone();
-    port4k.set("hint_trigger",
+    port4k.set(
+        "hint_trigger",
         lua.create_function(move |_, trigger: String| -> mlua::Result<mlua::Value> {
             let rt_handle = ctx.rt_handle.clone();
             let cursor = ctx.cursor.clone();
@@ -517,7 +536,8 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
     )?;
 
     let ctx = arg_ctx.clone();
-    port4k.set("hint_consider",
+    port4k.set(
+        "hint_consider",
         lua.create_function(move |_, trigger: String| -> mlua::Result<mlua::Value> {
             let cursor = ctx.cursor.clone();
             let rt_handle = ctx.rt_handle.clone();
@@ -535,7 +555,8 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
 
     // port4k.matches_noun(args: str, list: list) -> bool
     // let ctx = arg_ctx.clone();
-    port4k.set("matches_noun",
+    port4k.set(
+        "matches_noun",
         lua.create_function(move |_, (args, list): (String, String)| -> mlua::Result<mlua::Value> {
             let _ = args;
             let _ = list;
@@ -545,17 +566,18 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
 
     // port4k.current_room() -> room
     let ctx = arg_ctx.clone();
-    port4k.set("current_room",
+    port4k.set(
+        "current_room",
         lua.create_function(move |lua, ()| -> mlua::Result<mlua::Value> {
-            let t =
-                create_lua_roomview_table(lua, &ctx.cursor.as_ref().unwrap().room_view).map(mlua::Value::Table)?;
+            let t = create_lua_roomview_table(lua, &ctx.cursor.as_ref().unwrap().room_view).map(mlua::Value::Table)?;
             Ok(t)
         })?,
     )?;
 
     // port4k.player_has_item("microcell")
     let ctx = arg_ctx.clone();
-    port4k.set("player_has_item",
+    port4k.set(
+        "player_has_item",
         lua.create_function(move |_, item_key: String| {
             let zone_id = ctx.cursor.as_ref().unwrap().zone_ctx.zone.id;
             let account_id = ctx.account.as_ref().unwrap().id;
@@ -563,24 +585,31 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
             let ctx = ctx.clone();
 
             let res = rt_handle.block_on(async {
-                ctx.registry.services.inventory
+                ctx.registry
+                    .services
+                    .inventory
                     .has_item_by_key(zone_id, account_id, &item_key)
                     .await
                     .map_err(|e| LuaError::ExternalError(Arc::new(e)))
             })?;
 
             Ok(mlua::Value::Boolean(res))
-        })?)?;
+        })?,
+    )?;
 
     // port4k.consume_item(id)
     let ctx = arg_ctx.clone();
-    port4k.set("consume_item",
+    port4k.set(
+        "consume_item",
         lua.create_function(move |_, instance_id: String| {
             // Validate UUID format
             let instance_id = match ItemId::from_str(&instance_id) {
                 Ok(id) => id,
                 Err(_) => {
-                    return Err(LuaError::external(format!("Invalid item ID format: '{}'. Expected a valid UUID.", instance_id)));
+                    return Err(LuaError::external(format!(
+                        "Invalid item ID format: '{}'. Expected a valid UUID.",
+                        instance_id
+                    )));
                 }
             };
 
@@ -590,7 +619,9 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
             let ctx = ctx.clone();
 
             rt_handle.block_on(async {
-                ctx.registry.services.inventory
+                ctx.registry
+                    .services
+                    .inventory
                     .consume_item(zone_id, account_id, instance_id)
                     .await
                     .map_err(|e| LuaError::external(format!("Failed to consume item: {}", e)))
@@ -602,7 +633,8 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
 
     // port4k.give_item_to_player("multi_spanner", 1)
     let ctx = arg_ctx.clone();
-    port4k.set("give_item_to_player",
+    port4k.set(
+        "give_item_to_player",
         lua.create_function(move |_, (item_key, quantity): (String, Option<i32>)| {
             let zone_id = ctx.cursor.as_ref().unwrap().zone_ctx.zone.id;
             let account_id = ctx.account.as_ref().unwrap().id;
@@ -612,7 +644,9 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
             let qty = quantity.unwrap_or(1);
 
             rt_handle.block_on(async {
-                ctx.registry.services.inventory
+                ctx.registry
+                    .services
+                    .inventory
                     .add_item(zone_id, account_id, &item_key, qty)
                     .await
                     .map_err(|e| LuaError::external(format!("Failed to give item: {}", e)))
@@ -954,7 +988,6 @@ fn json_to_lua<'lua>(lua: &'lua Lua, value: &serde_json::Value) -> mlua::Result<
     }
 }
 
-
 fn lua_value_to_json(lua_ctx: &mlua::Lua, value: &mlua::Value) -> mlua::Result<serde_json::Value> {
     use serde_json::Value as JsonValue;
 
@@ -962,11 +995,9 @@ fn lua_value_to_json(lua_ctx: &mlua::Lua, value: &mlua::Value) -> mlua::Result<s
         mlua::Value::Nil => Ok(JsonValue::Null),
         mlua::Value::Boolean(b) => Ok(JsonValue::Bool(*b)),
         mlua::Value::Integer(i) => Ok(JsonValue::Number((*i).into())),
-        mlua::Value::Number(n) => {
-            serde_json::Number::from_f64(*n)
-                .map(JsonValue::Number)
-                .ok_or_else(|| LuaError::external("Invalid number"))
-        }
+        mlua::Value::Number(n) => serde_json::Number::from_f64(*n)
+            .map(JsonValue::Number)
+            .ok_or_else(|| LuaError::external("Invalid number")),
         mlua::Value::String(s) => Ok(JsonValue::String(s.to_str()?.to_string())),
         mlua::Value::Table(t) => {
             // Check if it's an array or object by looking at keys
