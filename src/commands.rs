@@ -33,6 +33,7 @@ mod register;
 mod search;
 mod take;
 mod who;
+mod inventory;
 
 pub type CommandResult = Result<(), CommandError>;
 
@@ -189,10 +190,7 @@ pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
             Ok(())
         }
         Verb::Go => go::go(ctx.clone(), intent).await,
-        Verb::Inventory => {
-            ctx.output.system("Inventory command not implemented yet.").await;
-            Ok(())
-        }
+        Verb::Inventory => inventory::inventory(ctx.clone(), intent).await,
         Verb::Quit => {
             ctx.output.system("Goodbye! Connection closed by user.").await;
             Ok(())

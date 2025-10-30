@@ -96,6 +96,63 @@ impl OutputHandle {
     pub async fn raw(&self, bytes: Vec<u8>) {
         let _ = self.tx.send(OutEvent::Raw(bytes, self.next_seq())).await;
     }
+
+    pub async fn table<S: AsRef<str>>(&self, headers: Vec<S>, rows: Vec<Vec<S>>) {
+        let table = generate_table(headers, rows);
+
+        let vars = generate_render_vars(self.sess.clone());
+        let rendered = render_template(&table, &vars, MAX_TERMINAL_WIDTH);
+        let _ = self
+            .tx
+            .send(OutEvent::Frame(OutFrame::Line(rendered), self.next_seq()))
+            .await;
+    }
+}
+
+pub fn generate_table<S: AsRef<str>>(headers: Vec<S>, rows: Vec<Vec<S>>) -> String {
+    let mut result = String::new();
+
+    // Calculate column widths
+    let mut col_widths = headers.iter().map(|h| h.as_ref().len()).collect::<Vec<_>>();
+
+    for row in &rows {
+        for (i, cell) in row.iter().enumerate() {
+            if i < col_widths.len() {
+                col_widths[i] = col_widths[i].max(cell.as_ref().len());
+            }
+        }
+    }
+
+    // Add headers
+    for (i, header) in headers.iter().enumerate() {
+        result.push_str(&format!("{:<width$}", header.as_ref(), width = col_widths[i]));
+        if i < headers.len() - 1 {
+            result.push_str(" | ");
+        }
+    }
+    result.push('\n');
+
+    // Add separator line
+    for (i, width) in col_widths.iter().enumerate() {
+        result.push_str(&"-".repeat(*width));
+        if i < col_widths.len() - 1 {
+            result.push_str("-+-");
+        }
+    }
+    result.push('\n');
+
+    // Add rows
+    for row in &rows {
+        for (i, cell) in row.iter().enumerate() {
+            result.push_str(&format!("{:<width$}", cell.as_ref(), width = col_widths[i]));
+            if i < row.len() - 1 {
+                result.push_str(" | ");
+            }
+        }
+        result.push('\n');
+    }
+
+    result
 }
 
 pub enum OutEvent {
