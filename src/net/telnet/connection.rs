@@ -131,7 +131,14 @@ async fn dispatch_command(raw: &str, ctx: Arc<AppCtx>, sess: Arc<RwLock<Session>
         sess: sess.clone(),
     });
 
-    _ = process_command(raw, cmd_ctx.clone()).await;
+    match process_command(raw, cmd_ctx.clone()).await {
+        Ok(_) => {}
+        Err(e) => {
+            ctx.output
+                .system(format!("{{c:bright_yellow:bright_red}}Error processing command: {}{{c}}", e))
+                .await;
+        }
+    }
     Ok(())
 }
 

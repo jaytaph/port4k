@@ -119,10 +119,11 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "hidden": { "type": "boolean" },
-            "revealed": { "type": "boolean" },
-            "takeable": { "type": "boolean" },
-            "stackable": { "type": "boolean" }
+            "locked": { "type": "boolean", "default": false },
+            "hidden": { "type": "boolean", "default": false },
+            "revealed": { "type": "boolean", "default": true },
+            "takeable": { "type": "boolean", "default": false },
+            "stackable": { "type": "boolean", "default": false }
           }
         },
 

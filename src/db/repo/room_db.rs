@@ -109,7 +109,7 @@ impl RoomRepo for RoomRepository {
         let rows = client
             .query(
                 r#"
-        SELECT o.id, o.room_id, o.name, o.short, o.description, o.examine, o.state, o.use_lua, o.position,
+        SELECT o.id, o.room_id, o.name, o.short, o.description, o.examine, o.flags, o.state, o.use_lua, o.position, o.loot,
             COALESCE(n.nouns, ARRAY[]::text[]) AS nouns,
             COALESCE(k.kv, '{}'::jsonb) AS kv
         FROM bp_objects AS o
@@ -132,10 +132,7 @@ impl RoomRepo for RoomRepository {
 
         let mut out = Vec::with_capacity(rows.len());
         for row in rows {
-            // If your BlueprintObject::try_from_row expects only bp_objects columns,
-            // add a constructor that takes nouns + kv, or adapt here:
-            let nouns: Vec<String> = row.get("nouns");
-            let obj = BlueprintObject::try_from_row(&row, nouns, Kv::from(row.get("kv")))?;
+            let obj = BlueprintObject::try_from_row(&row)?;
             out.push(obj);
         }
         Ok(out)
@@ -186,12 +183,10 @@ impl RoomRepo for RoomRepository {
         let n = c
             .execute(
                 r#"
-            UPDATE blueprints AS b
-            SET entry_room_id = r.id
-            FROM bp_rooms AS r
-            WHERE b.key = $1
-                AND r.key = $2
-                AND r.bp_id = b.id
+                UPDATE blueprints AS b
+                    SET entry_room_id = r.id
+                FROM bp_rooms AS r
+                    WHERE b.key = $1 AND r.key = $2 AND r.bp_id = b.id
             "#,
                 &[&key.bp_key, &key.room_key],
             )
@@ -238,12 +233,10 @@ impl RoomRepo for RoomRepository {
         let n = c
             .execute(
                 r#"
-            UPDATE bp_rooms AS r
-            SET locked = $3
-            FROM blueprints AS bp
-            WHERE bp.id = r.bp_id
-                AND bp.key = $1
-                AND r.key = $2
+                UPDATE bp_rooms AS r
+                    SET locked = $3
+                FROM blueprints AS bp
+                WHERE bp.id = r.bp_id AND bp.key = $1 AND r.key = $2
             "#,
                 &[&key.bp_key, &key.room_key, &locked],
             )

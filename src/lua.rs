@@ -5,7 +5,7 @@ use crate::error::{AppResult, DomainError};
 use crate::input::parser::{Intent, NounPhrase, Preposition, Quantifier};
 use crate::lua::table::format_lua_value;
 use crate::models::account::Account;
-use crate::models::room::{ResolvedExit, ResolvedObject, RoomView};
+use crate::models::room::{ObjectLoot, ResolvedExit, ResolvedObject, RoomView};
 use crate::models::types::{Direction, ItemId};
 use crate::net::output::OutputHandle;
 use crate::state::session::Cursor;
@@ -747,15 +747,35 @@ fn create_lua_object_table(lua: &Lua, obj: &ResolvedObject) -> mlua::Result<Tabl
     ot.set("locked", obj.flags.locked)?;
     ot.set("stackable", obj.flags.stackable)?;
 
-    // Add kv
+    // Add kv state
     let kv_tbl = lua.create_table()?;
     for (k, v) in obj.kv.inner.iter() {
         kv_tbl.set(k.as_str(), json_to_lua(lua, v)?)?;
     }
     ot.set("state", kv_tbl)?;
 
+    // Add loot
+    let loot_tbl = lua.create_table()?;
+    for (i, loot) in obj.loot.iter().enumerate() {
+        loot_tbl.raw_set(i + 1, create_lua_loot_table(lua, loot)?)?;
+    }
+    ot.set("state", loot_tbl)?;
+
     _ = set_lua_table_readonly!(ot, lua);
     Ok(ot)
+}
+
+fn create_lua_loot_table(lua: &Lua, loot: &ObjectLoot) -> mlua::Result<Table> {
+    let lt = lua.create_table()?;
+    lt.set("credits", loot.credits)?;
+    lt.set("shared", loot.shared)?;
+    let it = lua.create_table()?;
+    for (i, item_key) in loot.items.iter().enumerate() {
+        it.set(i + 1, item_key.as_str())?;
+    }
+    lt.set("items", it)?;
+    lt.set("once", loot.once)?;
+    Ok(lt)
 }
 
 fn create_lua_intent_table(lua: &Lua, intent: &Intent) -> mlua::Result<Table> {

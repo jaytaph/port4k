@@ -94,6 +94,19 @@ impl BlueprintExit {
     }
 }
 
+/// Loot configuration for container objects
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObjectLoot {
+    /// List of item keys that can be taken from this container
+    pub items: Vec<String>,
+    /// Amount of credits/money
+    pub credits: i32,
+    /// If true, loot can only be taken once and won't respawn
+    pub once: bool,
+    /// If true, loot is shared across all players. If false, it's for player only
+    pub shared: bool,
+}
+
 /// Blueprint object model for `bp_objects`. There are no zone or user overlays in here
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlueprintObject {
@@ -113,8 +126,6 @@ pub struct BlueprintObject {
     pub position: Option<i32>,
     /// Synonyms / alternate nouns (terminal, console, computer, screen)
     pub nouns: Vec<String>,
-    /// How is this object discovered in the room?
-    // pub discovery: Discovery,
 
     /// Object key values
     pub object_kv: Kv,
@@ -130,10 +141,30 @@ pub struct BlueprintObject {
     pub stackable: bool,
     /// Is the object a coin/currency?
     pub is_coin: bool,
+
+    /// Loot configuration
+    pub loot: Option<ObjectLoot>,
 }
 
 impl BlueprintObject {
-    pub fn try_from_row(row: &Row, nouns: Vec<String>, kv: Kv) -> DbResult<Self> {
+    pub fn try_from_row(row: &Row) -> DbResult<Self> {
+        let loot_json: Value = row.try_get("loot")?;
+
+        let loot = match loot_json {
+            Value::Null => None,
+            Value::Object(ref obj) if obj.is_empty() => None,
+            _ => Some(serde_json::from_value::<ObjectLoot>(loot_json).map_err(|e| {
+                DbError::Decode(format!("Failed to deserialize loot: {}", e))
+            })?)
+        };
+
+        // Same for flags if needed
+        let flags_json: Value = row.try_get("flags")?;
+        let flags = serde_json::from_value::<ObjectFlags>(flags_json).map_err(|e| {
+            DbError::Decode(format!("Failed to deserialize flags: {}", e))
+        })?;
+
+
         Ok(Self {
             id: ObjectId(row.try_get::<_, Uuid>("id")?),
             name: row.try_get("name")?,
@@ -142,17 +173,17 @@ impl BlueprintObject {
             examine: row.try_get("examine")?,
             on_use_lua: row.try_get("use_lua")?,
             position: row.try_get("position")?,
-            nouns,
-            // discovery: Discovery::default(),
+            nouns: row.try_get("nouns")?,
 
             // This needs to be set
-            object_kv: kv,
+            object_kv: Kv::from(row.try_get("kv")?),
             initial_qty: None,
-            default_locked: false,
-            default_revealed: false,
-            takeable: false,
-            stackable: false,
+            default_locked: flags.locked,
+            default_revealed: flags.revealed,
+            takeable: flags.takeable,
+            stackable: flags.stackable,
             is_coin: false,
+            loot,
         })
     }
 }
@@ -397,6 +428,7 @@ pub(crate) fn build_room_view_impl(
                 stackable: o.stackable,
             },
             is_coin: o.is_coin,
+            loot: o.loot.clone(),
         });
     }
 
@@ -505,6 +537,7 @@ impl ExitFlags {
 }
 
 #[derive(Default, Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct ObjectFlags {
     pub locked: bool,    // Can't interact until unlocked
     pub hidden: bool,    // Invisible to the player if true
@@ -540,6 +573,14 @@ impl ResolvedExit {
     }
 }
 
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct ObjectLoot {
+//     pub items: Vec<String>,  // item keys like "multi_spanner"
+//     pub credits: i32,
+//     pub once: bool,
+// }
+
+
 /// Resolved object that takes into account the zone and the player's overlays
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedObject {
@@ -558,6 +599,8 @@ pub struct ResolvedObject {
 
     pub is_coin: bool,
     pub qty: i32,
+
+    pub loot: Option<ObjectLoot>,
 }
 
 #[cfg(test)]
@@ -624,6 +667,7 @@ mod tests {
             takeable: true,
             stackable: false,
             is_coin: false,
+            loot: None,
         }
     }
 

@@ -61,14 +61,11 @@ struct HintYaml {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(default)]
 struct FlagsYaml {
-    #[serde(default)]
     pub hidden: Option<bool>,
-    #[serde(default)]
     pub revealed: Option<bool>,
-    #[serde(default)]
     pub takeable: Option<bool>,
-    #[serde(default)]
     pub stackable: Option<bool>,
 }
 

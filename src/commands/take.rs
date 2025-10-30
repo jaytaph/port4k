@@ -1,22 +1,27 @@
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
+use crate::input::parser::Preposition;
 use rand::Rng;
 use std::sync::Arc;
 
 pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.is_empty() {
-        ctx.output.system("Usage: take <item> [N]").await;
+        ctx.output.system("Usage: take <item> [from <container>]").await;
         return Ok(());
     }
 
-    let what = intent.direct.unwrap().head;
+    let what = &intent.direct.as_ref().unwrap().head;
 
-    // // Special case: coins (the only takeable thing)
-    // if what == "coin" || what == "coins" {
-    //     return take_coins(ctx, &intent.args).await;
-    // }
+    // Case 1: "take X from Y" - taking from a container
+    if let Some(Preposition::From) = intent.preposition {
+        if let Some(target) = &intent.target {
+            return take_from_container(ctx, what, &target.head).await;
+        }
+    }
 
-    // Check if it's an object in the room (can't be taken)
+    // Case 2: Regular "take X" - from room or ground
+    // (Your existing logic here)
+
     let Ok(room_view) = ctx.room_view() else {
         ctx.output.system("You are not in a world.").await;
         return Ok(());
@@ -26,7 +31,7 @@ pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     let is_known_object = room_view
         .objects
         .iter()
-        .any(|obj| obj.name.to_ascii_lowercase().contains(&what));
+        .any(|obj| obj.name.to_ascii_lowercase().contains(what));
 
     if is_known_object {
         // It exists but can't be taken
@@ -81,6 +86,51 @@ pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         let msg = messages[rand::rng().random_range(0..messages.len())].to_string();
         ctx.output.line(msg).await;
     }
+
+    Ok(())
+}
+
+async fn take_from_container(ctx: Arc<CmdCtx>, item_name: &str, container_name: &str) -> CommandResult {
+    let Ok(room_view) = ctx.room_view() else {
+        ctx.output.system("You are not in a world.").await;
+        return Ok(());
+    };
+
+    // Find the container object
+    let container = room_view
+        .objects
+        .iter()
+        .find(|obj| obj.name.to_ascii_lowercase().contains(&container_name.to_ascii_lowercase()));
+
+    let Some(container) = container else {
+        ctx.output.line(&format!("You don't see any '{}' here.", container_name)).await;
+        return Ok(());
+    };
+
+    // Check if container has loot
+    let Some(loot) = &container.loot else {
+        ctx.output.line(&format!("The {} doesn't contain anything.", container.name)).await;
+        return Ok(());
+    };
+
+    // Check if the requested item is in the loot
+    let has_item = loot.items.iter().any(|item_key| {
+        // TODO: You'll need to look up the item by key to get its nouns
+        // For now, just match the key directly
+        item_key.to_ascii_lowercase().contains(&item_name.to_ascii_lowercase())
+    });
+
+    if !has_item {
+        ctx.output.line(&format!("There is no {} in the {}.", item_name, container.name)).await;
+        return Ok(());
+    }
+
+    // TODO:
+    // 1. Look up the full Item from catalog by item_key
+    // 2. Create an ItemInstance with location = player inventory
+    // 3. Remove the item from the container's loot (if once=true)
+    // 4. Save changes to database
+    ctx.output.line(&format!("You take the {} from the {}.", item_name, container.name)).await;
 
     Ok(())
 }
