@@ -194,6 +194,7 @@ impl InventoryService {
 
         // Check if already instantiated
         if self.is_loot_instantiated(zone_id, object_id, state_account_id).await? {
+            println!("Loot already instantiated for object {:?} and account {:?}", object_id, state_account_id);
             return Ok(LootInstantiationResult::AlreadyInstantiated);
         }
 
@@ -217,6 +218,13 @@ impl InventoryService {
 
             spawned_items.push(instance_id);
         }
+
+        println!(
+            "Spawned {} loot items for object {:?} and account {:?}",
+            spawned_items.len(),
+            object_id,
+            state_account_id
+        );
 
         // Mark as instantiated
         self.repo

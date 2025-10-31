@@ -218,7 +218,7 @@ impl InventoryRepo for InventoryRepository {
 
         let row = client
             .query_one(
-                "SELECT EXISTS(SELECT 1 FROM items WHERE id = $1 AND zone_id = $2 AND account_id = $3)",
+                "SELECT EXISTS(SELECT 1 FROM item_instances WHERE instance_id = $1 AND zone_id = $2 AND account_id = $3)",
                 &[&instance_id, &zone_id, &account_id],
             )
             .await?;
@@ -227,22 +227,20 @@ impl InventoryRepo for InventoryRepository {
     }
 
     async fn has_item_by_key(&self, zone_id: ZoneId, account_id: AccountId, item_key: &str) -> DbResult<bool> {
-        let bp_id = self.get_blueprint_for_zone(zone_id).await?;
         let client = self.db.pool.get().await?;
 
         let row = client
             .query_one(
                 r#"
-                SELECT EXISTS(
-                    SELECT 1 FROM items i
-                    JOIN bp_items_catalog c ON i.catalog_id = c.id
-                    WHERE i.zone_id = $1
-                      AND i.account_id = $2
-                      AND c.bp_id = $3
-                      AND c.item_key = $4
-                )
-                "#,
-                &[&zone_id, &account_id, &bp_id, &item_key],
+            SELECT EXISTS(
+                SELECT 1 FROM item_instances ii
+                JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
+                WHERE ii.zone_id = $1
+                    AND ii.account_id = $2
+                    AND bp.item_key = $3
+            )
+            "#,
+                &[&zone_id, &account_id, &item_key],
             )
             .await?;
 
@@ -250,23 +248,21 @@ impl InventoryRepo for InventoryRepository {
     }
 
     async fn has_item_by_noun(&self, zone_id: ZoneId, account_id: AccountId, noun: &str) -> DbResult<bool> {
-        let bp_id = self.get_blueprint_for_zone(zone_id).await?;
         let client = self.db.pool.get().await?;
 
         let row = client
             .query_one(
                 r#"
-                SELECT EXISTS(
-                    SELECT 1 FROM items i
-                    JOIN bp_items_catalog c ON i.catalog_id = c.id
-                    JOIN bp_item_nouns n ON n.item_id = c.id
-                    WHERE i.zone_id = $1
-                      AND i.account_id = $2
-                      AND c.bp_id = $3
-                      AND LOWER(n.noun) = LOWER($4)
-                )
-                "#,
-                &[&zone_id, &account_id, &bp_id, &noun],
+            SELECT EXISTS(
+                SELECT 1 FROM item_instances ii
+                JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
+                JOIN bp_item_nouns n ON n.item_id = bp.id
+                WHERE ii.zone_id = $1
+                    AND ii.account_id = $2
+                    AND LOWER(n.noun) = LOWER($3)
+            )
+            "#,
+                &[&zone_id, &account_id, &noun],
             )
             .await?;
 
@@ -283,19 +279,19 @@ impl InventoryRepo for InventoryRepository {
         let rows = client
             .query(
                 r#"
-                SELECT
-                    i.id, i.zone_id, i.catalog_id,
-                    i.room_id, i.account_id, i.object_id, i.container_item_id,
-                    i.quantity, i.condition, i.created_at, i.updated_at,
-                    c.item_key, c.name, c.short, c.description, c.examine, c.stackable,
-                    COALESCE(array_agg(n.noun ORDER BY n.noun) FILTER (WHERE n.noun IS NOT NULL), ARRAY[]::TEXT[]) as nouns
-                FROM items i
-                JOIN bp_items_catalog c ON i.catalog_id = c.id
-                LEFT JOIN bp_item_nouns n ON n.item_id = c.id
-                WHERE i.zone_id = $1 AND i.account_id = $2
-                GROUP BY i.id, c.id
-                ORDER BY c.name
-                "#,
+            SELECT
+                ii.instance_id, ii.zone_id, ii.catalog_id,
+                ii.room_id, ii.account_id, ii.object_id, ii.container_item_id,
+                ii.quantity, ii.condition, ii.created_at, ii.updated_at,
+                bp.item_key, bp.name, bp.short, bp.description, bp.examine, bp.stackable,
+                COALESCE(array_agg(n.noun ORDER BY n.noun) FILTER (WHERE n.noun IS NOT NULL), ARRAY[]::TEXT[]) as nouns
+            FROM item_instances ii
+            JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
+            LEFT JOIN bp_item_nouns n ON n.item_id = bp.id
+            WHERE ii.zone_id = $1 AND ii.account_id = $2
+            GROUP BY ii.instance_id, bp.id
+            ORDER BY bp.name
+            "#,
                 &[&zone_id, &account_id],
             )
             .await?;
@@ -391,19 +387,19 @@ impl InventoryRepo for InventoryRepository {
         let row = client
             .query_opt(
                 r#"
-                SELECT
-                    i.id, i.zone_id, i.catalog_id,
-                    i.room_id, i.account_id, i.object_id, i.container_item_id,
-                    i.quantity, i.condition, i.created_at, i.updated_at,
-                    c.item_key, c.name, c.short, c.description, c.examine, c.stackable,
-                    COALESCE(array_agg(n.noun ORDER BY n.noun) FILTER (WHERE n.noun IS NOT NULL), ARRAY[]::TEXT[]) as nouns
-                FROM items i
-                JOIN bp_items_catalog c ON i.catalog_id = c.id
-                LEFT JOIN bp_item_nouns n ON n.item_id = c.id
-                WHERE i.zone_id = $1 AND i.account_id = $2 AND c.item_key = $3
-                GROUP BY i.id, c.id
-                LIMIT 1
-                "#,
+            SELECT
+                ii.instance_id, ii.zone_id, ii.catalog_id,
+                ii.room_id, ii.account_id, ii.object_id, ii.container_item_id,
+                ii.quantity, ii.condition, ii.created_at, ii.updated_at,
+                bp.item_key, bp.name, bp.short, bp.description, bp.examine, bp.stackable,
+                COALESCE(array_agg(n.noun ORDER BY n.noun) FILTER (WHERE n.noun IS NOT NULL), ARRAY[]::TEXT[]) as nouns
+            FROM item_instances ii
+            JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
+            LEFT JOIN bp_item_nouns n ON n.item_id = bp.id
+            WHERE ii.zone_id = $1 AND ii.account_id = $2 AND bp.item_key = $3
+            GROUP BY ii.instance_id, bp.id
+            LIMIT 1
+            "#,
                 &[&zone_id, &account_id, &item_key],
             )
             .await?;
@@ -430,9 +426,8 @@ impl InventoryRepo for InventoryRepository {
                 nouns: r.get(17),
             })
         })
-        .transpose()
+            .transpose()
     }
-
     // ========================================================================
     // ROOM QUERIES
     // ========================================================================
@@ -443,19 +438,19 @@ impl InventoryRepo for InventoryRepository {
         let rows = client
             .query(
                 r#"
-                SELECT
-                    i.id, i.zone_id, i.catalog_id,
-                    i.room_id, i.account_id, i.object_id, i.container_item_id,
-                    i.quantity, i.condition, i.created_at, i.updated_at,
-                    c.item_key, c.name, c.short, c.description, c.examine, c.stackable,
-                    COALESCE(array_agg(n.noun ORDER BY n.noun) FILTER (WHERE n.noun IS NOT NULL), ARRAY[]::TEXT[]) as nouns
-                FROM items i
-                JOIN bp_items_catalog c ON i.catalog_id = c.id
-                LEFT JOIN bp_item_nouns n ON n.item_id = c.id
-                WHERE i.zone_id = $1 AND i.room_id = $2
-                GROUP BY i.id, c.id
-                ORDER BY c.name
-                "#,
+            SELECT
+                ii.instance_id, ii.zone_id, ii.catalog_id,
+                ii.room_id, ii.account_id, ii.object_id, ii.container_item_id,
+                ii.quantity, ii.condition, ii.created_at, ii.updated_at,
+                bp.item_key, bp.name, bp.short, bp.description, bp.examine, bp.stackable,
+                COALESCE(array_agg(n.noun ORDER BY n.noun) FILTER (WHERE n.noun IS NOT NULL), ARRAY[]::TEXT[]) as nouns
+            FROM item_instances ii
+            JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
+            LEFT JOIN bp_item_nouns n ON n.item_id = bp.id
+            WHERE ii.zone_id = $1 AND ii.room_id = $2
+            GROUP BY ii.instance_id, bp.id
+            ORDER BY bp.name
+            "#,
                 &[&zone_id, &room_id],
             )
             .await?;
@@ -492,20 +487,20 @@ impl InventoryRepo for InventoryRepository {
         let row = client
             .query_opt(
                 r#"
-                SELECT
-                    i.id, i.zone_id, i.catalog_id,
-                    i.room_id, i.account_id, i.object_id, i.container_item_id,
-                    i.quantity, i.condition, i.created_at, i.updated_at,
-                    c.item_key, c.name, c.short, c.description, c.examine, c.stackable,
-                    COALESCE(array_agg(n2.noun ORDER BY n2.noun) FILTER (WHERE n2.noun IS NOT NULL), ARRAY[]::TEXT[]) as nouns
-                FROM items i
-                JOIN bp_items_catalog c ON i.catalog_id = c.id
-                JOIN bp_item_nouns n ON n.item_id = c.id AND LOWER(n.noun) = LOWER($3)
-                LEFT JOIN bp_item_nouns n2 ON n2.item_id = c.id
-                WHERE i.zone_id = $1 AND i.room_id = $2
-                GROUP BY i.id, c.id
-                LIMIT 1
-                "#,
+            SELECT
+                ii.instance_id, ii.zone_id, ii.catalog_id,
+                ii.room_id, ii.account_id, ii.object_id, ii.container_item_id,
+                ii.quantity, ii.condition, ii.created_at, ii.updated_at,
+                bp.item_key, bp.name, bp.short, bp.description, bp.examine, bp.stackable,
+                COALESCE(array_agg(n2.noun ORDER BY n2.noun) FILTER (WHERE n2.noun IS NOT NULL), ARRAY[]::TEXT[]) as nouns
+            FROM item_instances ii
+            JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
+            JOIN bp_item_nouns n ON n.item_id = bp.id AND LOWER(n.noun) = LOWER($3)
+            LEFT JOIN bp_item_nouns n2 ON n2.item_id = bp.id
+            WHERE ii.zone_id = $1 AND ii.room_id = $2
+            GROUP BY ii.instance_id, bp.id
+            LIMIT 1
+            "#,
                 &[&zone_id, &room_id, &noun],
             )
             .await?;
@@ -532,7 +527,7 @@ impl InventoryRepo for InventoryRepository {
                 nouns: r.get(17),
             })
         })
-        .transpose()
+            .transpose()
     }
 
     // ========================================================================
@@ -545,19 +540,19 @@ impl InventoryRepo for InventoryRepository {
         let rows = client
             .query(
                 r#"
-                SELECT
-                    i.id, i.zone_id, i.catalog_id,
-                    i.room_id, i.account_id, i.object_id, i.container_item_id,
-                    i.quantity, i.condition, i.created_at, i.updated_at,
-                    c.item_key, c.name, c.short, c.description, c.examine, c.stackable,
-                    COALESCE(array_agg(n.noun ORDER BY n.noun) FILTER (WHERE n.noun IS NOT NULL), ARRAY[]::TEXT[]) as nouns
-                FROM items i
-                JOIN bp_items_catalog c ON i.catalog_id = c.id
-                LEFT JOIN bp_item_nouns n ON n.item_id = c.id
-                WHERE i.zone_id = $1 AND i.object_id = $2
-                GROUP BY i.id, c.id
-                ORDER BY c.name
-                "#,
+            SELECT
+                ii.instance_id, ii.zone_id, ii.catalog_id,
+                ii.room_id, ii.account_id, ii.object_id, ii.container_item_id,
+                ii.quantity, ii.condition, ii.created_at, ii.updated_at,
+                bp.item_key, bp.name, bp.short, bp.description, bp.examine, bp.stackable,
+                COALESCE(array_agg(n.noun ORDER BY n.noun) FILTER (WHERE n.noun IS NOT NULL), ARRAY[]::TEXT[]) as nouns
+            FROM item_instances ii
+            JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
+            LEFT JOIN bp_item_nouns n ON n.item_id = bp.id
+            WHERE ii.zone_id = $1 AND ii.object_id = $2
+            GROUP BY ii.instance_id, bp.id
+            ORDER BY bp.name
+            "#,
                 &[&zone_id, &object_id],
             )
             .await?;
@@ -599,20 +594,20 @@ impl InventoryRepo for InventoryRepository {
         let row = client
             .query_opt(
                 r#"
-                SELECT
-                    i.id, i.zone_id, i.catalog_id,
-                    i.room_id, i.account_id, i.object_id, i.container_item_id,
-                    i.quantity, i.condition, i.created_at, i.updated_at,
-                    c.item_key, c.name, c.short, c.description, c.examine, c.stackable,
-                    COALESCE(array_agg(n2.noun ORDER BY n2.noun) FILTER (WHERE n2.noun IS NOT NULL), ARRAY[]::TEXT[]) as nouns
-                FROM items i
-                JOIN bp_items_catalog c ON i.catalog_id = c.id
-                JOIN bp_item_nouns n ON n.item_id = c.id AND LOWER(n.noun) = LOWER($3)
-                LEFT JOIN bp_item_nouns n2 ON n2.item_id = c.id
-                WHERE i.zone_id = $1 AND i.object_id = $2
-                GROUP BY i.id, c.id
-                LIMIT 1
-                "#,
+            SELECT
+                ii.instance_id, ii.zone_id, ii.catalog_id,
+                ii.room_id, ii.account_id, ii.object_id, ii.container_item_id,
+                ii.quantity, ii.condition, ii.created_at, ii.updated_at,
+                bp.item_key, bp.name, bp.short, bp.description, bp.examine, bp.stackable,
+                COALESCE(array_agg(n2.noun ORDER BY n2.noun) FILTER (WHERE n2.noun IS NOT NULL), ARRAY[]::TEXT[]) as nouns
+            FROM item_instances ii
+            JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
+            JOIN bp_item_nouns n ON n.item_id = bp.id AND LOWER(n.noun) = LOWER($3)
+            LEFT JOIN bp_item_nouns n2 ON n2.item_id = bp.id
+            WHERE ii.zone_id = $1 AND ii.object_id = $2
+            GROUP BY ii.instance_id, bp.id
+            LIMIT 1
+            "#,
                 &[&zone_id, &object_id, &noun],
             )
             .await?;
@@ -639,7 +634,7 @@ impl InventoryRepo for InventoryRepository {
                 nouns: r.get(17),
             })
         })
-        .transpose()
+            .transpose()
     }
 
     // ========================================================================
@@ -657,20 +652,18 @@ impl InventoryRepo for InventoryRepository {
         let row = client
             .query_one(
                 r#"
-                SELECT COALESCE(instantiated, FALSE)
-                FROM zone_object_loot_state
+            SELECT EXISTS(
+                SELECT 1 FROM loot_instantiation_state
                 WHERE zone_id = $1
-                  AND object_id = $2
-                  AND (account_id = $3 OR (account_id IS NULL AND $3 IS NULL))
-                "#,
+                    AND object_id = $2
+                    AND account_id IS NOT DISTINCT FROM $3
+            )
+            "#,
                 &[&zone_id, &object_id, &account_id],
             )
-            .await;
+            .await?;
 
-        match row {
-            Ok(r) => Ok(r.get(0)),
-            Err(_) => Ok(false), // Not found = not instantiated
-        }
+        Ok(row.get(0))
     }
 
     async fn mark_loot_instantiated(
@@ -684,18 +677,17 @@ impl InventoryRepo for InventoryRepository {
         client
             .execute(
                 r#"
-                INSERT INTO zone_object_loot_state (zone_id, object_id, account_id, instantiated, instantiated_at)
-                VALUES ($1, $2, $3, TRUE, NOW())
-                ON CONFLICT (zone_id, object_id, account_id)
-                DO UPDATE SET instantiated = TRUE, instantiated_at = NOW()
-                "#,
+            INSERT INTO loot_instantiation_state (zone_id, object_id, account_id, instantiated_at)
+            VALUES ($1, $2, $3, NOW())
+            ON CONFLICT (zone_id, object_id, account_id)
+            DO UPDATE SET instantiated_at = NOW()
+            "#,
                 &[&zone_id, &object_id, &account_id],
             )
             .await?;
 
         Ok(())
     }
-
     // ========================================================================
     // ITEM SPAWNING
     // ========================================================================
@@ -707,16 +699,78 @@ impl InventoryRepo for InventoryRepository {
         location: ItemLocation,
         quantity: i32,
     ) -> DbResult<ItemId> {
-        let client = self.db.pool.get().await?;
+        let mut client = self.db.pool.get().await?;
+        let transaction = client.transaction().await?;
 
-        // Call the database spawn_item function
+        // 1. Get bp_id for the zone
+        let bp_id: BlueprintId = transaction
+            .query_one("SELECT bp_id FROM zones WHERE id = $1", &[&zone_id])
+            .await?
+            .get(0);
+
+        // 1. Get item definition from bp_items_catalog
+        let catalog_row = transaction
+            .query_one(
+                "SELECT id, name, short, stackable FROM bp_items_catalog WHERE bp_id = $1 AND item_key = $2",
+                &[&bp_id, &item_key],
+            )
+            .await?;
+
+        let catalog_id: ItemId = catalog_row.get("id");
+        let stackable: bool = catalog_row.get("stackable");
+
         let (room_id, account_id, object_id, container_item_id) = location.to_db_columns();
 
-        let row = client
+        // 2. If stackable, try to find existing stack at this location
+        if stackable {
+            let existing = transaction
+                .query_opt(
+                    "SELECT instance_id, quantity
+                FROM item_instances
+                WHERE zone_id = $1
+                    AND catalog_id = $2
+                    AND room_id IS NOT DISTINCT FROM $3
+                    AND account_id IS NOT DISTINCT FROM $4
+                    AND object_id IS NOT DISTINCT FROM $5
+                    AND container_item_id IS NOT DISTINCT FROM $6
+                LIMIT 1",
+                    &[&zone_id, &catalog_id, &room_id, &account_id, &object_id, &container_item_id],
+                )
+                .await?;
+
+            if let Some(row) = existing {
+                // Stack exists - update quantity
+                let instance_id: ItemId = row.get(0);
+                let current_quantity: i32 = row.get(1);
+                let new_quantity = current_quantity + quantity;
+
+                transaction
+                    .execute(
+                        "UPDATE item_instances
+                    SET quantity = $1, updated_at = NOW()
+                    WHERE instance_id = $2",
+                        &[&new_quantity, &instance_id],
+                    )
+                    .await?;
+
+                transaction.commit().await?;
+                return Ok(instance_id);
+            }
+        }
+
+        // 3. No existing stack (or not stackable) - create new instance
+        let row = transaction
             .query_one(
-                "SELECT spawn_item($1, $2, $3, $4, $5, $6, $7)",
+                "INSERT INTO item_instances (
+                zone_id, catalog_id, item_key,
+                room_id, account_id, object_id, container_item_id,
+                quantity, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+            RETURNING instance_id",
                 &[
                     &zone_id,
+                    &catalog_id,
                     &item_key,
                     &room_id,
                     &account_id,
@@ -727,7 +781,10 @@ impl InventoryRepo for InventoryRepository {
             )
             .await?;
 
-        Ok(row.get(0))
+        let instance_id: ItemId = row.get(0);
+
+        transaction.commit().await?;
+        Ok(instance_id)
     }
 
     // ========================================================================
@@ -735,17 +792,84 @@ impl InventoryRepo for InventoryRepository {
     // ========================================================================
 
     async fn move_item(&self, instance_id: ItemId, new_location: ItemLocation) -> DbResult<()> {
-        let client = self.db.pool.get().await?;
+        let mut client = self.db.pool.get().await?;
+        let transaction = client.transaction().await?;
 
-        let (room_id, account_id, object_id, container_item_id) = new_location.to_db_columns();
-
-        client
-            .execute(
-                "SELECT move_item($1, $2, $3, $4, $5)",
-                &[&instance_id, &room_id, &account_id, &object_id, &container_item_id],
+        // Get item info
+        let item_row = transaction
+            .query_one(
+                "SELECT zone_id, catalog_id, quantity FROM item_instances WHERE instance_id = $1",
+                &[&instance_id],
             )
             .await?;
 
+        let zone_id: ZoneId = item_row.get(0);
+        let catalog_id: ItemId = item_row.get(1);
+        let quantity: i32 = item_row.get(2);
+
+        // Check if stackable
+        let stackable: bool = transaction
+            .query_one(
+                "SELECT stackable FROM bp_items_catalog WHERE id = $1",
+                &[&catalog_id],
+            )
+            .await?
+            .get(0);
+
+        let (room_id, account_id, object_id, container_item_id) = new_location.to_db_columns();
+
+        // If stackable, try to merge with existing stack at destination
+        if stackable {
+            let existing = transaction
+                .query_opt(
+                    "SELECT instance_id, quantity
+                FROM item_instances
+                WHERE zone_id = $1
+                    AND catalog_id = $2
+                    AND instance_id != $3
+                    AND room_id IS NOT DISTINCT FROM $4
+                    AND account_id IS NOT DISTINCT FROM $5
+                    AND object_id IS NOT DISTINCT FROM $6
+                    AND container_item_id IS NOT DISTINCT FROM $7
+                LIMIT 1",
+                    &[&zone_id, &catalog_id, &instance_id, &room_id, &account_id, &object_id, &container_item_id],
+                )
+                .await?;
+
+            if let Some(row) = existing {
+                // Merge into existing stack
+                let existing_id: ItemId = row.get(0);
+                let existing_quantity: i32 = row.get(1);
+
+                // Update existing stack
+                transaction
+                    .execute(
+                        "UPDATE item_instances SET quantity = $1, updated_at = NOW() WHERE instance_id = $2",
+                        &[&(existing_quantity + quantity), &existing_id],
+                    )
+                    .await?;
+
+                // Delete moved item
+                transaction
+                    .execute("DELETE FROM item_instances WHERE instance_id = $1", &[&instance_id])
+                    .await?;
+
+                transaction.commit().await?;
+                return Ok(());
+            }
+        }
+
+        // No merge - just update location
+        transaction
+            .execute(
+                "UPDATE item_instances
+            SET room_id = $1, account_id = $2, object_id = $3, container_item_id = $4, updated_at = NOW()
+            WHERE instance_id = $5",
+                &[&room_id, &account_id, &object_id, &container_item_id, &instance_id],
+            )
+            .await?;
+
+        transaction.commit().await?;
         Ok(())
     }
 
@@ -758,7 +882,7 @@ impl InventoryRepo for InventoryRepository {
 
         // Get current quantity
         let row = client
-            .query_one("SELECT quantity FROM items WHERE id = $1", &[&instance_id])
+            .query_one("SELECT quantity FROM item_instances WHERE instance_id = $1", &[&instance_id])
             .await?;
 
         let quantity: i32 = row.get(0);
@@ -766,13 +890,13 @@ impl InventoryRepo for InventoryRepository {
         if quantity <= 1 {
             // Delete item
             client
-                .execute("DELETE FROM items WHERE id = $1", &[&instance_id])
+                .execute("DELETE FROM item_instances WHERE instance_id = $1", &[&instance_id])
                 .await?;
         } else {
             // Reduce quantity
             client
                 .execute(
-                    "UPDATE items SET quantity = quantity - 1, updated_at = NOW() WHERE id = $1",
+                    "UPDATE item_instances SET quantity = quantity - 1, updated_at = NOW() WHERE instance_id = $1",
                     &[&instance_id],
                 )
                 .await?;
@@ -786,7 +910,7 @@ impl InventoryRepo for InventoryRepository {
 
         client
             .execute(
-                "UPDATE items SET quantity = $1, updated_at = NOW() WHERE id = $2",
+                "UPDATE item_instances SET quantity = $1, updated_at = NOW() WHERE instance_id = $2",
                 &[&quantity, &instance_id],
             )
             .await?;
@@ -799,7 +923,7 @@ impl InventoryRepo for InventoryRepository {
 
         client
             .execute(
-                "UPDATE items SET condition = $1, updated_at = NOW() WHERE id = $2",
+                "UPDATE item_instances SET condition = $1, updated_at = NOW() WHERE instance_id = $2",
                 &[&condition, &instance_id],
             )
             .await?;
@@ -811,7 +935,7 @@ impl InventoryRepo for InventoryRepository {
         let client = self.db.pool.get().await?;
 
         client
-            .execute("DELETE FROM items WHERE id = $1", &[&instance_id])
+            .execute("DELETE FROM item_instances WHERE instance_id = $1", &[&instance_id])
             .await?;
 
         Ok(())

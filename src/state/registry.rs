@@ -55,18 +55,20 @@ impl Registry {
         let zone_mem = Arc::new(MemoryBackend::new());
         let zone_router = Arc::new(ZoneRouter::new(zone_db, zone_mem));
 
+        let inventory_service = Arc::new(InventoryService::new(repos.inventory.clone()));
         let blueprint_service = Arc::new(BlueprintService::new(repos.room.clone()));
         let room_service = Arc::new(RoomService::new(
             repos.room.clone(),
             repos.zone.clone(),
             repos.user.clone(),
+            inventory_service.clone(),
         ));
 
         let services = Arc::new(Services {
             auth: Arc::new(AuthService::new(repos.account.clone())),
             account: Arc::new(AccountService::new(repos.account.clone())),
             blueprint: blueprint_service.clone(),
-            inventory: Arc::new(InventoryService::new(repos.inventory.clone())),
+            inventory: inventory_service,
             room: room_service.clone(),
             cursor: Arc::new(CursorService::new(zone_router.clone(), room_service.clone())),
             navigator: Arc::new(NavigatorService::new(zone_router.clone())),

@@ -51,84 +51,50 @@ CREATE INDEX idx_bp_item_nouns_noun ON bp_item_nouns(noun);
 -- ZONE-LEVEL: Item Instances
 -- ============================================================================
 
--- Table: items
--- Actual item instances that exist in the game world
--- Each item references its catalog definition and has a specific location
-CREATE TABLE items (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    zone_id UUID NOT NULL REFERENCES zones(id) ON DELETE CASCADE,
+-- Item instances (actual spawned items)
+CREATE TABLE item_instances (
+    instance_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    zone_id UUID NOT NULL,
     catalog_id UUID NOT NULL REFERENCES bp_items_catalog(id),
+    item_key VARCHAR(100) NOT NULL,
 
-    -- Location: Exactly ONE of these must be set
-    room_id UUID REFERENCES bp_rooms(id) ON DELETE CASCADE,
-    account_id UUID REFERENCES accounts(id) ON DELETE CASCADE,
-    object_id UUID REFERENCES bp_objects(id) ON DELETE CASCADE,
-    container_item_id UUID REFERENCES items(id) ON DELETE CASCADE,
+    -- Location (only ONE should be set)
+    room_id UUID,
+    account_id UUID,
+    object_id UUID,
+    container_item_id UUID,
 
-    -- Instance-specific properties
-    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
-    condition JSONB,  -- Durability, charges, enchantments, etc.
+    -- Item state
+    quantity INTEGER NOT NULL DEFAULT 1,
+    condition JSONB DEFAULT '{}',
 
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
 
-    -- Constraint: Exactly one location must be specified
-    CONSTRAINT chk_item_single_location CHECK (
-        (
-            (room_id IS NOT NULL)::INTEGER +
-            (account_id IS NOT NULL)::INTEGER +
-            (object_id IS NOT NULL)::INTEGER +
-            (container_item_id IS NOT NULL)::INTEGER
-        ) = 1
+    -- Ensure only one location is set
+    CHECK (
+        (room_id IS NOT NULL)::int +
+        (account_id IS NOT NULL)::int +
+        (object_id IS NOT NULL)::int +
+        (container_item_id IS NOT NULL)::int = 1
     )
 );
 
--- Core indexes
-CREATE INDEX idx_items_zone_id ON items(zone_id);
-CREATE INDEX idx_items_catalog_id ON items(catalog_id);
+CREATE INDEX idx_item_instances_zone ON item_instances(zone_id);
+CREATE INDEX idx_item_instances_room ON item_instances(zone_id, room_id) WHERE room_id IS NOT NULL;
+CREATE INDEX idx_item_instances_player ON item_instances(zone_id, account_id) WHERE account_id IS NOT NULL;
+CREATE INDEX idx_item_instances_object ON item_instances(zone_id, object_id) WHERE object_id IS NOT NULL;
+CREATE INDEX idx_item_instances_container ON item_instances(zone_id, container_item_id) WHERE container_item_id IS NOT NULL;
+CREATE INDEX idx_item_instances_stacking ON item_instances(zone_id, catalog_id, room_id, account_id, object_id, container_item_id);
 
--- Location-specific indexes (partial indexes for better performance)
-CREATE INDEX idx_items_room_id
-    ON items(room_id)
-    WHERE room_id IS NOT NULL;
+-- Track loot instantiation state
+CREATE TABLE loot_instantiation_state (
+    zone_id UUID NOT NULL,
+    object_id UUID NOT NULL,
+    account_id UUID,
+    instantiated_at TIMESTAMP NOT NULL DEFAULT NOW(),
 
-CREATE INDEX idx_items_account_id
-    ON items(account_id)
-    WHERE account_id IS NOT NULL;
-
-CREATE INDEX idx_items_object_id
-    ON items(object_id)
-    WHERE object_id IS NOT NULL;
-
-CREATE INDEX idx_items_container_item_id
-    ON items(container_item_id)
-    WHERE container_item_id IS NOT NULL;
-
--- Composite indexes for common queries
-CREATE INDEX idx_items_zone_account
-    ON items(zone_id, account_id)
-    WHERE account_id IS NOT NULL;
-
-CREATE INDEX idx_items_zone_room
-    ON items(zone_id, room_id)
-    WHERE room_id IS NOT NULL;
-
-
--- Add to zone_object_loot_state table
-CREATE TABLE zone_object_loot_state (
-    zone_id UUID NOT NULL REFERENCES zones(id) ON DELETE CASCADE,
-    object_id UUID NOT NULL REFERENCES bp_objects(id) ON DELETE CASCADE,
-    account_id UUID,  -- NEW: NULL for shared, specific for per-player
-    instantiated BOOLEAN NOT NULL DEFAULT FALSE,
-    instantiated_at TIMESTAMPTZ,
     PRIMARY KEY (zone_id, object_id, account_id)
 );
 
--- Partial indexes for performance
-CREATE INDEX idx_zone_object_loot_state_shared
-    ON zone_object_loot_state(zone_id, object_id)
-    WHERE account_id IS NULL;
-
-CREATE INDEX idx_zone_object_loot_state_player
-    ON zone_object_loot_state(zone_id, object_id, account_id)
-    WHERE account_id IS NOT NULL;
+CREATE INDEX idx_loot_state_object ON loot_instantiation_state(zone_id, object_id);

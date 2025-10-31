@@ -11,19 +11,27 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
+use crate::services::inventory::LootConfig;
 
 pub struct RoomService {
     room_repo: Arc<dyn RoomRepo>,
     zone_repo: Arc<dyn ZoneRepo>,
     user_repo: Arc<dyn UserRepo>,
+    inventory_service: Arc<crate::services::inventory::InventoryService>,
 }
 
 impl RoomService {
-    pub fn new(room_repo: Arc<dyn RoomRepo>, zone_repo: Arc<dyn ZoneRepo>, user_repo: Arc<dyn UserRepo>) -> Self {
+    pub fn new(
+        room_repo: Arc<dyn RoomRepo>,
+        zone_repo: Arc<dyn ZoneRepo>,
+        user_repo: Arc<dyn UserRepo>,
+        inventory_service: Arc<crate::services::inventory::InventoryService>,
+    ) -> Self {
         Self {
             room_repo,
             zone_repo,
             user_repo,
+            inventory_service,
         }
     }
 
@@ -121,7 +129,7 @@ impl RoomService {
             )
             .await?;
 
-        // reload room view after updating visit count
+        // Reload room view after updating visit count
         let rv = self
             .build_room_view(&ctx.zone_ctx()?, ctx.account_id()?, ctx.room_id()?)
             .await?;
@@ -132,6 +140,29 @@ impl RoomService {
                 .as_mut()
                 .ok_or_else(|| DomainError::InternalError("Cursor not able to mutate".into()))?;
             cursor.room_view = rv;
+        }
+
+        // Spawn loot found in the room
+        for object in &ctx.cursor()?.room_view.objects {
+            if let Some(loot_config) = &object.loot {
+                let zone_id = ctx.zone_id()?;
+                let account_id = ctx.account_id()?;
+
+                let loot_config = LootConfig {
+                    items: loot_config.items.clone(),
+                    credits: loot_config.credits,
+                    once: loot_config.once,
+                    shared: loot_config.shared,
+                };
+
+                // Instantiate if not already done
+                self.inventory_service.instantiate_loot(
+                    zone_id,
+                    object.id,
+                    account_id,
+                    &loot_config
+                ).await?;
+            }
         }
 
         // Enter or First enter lua hooks
