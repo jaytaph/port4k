@@ -1,8 +1,8 @@
+use crate::net::InputMode;
 use crate::net::output::OutFrame;
 use crate::net::sink::ClientSink;
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
-use crate::net::InputMode;
 
 pub struct TelnetSink<W> {
     writer: W,
@@ -23,11 +23,11 @@ where
         match frame {
             OutFrame::InputMode(InputMode::Normal) => {
                 // Client may echo again
-                self.writer.write_all(&[255, 252, 1]).await?;       // IAC wont echo
+                self.writer.write_all(&[255, 252, 1]).await?; // IAC wont echo
             }
             OutFrame::InputMode(InputMode::Hidden(_mask)) => {
                 // No echo
-                self.writer.write_all(&[255, 251, 1]).await?;       // IAC will echo
+                self.writer.write_all(&[255, 251, 1]).await?; // IAC will echo
             }
             OutFrame::Line(s) => {
                 for line in s.lines() {

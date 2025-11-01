@@ -48,9 +48,7 @@ where
             OutFrame::RoomView { content } => WsFrame::RoomView { content },
             OutFrame::Prompt(s) => WsFrame::Prompt { text: s },
             OutFrame::InputMode(_) => {
-                return Err(anyhow::Error::msg(
-                    "InputMode frame not supported over WebSocket sink",
-                ));
+                return Err(anyhow::Error::msg("InputMode frame not supported over WebSocket sink"));
             }
             OutFrame::ClearScreen => WsFrame::ClearScreen,
             OutFrame::Raw(_) => {

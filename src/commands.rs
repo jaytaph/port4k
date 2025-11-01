@@ -8,6 +8,7 @@ use crate::models::room::RoomView;
 use crate::models::types::{AccountId, RealmId, RoomId};
 use crate::net::output::OutputHandle;
 use crate::services::ServiceError;
+use crate::state::interactive::InteractiveState;
 use crate::state::session::{Cursor, Session};
 use crate::{Registry, ansi};
 use async_trait::async_trait;
@@ -16,7 +17,6 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::SendError;
-use crate::state::interactive::InteractiveState;
 
 mod blueprint;
 mod debug_cmd;
@@ -214,13 +214,31 @@ pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
         Verb::Examine => examine::examine(ctx.clone(), intent).await,
         Verb::Search => search::search(ctx.clone(), intent).await,
         Verb::Take => take::take(ctx.clone(), intent).await,
-        Verb::Drop => { ctx.output.system("Drop command not implemented yet.").await; Ok(()) }
+        Verb::Drop => {
+            ctx.output.system("Drop command not implemented yet.").await;
+            Ok(())
+        }
         Verb::Open => open::open(ctx.clone(), intent).await,
-        Verb::Unlock => { ctx.output.system("Unlock command not implemented yet.").await; Ok(()) }
-        Verb::Lock => { ctx.output.system("Lock command not implemented yet.").await; Ok(()) }
-        Verb::Use => { ctx.output.system("Use command not implemented yet.").await; Ok(()) }
-        Verb::Put => { ctx.output.system("Put command not implemented yet.").await; Ok(()) }
-        Verb::Talk => { ctx.output.system("Talk command not implemented yet.").await; Ok(()) }
+        Verb::Unlock => {
+            ctx.output.system("Unlock command not implemented yet.").await;
+            Ok(())
+        }
+        Verb::Lock => {
+            ctx.output.system("Lock command not implemented yet.").await;
+            Ok(())
+        }
+        Verb::Use => {
+            ctx.output.system("Use command not implemented yet.").await;
+            Ok(())
+        }
+        Verb::Put => {
+            ctx.output.system("Put command not implemented yet.").await;
+            Ok(())
+        }
+        Verb::Talk => {
+            ctx.output.system("Talk command not implemented yet.").await;
+            Ok(())
+        }
         Verb::Go => go::go(ctx.clone(), intent).await,
         Verb::Inventory => inventory::inventory(ctx.clone(), intent).await,
         Verb::Who => who::who(ctx.clone()).await,
@@ -290,22 +308,13 @@ fn permission_check(intent: &Intent, ctx: Arc<CmdCtx>) -> PermissionResult {
     Ok(())
 }
 
-
-async fn process_interactive_state(
-    st: InteractiveState,
-    raw: &str,
-    ctx: Arc<CmdCtx>
-) -> CommandResult {
+async fn process_interactive_state(st: InteractiveState, raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
     match st {
-        InteractiveState::LoginAskUsername => {
-            login::continue_with_username(ctx.clone(), raw).await
-        }
+        InteractiveState::LoginAskUsername => login::continue_with_username(ctx.clone(), raw).await,
         InteractiveState::LoginAskPassword { username } => {
             login::continue_with_password(ctx.clone(), username, raw).await
         }
-        InteractiveState::Register(reg_state) => {
-            register::continue_register(ctx.clone(), reg_state, raw).await
-        }
+        InteractiveState::Register(reg_state) => register::continue_register(ctx.clone(), reg_state, raw).await,
         InteractiveState::None => Ok(()),
     }
 }

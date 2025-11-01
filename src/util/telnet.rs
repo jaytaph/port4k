@@ -222,11 +222,7 @@ impl TelnetMachine {
         }
     }
 
-    pub async fn set_echo<W: AsyncWrite + Unpin>(
-        &mut self,
-        w: &mut W,
-        enabled: bool,
-    ) -> std::io::Result<()> {
+    pub async fn set_echo<W: AsyncWrite + Unpin>(&mut self, w: &mut W, enabled: bool) -> std::io::Result<()> {
         if enabled {
             // go back to: server will echo -> client stops local echo
             send_will(w, ECHO).await

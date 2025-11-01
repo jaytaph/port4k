@@ -2,11 +2,12 @@ use crate::models::account::Account;
 use crate::models::realm::Realm;
 use crate::models::room::RoomView;
 use crate::models::types::{AccountId, RealmId, RoomId};
-use std::sync::Arc;
 use crate::net::InputMode;
 use crate::state::interactive::InteractiveState;
+use std::sync::Arc;
 
-const DEFAULT_USER_PROMPT: &'static str = "{c:bright_yellow:blue} {v:account.name:Not logged in} [{rv:title:Nowhere}] @ {v:wall_time} {c} # ";
+const DEFAULT_USER_PROMPT: &str =
+    "{c:bright_yellow:blue} {v:account.name:Not logged in} [{rv:title:Nowhere}] @ {v:wall_time} {c} # ";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnState {

@@ -19,5 +19,5 @@ struct AppCtx {
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
 pub enum InputMode {
     Normal,
-    Hidden(char),  // masked with for instance '*'
+    Hidden(char), // masked with for instance '*'
 }

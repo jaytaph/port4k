@@ -1,14 +1,17 @@
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use crate::models::account::Account;
-use std::sync::Arc;
 use crate::net::InputMode;
 use crate::state::interactive::{InteractiveState, RegisterState};
+use std::sync::Arc;
 
 pub async fn register(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
-    if let Some(username) = intent.args.get(0) {
-        let mut st = RegisterState::default();
-        st.username = Some(username.to_string());
+    if let Some(username) = intent.args.first() {
+        let st = RegisterState {
+            username: Some(username.to_string()),
+            email: None,
+            password: None,
+        };
         ctx.set_interactive(InteractiveState::Register(st));
         ctx.output.set_prompt("Please enter your email: ").await;
         return Ok(());
@@ -19,11 +22,7 @@ pub async fn register(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     Ok(())
 }
 
-pub async fn continue_register(
-    ctx: Arc<CmdCtx>,
-    mut st: RegisterState,
-    raw: &str,
-) -> CommandResult {
+pub async fn continue_register(ctx: Arc<CmdCtx>, mut st: RegisterState, raw: &str) -> CommandResult {
     let line = raw.trim();
 
     if st.username.is_none() {
@@ -41,7 +40,6 @@ pub async fn continue_register(
             ctx.output.system("That username is already taken.").await;
             return Ok(());
         }
-
 
         st.username = Some(line.to_string());
         ctx.set_interactive(InteractiveState::Register(st));
@@ -86,4 +84,3 @@ pub async fn continue_register(
 
     Ok(())
 }
-

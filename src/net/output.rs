@@ -1,4 +1,5 @@
 use crate::Session;
+use crate::net::InputMode;
 use crate::net::sink::ClientSink;
 use crate::net::sink::telnet::TelnetSink;
 use crate::net::sink::websocket::WebSocketSink;
@@ -11,7 +12,6 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use tokio::io::AsyncWrite;
 use tokio::sync::mpsc;
-use crate::net::InputMode;
 
 const MAX_TERMINAL_WIDTH: usize = 80;
 
@@ -22,7 +22,9 @@ pub enum OutFrame {
     /// System prompt from the game engine, not world related
     System(String),
     /// Room view content
-    RoomView { content: String },
+    RoomView {
+        content: String,
+    },
     /// Display prompt line
     Prompt(String),
     // Should input be shown or hidden
@@ -256,9 +258,7 @@ where
         }
     });
 
-    SessionIoBundle {
-        output: output_handle
-    }
+    SessionIoBundle { output: output_handle }
 }
 
 pub async fn init_session_for_websocket(

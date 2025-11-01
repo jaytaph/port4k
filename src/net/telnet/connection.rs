@@ -77,7 +77,6 @@ async fn handle_data_byte(
     sess: Arc<RwLock<Session>>,
     ctx: Arc<AppCtx>,
 ) -> AppResult<()> {
-
     {
         // Set input mask based on session mode
         let s = sess.read();

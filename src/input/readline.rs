@@ -341,7 +341,7 @@ impl LineEditor {
 
     pub fn visible_buffer(&self) -> String {
         if let Some(mask) = self.mask_char {
-            std::iter::repeat(mask).take(self.buf.chars().count()).collect()
+            std::iter::repeat_n(mask, self.buf.chars().count()).collect()
         } else {
             self.buf.clone()
         }

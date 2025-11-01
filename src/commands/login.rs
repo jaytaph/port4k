@@ -5,9 +5,9 @@ use crate::models::account::Account;
 use crate::models::realm::Realm;
 use crate::models::room::RoomView;
 use crate::models::types::{RealmId, RoomId};
-use std::sync::Arc;
 use crate::net::InputMode;
 use crate::state::interactive::InteractiveState;
+use std::sync::Arc;
 
 const DEFAULT_REALM_KEY: &str = "live_world";
 const DEFAULT_ROOM_KEY: &str = "cell_block";
@@ -40,7 +40,6 @@ const MOTD: &str = r#"
 
 "#;
 
-
 pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if ctx.is_logged_in() {
         ctx.output
@@ -51,15 +50,15 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
 
     // Step 1: Validate input
     match (intent.args.get(1), intent.args.get(2)) {
-        (Some(username), Some(password)) => {
-            do_login(ctx.clone(), username, password).await
-        }
+        (Some(username), Some(password)) => do_login(ctx.clone(), username, password).await,
 
         (Some(username), None) => {
             ctx.set_interactive(InteractiveState::LoginAskPassword {
                 username: username.to_string(),
             });
-            ctx.output.set_prompt(format!("Please provide password for user \"{}\": ", username)).await;
+            ctx.output
+                .set_prompt(format!("Please provide password for user \"{}\": ", username))
+                .await;
             ctx.output.input_mode(InputMode::Hidden('*')).await;
             Ok(())
         }
@@ -69,10 +68,9 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
             ctx.output.set_prompt("Please enter your username: ").await;
             Ok(())
         }
-        _ => Ok(())
+        _ => Ok(()),
     }
 }
-
 
 pub async fn continue_with_username(ctx: Arc<CmdCtx>, raw: &str) -> CommandResult {
     let username = raw.trim();
@@ -85,16 +83,14 @@ pub async fn continue_with_username(ctx: Arc<CmdCtx>, raw: &str) -> CommandResul
     ctx.set_interactive(InteractiveState::LoginAskPassword {
         username: username.to_string(),
     });
-    ctx.output.set_prompt(format!("Please provide password for user \"{}\": ", username)).await;
+    ctx.output
+        .set_prompt(format!("Please provide password for user \"{}\": ", username))
+        .await;
     ctx.output.input_mode(InputMode::Hidden('*')).await;
     Ok(())
 }
 
-pub async fn continue_with_password(
-    ctx: Arc<CmdCtx>,
-    username: String,
-    raw: &str,
-) -> CommandResult {
+pub async fn continue_with_password(ctx: Arc<CmdCtx>, username: String, raw: &str) -> CommandResult {
     let password = raw.trim();
     if password.is_empty() {
         ctx.output.system("Password cannot be empty.").await;
@@ -110,7 +106,9 @@ pub async fn continue_with_password(
             Ok(())
         }
         Err(_) => {
-            ctx.output.system("Login failed. Check your username and password.").await;
+            ctx.output
+                .system("Login failed. Check your username and password.")
+                .await;
             ctx.clear_interactive();
             ctx.output.restore_prompt().await;
             Ok(())
@@ -120,10 +118,7 @@ pub async fn continue_with_password(
 
 async fn do_login(ctx: Arc<CmdCtx>, username: &str, password: &str) -> CommandResult {
     // Step 2: Attempt to login
-    let account = match ctx.registry.services.account
-        .login(username, password)
-        .await
-    {
+    let account = match ctx.registry.services.account.login(username, password).await {
         Ok(account) => account,
         Err(err) => {
             match err {

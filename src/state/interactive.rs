@@ -12,4 +12,3 @@ pub struct RegisterState {
     pub email: Option<String>,
     pub password: Option<String>,
 }
-
