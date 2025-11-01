@@ -2,24 +2,24 @@ mod account;
 mod account_db;
 mod inventory;
 mod inventory_db;
+mod realm;
+mod realm_db;
 mod room;
 mod room_db;
 mod user;
 mod user_db;
-mod realm;
-mod realm_db;
 
 pub use account_db::AccountRepository;
 pub use inventory_db::InventoryRepository;
+pub use realm_db::RealmRepository;
 pub use room_db::RoomRepository;
 pub use user_db::UserRepository;
-pub use realm_db::RealmRepository;
 
 pub use account::AccountRepo;
 pub use inventory::InventoryRepo;
+pub use realm::RealmRepo;
 pub use room::RoomRepo;
 pub use user::UserRepo;
-pub use realm::RealmRepo;
 
 /// Even though room_ids are globally unique, we still use a combination of
 /// blueprint key and room key to identify a room sometimes. So we have a combined key

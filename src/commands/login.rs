@@ -1,11 +1,11 @@
 use crate::commands::{CmdCtx, CommandError, CommandResult};
-use crate::input::parser::Intent;
-use std::sync::Arc;
 use crate::error::{AppResult, DomainError, LoginError};
+use crate::input::parser::Intent;
 use crate::models::account::Account;
 use crate::models::realm::Realm;
 use crate::models::room::RoomView;
 use crate::models::types::{RealmId, RoomId};
+use std::sync::Arc;
 
 const DEFAULT_REALM_KEY: &'static str = "live_world";
 const DEFAULT_ROOM_KEY: &'static str = "cell_block";
@@ -49,24 +49,40 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     }
 
     // Step 2: Attempt to login
-    let account = match ctx.registry.services.account.login(intent.args[1].as_str(), intent.args[2].as_str()).await {
+    let account = match ctx
+        .registry
+        .services
+        .account
+        .login(intent.args[1].as_str(), intent.args[2].as_str())
+        .await
+    {
         Ok(account) => account,
         Err(err) => {
             match err {
                 LoginError::UserNotFound => {
-                    ctx.output.system("Login failed. Check your username and password.").await;
+                    ctx.output
+                        .system("Login failed. Check your username and password.")
+                        .await;
                 }
                 LoginError::InvalidPassword => {
-                    ctx.output.system("Login failed. Check your username and password.").await;
+                    ctx.output
+                        .system("Login failed. Check your username and password.")
+                        .await;
                 }
                 LoginError::AccountLocked => {
-                    ctx.output.system("This account has been locked. Please contact admin for support").await;
+                    ctx.output
+                        .system("This account has been locked. Please contact admin for support")
+                        .await;
                 }
                 LoginError::TooManyAttempts => {
-                    ctx.output.system("This account has been tried too many times. Please contact admin for support").await;
+                    ctx.output
+                        .system("This account has been tried too many times. Please contact admin for support")
+                        .await;
                 }
                 LoginError::InternalError(e) => {
-                    ctx.output.system(format!("Login failed due to server error. Contact admin. Error: {}", e)).await;
+                    ctx.output
+                        .system(format!("Login failed due to server error. Contact admin. Error: {}", e))
+                        .await;
                 }
             }
             return Ok(());
@@ -78,15 +94,15 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         CommandError::Custom(e.to_string())
         // CommandError::Custom("Failed to resolve starting realm.".to_string())
     })?;
-    let realm = load_realm(&ctx, realm_id).await.map_err(|_| {
-        CommandError::Custom("Failed to load starting realm.".to_string())
-    })?;
-    let room_id = resolve_room_id(&ctx, &account, realm.id).await.map_err(|_| {
-        CommandError::Custom("Failed to resolve starting room.".to_string())
-    })?;
-    let room = load_room(&ctx, &account, realm.id, room_id).await.map_err(|_| {
-        CommandError::Custom("Failed to load starting room.".to_string())
-    })?;
+    let realm = load_realm(&ctx, realm_id)
+        .await
+        .map_err(|_| CommandError::Custom("Failed to load starting realm.".to_string()))?;
+    let room_id = resolve_room_id(&ctx, &account, realm.id)
+        .await
+        .map_err(|_| CommandError::Custom("Failed to resolve starting room.".to_string()))?;
+    let room = load_room(&ctx, &account, realm.id, room_id)
+        .await
+        .map_err(|_| CommandError::Custom("Failed to load starting room.".to_string()))?;
 
     // Step 4: Log into the session at the realm/room
     ctx.sess.write().login(account, realm, room);
@@ -103,11 +119,14 @@ pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     }
 
     // Step 6: "enter" the room
-    ctx.registry.services.room.enter_room(ctx.clone(), &ctx.cursor()?).await?;
+    ctx.registry
+        .services
+        .room
+        .enter_room(ctx.clone(), &ctx.cursor()?)
+        .await?;
 
     Ok(())
 }
-
 
 async fn resolve_realm_id(ctx: &Arc<CmdCtx>, account: &Account) -> AppResult<RealmId> {
     if let Some(rid) = account.current_realm_id {
@@ -115,10 +134,7 @@ async fn resolve_realm_id(ctx: &Arc<CmdCtx>, account: &Account) -> AppResult<Rea
     }
 
     // fall back to default realm
-    match ctx.registry.services.realm
-        .get_by_key(DEFAULT_REALM_KEY)
-        .await
-    {
+    match ctx.registry.services.realm.get_by_key(DEFAULT_REALM_KEY).await {
         Ok(Some(realm)) => Ok(realm.id),
         // Err(e) => panic!("{}", e.to_string()),
         _ => fail_login(ctx, "Default realm not found.").await,
@@ -133,17 +149,16 @@ async fn load_realm(ctx: &Arc<CmdCtx>, realm_id: RealmId) -> AppResult<Realm> {
     }
 }
 
-async fn resolve_room_id(
-    ctx: &Arc<CmdCtx>,
-    account: &Account,
-    realm_id: RealmId,
-) -> AppResult<RoomId> {
+async fn resolve_room_id(ctx: &Arc<CmdCtx>, account: &Account, realm_id: RealmId) -> AppResult<RoomId> {
     if let Some(rid) = account.current_room_id {
         return Ok(rid);
     }
 
     // fall back to default room in this realm
-    match ctx.registry.services.room
+    match ctx
+        .registry
+        .services
+        .room
         .get_room_id_by_key(realm_id, DEFAULT_ROOM_KEY)
         .await
     {
@@ -152,13 +167,11 @@ async fn resolve_room_id(
     }
 }
 
-async fn load_room(
-    ctx: &Arc<CmdCtx>,
-    account: &Account,
-    realm_id: RealmId,
-    room_id: RoomId,
-) -> AppResult<RoomView> {
-    match ctx.registry.services.room
+async fn load_room(ctx: &Arc<CmdCtx>, account: &Account, realm_id: RealmId, room_id: RoomId) -> AppResult<RoomView> {
+    match ctx
+        .registry
+        .services
+        .room
         .get_by_id(realm_id, account.id, room_id)
         .await
     {

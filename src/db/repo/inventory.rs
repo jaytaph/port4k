@@ -67,7 +67,8 @@ pub trait InventoryRepo: Send + Sync {
     async fn get_room_items(&self, realm_id: RealmId, room_id: RoomId) -> DbResult<Vec<ItemInstance>>;
 
     /// Find item in room by noun
-    async fn find_item_in_room(&self, realm_id: RealmId, room_id: RoomId, noun: &str) -> DbResult<Option<ItemInstance>>;
+    async fn find_item_in_room(&self, realm_id: RealmId, room_id: RoomId, noun: &str)
+    -> DbResult<Option<ItemInstance>>;
 
     // ========================================================================
     // OBJECT/CONTAINER QUERIES

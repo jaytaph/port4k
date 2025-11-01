@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use crate::models::account::Account;
+use crate::models::realm::Realm;
 use crate::models::room::RoomView;
 use crate::models::types::{AccountId, RealmId, RoomId};
-use crate::models::realm::Realm;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnState {

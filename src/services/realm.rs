@@ -1,20 +1,26 @@
-use std::sync::Arc;
-use async_trait::async_trait;
-use chrono::Utc;
-use serde_json::Value;
 use crate::db::repo::{RealmRepo, UserRepo};
 use crate::error::{AppResult, DomainError};
 use crate::models::realm::{Realm, RealmKind};
 use crate::models::types::{AccountId, BlueprintId, ObjectId, RealmId, RoomId};
 use crate::services::realm::storage_db::DbStorage;
 use crate::services::realm::storage_mem::MemoryStorage;
+use async_trait::async_trait;
+use chrono::Utc;
+use serde_json::Value;
+use std::sync::Arc;
 
-mod storage_db;     // Persistent storage
-mod storage_mem;    // Ephemeral storage
+mod storage_db; // Persistent storage
+mod storage_mem; // Ephemeral storage
 
 #[async_trait]
 pub trait StateStorage: Send + Sync {
-    async fn update_realm_room_kv(&self, realm_id: RealmId, room_id: RoomId, key: &str, value: &Value) -> AppResult<bool>;
+    async fn update_realm_room_kv(
+        &self,
+        realm_id: RealmId,
+        room_id: RoomId,
+        key: &str,
+        value: &Value,
+    ) -> AppResult<bool>;
     async fn update_user_room_kv(
         &self,
         realm_id: RealmId,
@@ -24,7 +30,13 @@ pub trait StateStorage: Send + Sync {
         value: &Value,
     ) -> AppResult<bool>;
 
-    async fn update_realm_object_kv(&self, realm_id: RealmId, object_id: ObjectId, key: &str, value: &Value) -> AppResult<bool>;
+    async fn update_realm_object_kv(
+        &self,
+        realm_id: RealmId,
+        object_id: ObjectId,
+        key: &str,
+        value: &Value,
+    ) -> AppResult<bool>;
     async fn update_user_object_kv(
         &self,
         realm_id: RealmId,
@@ -45,10 +57,7 @@ pub struct RealmService {
 }
 
 impl RealmService {
-    pub fn new(
-        realm_repo: Arc<dyn RealmRepo>,
-        user_repo: Arc<dyn UserRepo>,
-    ) -> Self {
+    pub fn new(realm_repo: Arc<dyn RealmRepo>, user_repo: Arc<dyn UserRepo>) -> Self {
         let db_storage = Arc::new(DbStorage::new(realm_repo.clone(), user_repo.clone()));
         let mem_storage = Arc::new(MemoryStorage::new());
 
@@ -86,7 +95,9 @@ impl RealmService {
         kind: RealmKind,
     ) -> AppResult<Realm> {
         if matches!(kind, RealmKind::Test { .. }) {
-            return Err(DomainError::InvalidData("Cannot create persistent realm of Test kind".into()));
+            return Err(DomainError::InvalidData(
+                "Cannot create persistent realm of Test kind".into(),
+            ));
         }
 
         let realm = Realm {
@@ -112,4 +123,3 @@ impl RealmService {
     //     unimplemented!()
     // }
 }
-

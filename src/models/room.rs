@@ -153,17 +153,16 @@ impl BlueprintObject {
         let loot = match loot_json {
             Value::Null => None,
             Value::Object(ref obj) if obj.is_empty() => None,
-            _ => Some(serde_json::from_value::<ObjectLoot>(loot_json).map_err(|e| {
-                DbError::Decode(format!("Failed to deserialize loot: {}", e))
-            })?)
+            _ => Some(
+                serde_json::from_value::<ObjectLoot>(loot_json)
+                    .map_err(|e| DbError::Decode(format!("Failed to deserialize loot: {}", e)))?,
+            ),
         };
 
         // Same for flags if needed
         let flags_json: Value = row.try_get("flags")?;
-        let flags = serde_json::from_value::<ObjectFlags>(flags_json).map_err(|e| {
-            DbError::Decode(format!("Failed to deserialize flags: {}", e))
-        })?;
-
+        let flags = serde_json::from_value::<ObjectFlags>(flags_json)
+            .map_err(|e| DbError::Decode(format!("Failed to deserialize flags: {}", e)))?;
 
         Ok(Self {
             id: ObjectId(row.try_get::<_, Uuid>("id")?),
@@ -579,7 +578,6 @@ impl ResolvedExit {
 //     pub credits: i32,
 //     pub once: bool,
 // }
-
 
 /// Resolved object that takes into account the zone and the player's overlays
 #[derive(Debug, Clone, Serialize, Deserialize)]

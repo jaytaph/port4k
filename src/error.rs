@@ -122,7 +122,6 @@ pub enum InfraError {
     Io(#[from] std::io::Error),
 }
 
-
 #[derive(Debug, Error)]
 pub enum LoginError {
     #[error("user not found")]
@@ -134,5 +133,5 @@ pub enum LoginError {
     #[error("too many attempts")]
     TooManyAttempts,
     #[error("internal error: {0}")]
-    InternalError(String)
+    InternalError(String),
 }

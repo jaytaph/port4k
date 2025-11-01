@@ -1,9 +1,9 @@
-use crate::models::room::Kv;
-use crate::models::types::{ExitId, ObjectId, RoomId, RealmId, AccountId};
-use std::collections::HashMap;
 use crate::db::DbResult;
 use crate::error::AppResult;
 use crate::models::realm::Realm;
+use crate::models::room::Kv;
+use crate::models::types::{AccountId, ExitId, ObjectId, RealmId, RoomId};
+use std::collections::HashMap;
 
 #[async_trait::async_trait]
 pub trait RealmRepo: Send + Sync {
@@ -36,7 +36,13 @@ pub trait RealmRepo: Send + Sync {
 
 #[async_trait::async_trait]
 pub trait StateStorage: Send + Sync {
-    async fn update_realm_room_kv(&self, realm_id: RealmId, room_id: RoomId, key: &str, value: serde_json::Value) -> AppResult<bool>;
+    async fn update_realm_room_kv(
+        &self,
+        realm_id: RealmId,
+        room_id: RoomId,
+        key: &str,
+        value: serde_json::Value,
+    ) -> AppResult<bool>;
     async fn update_user_room_kv(
         &self,
         realm_id: RealmId,
@@ -46,7 +52,13 @@ pub trait StateStorage: Send + Sync {
         value: serde_json::Value,
     ) -> AppResult<bool>;
 
-    async fn update_realm_object_kv(&self, realm_id: RealmId, object_id: ObjectId, key: &str, value: serde_json::Value) -> AppResult<bool>;
+    async fn update_realm_object_kv(
+        &self,
+        realm_id: RealmId,
+        object_id: ObjectId,
+        key: &str,
+        value: serde_json::Value,
+    ) -> AppResult<bool>;
     async fn update_user_object_kv(
         &self,
         realm_id: RealmId,

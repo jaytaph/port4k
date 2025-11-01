@@ -1,7 +1,7 @@
 use crate::db::repo::InventoryRepo;
 use crate::error::{AppResult, DomainError};
 use crate::models::inventory::{Item, ItemInstance, ItemLocation};
-use crate::models::types::{AccountId, ItemId, ObjectId, RoomId, RealmId};
+use crate::models::types::{AccountId, ItemId, ObjectId, RealmId, RoomId};
 use std::sync::Arc;
 
 pub struct InventoryService {
@@ -132,7 +132,12 @@ impl InventoryService {
     }
 
     /// Find item in room by noun
-    pub async fn find_in_room(&self, realm_id: RealmId, room_id: RoomId, noun: &str) -> AppResult<Option<ItemInstance>> {
+    pub async fn find_in_room(
+        &self,
+        realm_id: RealmId,
+        room_id: RoomId,
+        noun: &str,
+    ) -> AppResult<Option<ItemInstance>> {
         let items = self.repo.find_item_in_room(realm_id, room_id, noun).await?;
         Ok(items)
     }
@@ -194,7 +199,10 @@ impl InventoryService {
 
         // Check if already instantiated
         if self.is_loot_instantiated(realm_id, object_id, state_account_id).await? {
-            println!("Loot already instantiated for object {:?} and account {:?}", object_id, state_account_id);
+            println!(
+                "Loot already instantiated for object {:?} and account {:?}",
+                object_id, state_account_id
+            );
             return Ok(LootInstantiationResult::AlreadyInstantiated);
         }
 

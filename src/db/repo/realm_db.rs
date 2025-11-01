@@ -1,12 +1,12 @@
 use crate::db::error::DbError;
-use crate::db::{map_row, map_row_opt, Db, DbResult};
+use crate::db::repo::realm::RealmRepo;
+use crate::db::{Db, DbResult, map_row, map_row_opt};
+use crate::models::realm::Realm;
 use crate::models::room::Kv;
 use crate::models::types::{AccountId, ExitId, ObjectId, RealmId, RoomId};
-use crate::models::realm::Realm;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::db::repo::realm::RealmRepo;
 
 pub struct RealmRepository {
     db: Arc<Db>,
@@ -28,7 +28,8 @@ impl RealmRepo for RealmRepository {
             SELECT id, bp_id, title, kind, created_at
             FROM realms
             WHERE id = $1
-        "#,            )
+        "#,
+            )
             .await?;
         let row_opt = client.query_opt(&stmt, &[&realm_id]).await?;
         row_opt.as_ref().map(Realm::try_from_row).transpose()
@@ -48,11 +49,7 @@ impl RealmRepo for RealmRepository {
             )
             .await?;
 
-        map_row_opt(
-            rows,
-            Realm::try_from_row,
-            &format!("RealmRepo::get_by_key key={}", key)
-        )
+        map_row_opt(rows, Realm::try_from_row, &format!("RealmRepo::get_by_key key={}", key))
     }
 
     async fn create(&self, realm: Realm) -> DbResult<Realm> {
@@ -93,10 +90,12 @@ impl RealmRepo for RealmRepository {
 
         let realms: DbResult<Vec<Realm>> = rows
             .into_iter()
-            .map(|row| { map_row(
-                &row,
-                Realm::try_from_row,
-                &format!("RealmRepo::find_by_owner owner_id={}", owner_id))
+            .map(|row| {
+                map_row(
+                    &row,
+                    Realm::try_from_row,
+                    &format!("RealmRepo::find_by_owner owner_id={}", owner_id),
+                )
             })
             .collect();
 

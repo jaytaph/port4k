@@ -1,7 +1,7 @@
 use crate::db::repo::inventory::InventoryRepo;
-use crate::db::{map_row, map_row_opt, Db, DbError, DbResult};
+use crate::db::{Db, DbError, DbResult, map_row, map_row_opt};
 use crate::models::inventory::{Item, ItemInstance, ItemLocation};
-use crate::models::types::{AccountId, BlueprintId, ItemId, ObjectId, RoomId, RealmId};
+use crate::models::types::{AccountId, BlueprintId, ItemId, ObjectId, RealmId, RoomId};
 use std::sync::Arc;
 
 pub struct InventoryRepository {
@@ -52,7 +52,10 @@ impl InventoryRepo for InventoryRepository {
         map_row(
             &row,
             Item::try_from_row,
-            &format!("InventoryRepo::get_item_by_key realm_id={} item_key={}", realm_id, item_key),
+            &format!(
+                "InventoryRepo::get_item_by_key realm_id={} item_key={}",
+                realm_id, item_key
+            ),
         )
     }
 
@@ -131,13 +134,14 @@ impl InventoryRepo for InventoryRepository {
             )
             .await?;
 
-
         let items: DbResult<Vec<Item>> = rows
             .into_iter()
-            .map(|row| { map_row(
-                &row,
-                Item::try_from_row,
-                &format!("InventoryRepo::get_realm_catalog realm_id={}", realm_id))
+            .map(|row| {
+                map_row(
+                    &row,
+                    Item::try_from_row,
+                    &format!("InventoryRepo::get_realm_catalog realm_id={}", realm_id),
+                )
             })
             .collect();
 
@@ -405,7 +409,7 @@ impl InventoryRepo for InventoryRepository {
                 nouns: r.get(17),
             })
         })
-            .transpose()
+        .transpose()
     }
     // ========================================================================
     // ROOM QUERIES
@@ -460,7 +464,12 @@ impl InventoryRepo for InventoryRepository {
             .collect()
     }
 
-    async fn find_item_in_room(&self, realm_id: RealmId, room_id: RoomId, noun: &str) -> DbResult<Option<ItemInstance>> {
+    async fn find_item_in_room(
+        &self,
+        realm_id: RealmId,
+        room_id: RoomId,
+        noun: &str,
+    ) -> DbResult<Option<ItemInstance>> {
         let client = self.db.pool.get().await?;
 
         let row = client
@@ -506,7 +515,7 @@ impl InventoryRepo for InventoryRepository {
                 nouns: r.get(17),
             })
         })
-            .transpose()
+        .transpose()
     }
 
     // ========================================================================
@@ -613,7 +622,7 @@ impl InventoryRepo for InventoryRepository {
                 nouns: r.get(17),
             })
         })
-            .transpose()
+        .transpose()
     }
 
     // ========================================================================
@@ -713,7 +722,14 @@ impl InventoryRepo for InventoryRepository {
                     AND object_id IS NOT DISTINCT FROM $5
                     AND container_item_id IS NOT DISTINCT FROM $6
                 LIMIT 1",
-                    &[&realm_id, &catalog_id, &room_id, &account_id, &object_id, &container_item_id],
+                    &[
+                        &realm_id,
+                        &catalog_id,
+                        &room_id,
+                        &account_id,
+                        &object_id,
+                        &container_item_id,
+                    ],
                 )
                 .await?;
 
@@ -788,10 +804,7 @@ impl InventoryRepo for InventoryRepository {
 
         // Check if stackable
         let stackable: bool = transaction
-            .query_one(
-                "SELECT stackable FROM bp_items_catalog WHERE id = $1",
-                &[&catalog_id],
-            )
+            .query_one("SELECT stackable FROM bp_items_catalog WHERE id = $1", &[&catalog_id])
             .await?
             .get(0);
 
@@ -811,7 +824,15 @@ impl InventoryRepo for InventoryRepository {
                     AND object_id IS NOT DISTINCT FROM $6
                     AND container_item_id IS NOT DISTINCT FROM $7
                 LIMIT 1",
-                    &[&realm_id, &catalog_id, &instance_id, &room_id, &account_id, &object_id, &container_item_id],
+                    &[
+                        &realm_id,
+                        &catalog_id,
+                        &instance_id,
+                        &room_id,
+                        &account_id,
+                        &object_id,
+                        &container_item_id,
+                    ],
                 )
                 .await?;
 
@@ -861,7 +882,10 @@ impl InventoryRepo for InventoryRepository {
 
         // Get current quantity
         let row = client
-            .query_one("SELECT quantity FROM item_instances WHERE instance_id = $1", &[&instance_id])
+            .query_one(
+                "SELECT quantity FROM item_instances WHERE instance_id = $1",
+                &[&instance_id],
+            )
             .await?;
 
         let quantity: i32 = row.get(0);

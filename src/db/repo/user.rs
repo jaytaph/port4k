@@ -11,12 +11,7 @@ pub trait UserRepo: Send + Sync {
     async fn obj_kv(&self, realm_id: RealmId, room_id: RoomId, account_id: AccountId) -> DbResult<HashMap<String, Kv>>;
 
     /// Stores the current realm/room/account location
-    async fn set_current_room(
-        &self,
-        realm_id: RealmId,
-        account_id: AccountId,
-        room_id: RoomId,
-    ) -> DbResult<()>;
+    async fn set_current_room(&self, realm_id: RealmId, account_id: AccountId, room_id: RoomId) -> DbResult<()>;
 
     /// Increase item in the room KV for a specific user
     async fn inc_room_kv(

@@ -29,8 +29,8 @@ impl Db {
 fn map_row<T, E>(
     row: &tokio_postgres::Row,
     f: impl FnOnce(&tokio_postgres::Row) -> Result<T, E>,
-    ctx: &str
-)  -> Result<T, E>
+    ctx: &str,
+) -> Result<T, E>
 where
     E: std::fmt::Display,
 {
@@ -48,15 +48,13 @@ where
     F: FnOnce(&Row) -> DbResult<T>,
 {
     match row_opt {
-        Some(row) => {
-            match f(&row) {
-                Ok(v) => Ok(Some(v)),
-                Err(e) => {
-                    tracing::error!(error = %e, context = %ctx, "row mapping failed");
-                    Err(e)
-                }
+        Some(row) => match f(&row) {
+            Ok(v) => Ok(Some(v)),
+            Err(e) => {
+                tracing::error!(error = %e, context = %ctx, "row mapping failed");
+                Err(e)
             }
-        }
+        },
         None => Ok(None),
     }
 }

@@ -1,10 +1,10 @@
 use crate::db::repo::AccountRepo;
 use crate::error::{AppResult, LoginError};
-use std::sync::Arc;
-use argon2::Argon2;
-use password_hash::{PasswordHash, PasswordVerifier};
 use crate::models::account::Account;
 use crate::models::types::AccountId;
+use argon2::Argon2;
+use password_hash::{PasswordHash, PasswordVerifier};
+use std::sync::Arc;
 
 pub struct AccountService {
     repo: Arc<dyn AccountRepo>,
@@ -35,11 +35,17 @@ impl AccountService {
             Err(_) => return Err(LoginError::UserNotFound),
         }
 
-        let Some(account) = self.repo.get_by_username(username).await.map_err(|_| LoginError::UserNotFound)? else {
+        let Some(account) = self
+            .repo
+            .get_by_username(username)
+            .await
+            .map_err(|_| LoginError::UserNotFound)?
+        else {
             return Err(LoginError::UserNotFound);
         };
 
-        let parsed = PasswordHash::new(&account.password_hash).map_err(|_| LoginError::InternalError("cannot generate password hash".into()))?;
+        let parsed = PasswordHash::new(&account.password_hash)
+            .map_err(|_| LoginError::InternalError("cannot generate password hash".into()))?;
         if self.argon.verify_password(password.as_bytes(), &parsed).is_err() {
             return Err(LoginError::InvalidPassword);
         };
@@ -49,7 +55,10 @@ impl AccountService {
         }
 
         // We are logged in. Update last login time
-        self.repo.update_last_login(account.id).await.map_err(|_| LoginError::InternalError("cannot update login timestamp".into()))?;
+        self.repo
+            .update_last_login(account.id)
+            .await
+            .map_err(|_| LoginError::InternalError("cannot update login timestamp".into()))?;
 
         Ok(account)
     }

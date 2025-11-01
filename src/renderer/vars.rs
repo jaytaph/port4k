@@ -1,10 +1,10 @@
 use crate::Session;
+use crate::game::{xp_to_level, xp_to_level_name};
 use crate::models::room::RoomView;
 use crate::renderer::RenderVars;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::game::{xp_to_level, xp_to_level_name};
 
 /// Returns a list of variables available for rendering templates.
 pub fn generate_render_vars(sess: Arc<RwLock<Session>>) -> RenderVars {
@@ -43,16 +43,16 @@ fn get_global_vars(sess: Arc<RwLock<Session>>) -> HashMap<String, String> {
         vars.insert("account.role".to_string(), account.role.to_string());
         vars.insert("account.xp".to_string(), format!("{}", account.xp));
         vars.insert("account.xp_level".to_string(), format!("{}", xp_to_level(account.xp)));
-        vars.insert("account.xp_level_name".to_string(), format!("{}", xp_to_level_name(account.xp)));
+        vars.insert(
+            "account.xp_level_name".to_string(),
+            format!("{}", xp_to_level_name(account.xp)),
+        );
         vars.insert("account.health".to_string(), format!("{}", account.health));
         vars.insert("account.coins".to_string(), format!("{}", account.coins));
     }
     if let Some(cursor) = sess.read().get_cursor().as_ref() {
         vars.insert("cursor.realm".to_string(), cursor.realm.title.to_string());
-        vars.insert(
-            "cursor.room.title".to_string(),
-            cursor.room.blueprint.title.to_string(),
-        );
+        vars.insert("cursor.room.title".to_string(), cursor.room.blueprint.title.to_string());
         // vars.insert("cursor.view".to_string(), cursor.room.title.to_string());
     }
 

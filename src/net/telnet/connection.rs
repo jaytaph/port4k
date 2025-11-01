@@ -62,7 +62,7 @@ async fn read_loop(
 }
 
 async fn cleanup(sess: Arc<RwLock<Session>>, registry: Arc<Registry>) {
-    let Some(account) = sess.read().get_account()  else {
+    let Some(account) = sess.read().get_account() else {
         return;
     };
 
@@ -130,7 +130,10 @@ async fn dispatch_command(raw: &str, ctx: Arc<AppCtx>, sess: Arc<RwLock<Session>
         Ok(_) => {}
         Err(e) => {
             ctx.output
-                .system(format!("{{c:bright_yellow:bright_red}}Error processing command: {}{{c}}", e))
+                .system(format!(
+                    "{{c:bright_yellow:bright_red}}Error processing command: {}{{c}}",
+                    e
+                ))
                 .await;
         }
     }

@@ -2,7 +2,7 @@ use crate::db::error::DbError;
 use crate::db::repo::UserRepo;
 use crate::db::{Db, DbResult};
 use crate::models::room::Kv;
-use crate::models::types::{AccountId, ExitId, ObjectId, RoomId, RealmId};
+use crate::models::types::{AccountId, ExitId, ObjectId, RealmId, RoomId};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;

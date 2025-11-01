@@ -42,7 +42,9 @@ pub async fn go(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
 }
 
 async fn try_move_player(ctx: Arc<CmdCtx>, dir: Direction) -> Result<(), MoveError> {
-    let c = ctx.cursor().map_err(|e| MoveError::Internal(format!("no cursor: {}", e)))?;
+    let c = ctx
+        .cursor()
+        .map_err(|e| MoveError::Internal(format!("no cursor: {}", e)))?;
 
     // Find exit
     let rv = ctx
@@ -72,17 +74,26 @@ async fn try_move_player(ctx: Arc<CmdCtx>, dir: Direction) -> Result<(), MoveErr
     }
 
     // Create a new cursor with the new room
-    let new_cursor = ctx.registry.services.room.create_cursor(
-        c.realm_id,
-        exit.to_room_id,
-        c.account_id,
-    ).await.map_err(|e| MoveError::Internal(format!("failed to create cursor: {}", e)))?;
+    let new_cursor = ctx
+        .registry
+        .services
+        .room
+        .create_cursor(c.realm_id, exit.to_room_id, c.account_id)
+        .await
+        .map_err(|e| MoveError::Internal(format!("failed to create cursor: {}", e)))?;
     ctx.sess.write().set_cursor(Some(new_cursor));
 
-    let cursor = ctx.cursor().map_err(|e| MoveError::Internal(format!("no cursor after move: {}", e)))?;
+    let cursor = ctx
+        .cursor()
+        .map_err(|e| MoveError::Internal(format!("no cursor after move: {}", e)))?;
 
     // Move to new room
-    ctx.registry.services.room.enter_room(ctx.clone(), &cursor).await.map_err(|e| MoveError::Internal(format!("failed to enter room: {e}")))?;
+    ctx.registry
+        .services
+        .room
+        .enter_room(ctx.clone(), &cursor)
+        .await
+        .map_err(|e| MoveError::Internal(format!("failed to enter room: {e}")))?;
     Ok(())
 }
 

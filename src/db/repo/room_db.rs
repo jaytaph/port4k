@@ -1,6 +1,6 @@
 use crate::db::error::DbError;
 use crate::db::repo::{BlueprintAndRoomKey, RoomRepo};
-use crate::db::{map_row, Db, DbResult};
+use crate::db::{Db, DbResult, map_row};
 use crate::lua::ScriptHook;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::{BlueprintExit, BlueprintObject, BlueprintRoom, Kv, RoomScripts};
@@ -36,7 +36,7 @@ impl RoomRepo for RoomRepository {
         map_row(
             &row,
             Blueprint::try_from_row,
-            &format!("RoomRepo::blueprint_by_key bp_key={}", bp_key)
+            &format!("RoomRepo::blueprint_by_key bp_key={}", bp_key),
         )
     }
 
@@ -57,7 +57,7 @@ impl RoomRepo for RoomRepository {
         map_row(
             &row,
             BlueprintRoom::try_from_row,
-            &format!("RoomRepo::room_by_id bp_id={}, room_id={}", bp_id, room_id)
+            &format!("RoomRepo::room_by_id bp_id={}, room_id={}", bp_id, room_id),
         )
     }
 
@@ -80,7 +80,6 @@ impl RoomRepo for RoomRepository {
         } else {
             Ok(None)
         }
-
     }
 
     async fn room_exits(&self, room_id: RoomId) -> DbResult<Vec<BlueprintExit>> {
@@ -111,10 +110,12 @@ impl RoomRepo for RoomRepository {
 
         let exits: DbResult<Vec<BlueprintExit>> = rows
             .into_iter()
-            .map(|row| { map_row(
-                &row,
-                BlueprintExit::try_from_row,
-                &format!("RoomRepo::room_exits room_id={}", room_id))
+            .map(|row| {
+                map_row(
+                    &row,
+                    BlueprintExit::try_from_row,
+                    &format!("RoomRepo::room_exits room_id={}", room_id),
+                )
             })
             .collect();
         exits
@@ -147,13 +148,14 @@ impl RoomRepo for RoomRepository {
             )
             .await?;
 
-
         let objects: DbResult<Vec<BlueprintObject>> = rows
             .into_iter()
-            .map(|row| { map_row(
-                &row,
-                BlueprintObject::try_from_row,
-                &format!("RoomRepo::room_objects room_id={}", room_id))
+            .map(|row| {
+                map_row(
+                    &row,
+                    BlueprintObject::try_from_row,
+                    &format!("RoomRepo::room_objects room_id={}", room_id),
+                )
             })
             .collect();
         objects

@@ -45,10 +45,7 @@ async fn main() -> anyhow::Result<()> {
     let cfg = Arc::new(config::Config::from_env()?);
 
     // allow overriding the DSN from CLI
-    let database_url = args
-        .database_url
-        .as_deref()
-        .unwrap_or(&cfg.database_url);
+    let database_url = args.database_url.as_deref().unwrap_or(&cfg.database_url);
 
     let db = Arc::new(Db::new(database_url)?);
     db.init().await?;
@@ -65,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
         &args.owner,
         &args.kind,
     )
-        .await?;
+    .await?;
 
     println!(
         "✅ Realm created:\n  id: {}\n  key: {}\n  title: {}\n  bp_id: {}",
@@ -77,18 +74,12 @@ async fn main() -> anyhow::Result<()> {
 
 /// Ensure there is a blueprint with this key in the database.
 /// If it doesn't exist yet, attempt to import it from the given dir.
-async fn ensure_blueprint_exists(
-    db: Arc<Db>,
-    bp_key: &str,
-) -> anyhow::Result<BlueprintId> {
+async fn ensure_blueprint_exists(db: Arc<Db>, bp_key: &str) -> anyhow::Result<BlueprintId> {
     let client = db.get_client().await?;
 
     // Try to find blueprint by key
     if let Some(row) = client
-        .query_opt(
-            r#"SELECT id FROM blueprints WHERE key = $1"#,
-            &[&bp_key],
-        )
+        .query_opt(r#"SELECT id FROM blueprints WHERE key = $1"#, &[&bp_key])
         .await?
     {
         let id: Uuid = row.get("id");
@@ -113,10 +104,7 @@ async fn create_realm(
 
     // Get owner id from username
     let owner_row = client
-        .query_one(
-            r#"SELECT id FROM accounts WHERE username = $1"#,
-            &[&owner],
-        )
+        .query_one(r#"SELECT id FROM accounts WHERE username = $1"#, &[&owner])
         .await
         .with_context(|| format!("failed to find owner account '{}'", owner))?;
     let owner_id: Uuid = owner_row.get("id");

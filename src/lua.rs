@@ -310,12 +310,10 @@ impl LuaArgContext {
     ) -> Self {
         let boxed_account = match account_id {
             None => None,
-            Some(account_id) => {
-                match registry.services.account.get_by_id(account_id).await {
-                    Ok(Some(account)) => Some(Box::new(account)),
-                    _ => None,
-                }
-            }
+            Some(account_id) => match registry.services.account.get_by_id(account_id).await {
+                Ok(Some(account)) => Some(Box::new(account)),
+                _ => None,
+            },
         };
 
         LuaArgContext {

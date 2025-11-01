@@ -1,11 +1,11 @@
+use crate::error::AppResult;
+use crate::models::types::{AccountId, ObjectId, RealmId, RoomId};
 use crate::services::realm::StateStorage;
-use std::collections::HashMap;
-use std::sync::Arc;
 use async_trait::async_trait;
 use dashmap::DashMap;
 use serde_json::Value;
-use crate::error::AppResult;
-use crate::models::types::{AccountId, ObjectId, RealmId, RoomId};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 pub struct MemoryStorage {
     realms: DashMap<RealmId, Arc<MemRealm>>,
@@ -13,9 +13,7 @@ pub struct MemoryStorage {
 
 impl MemoryStorage {
     pub fn new() -> Self {
-        Self {
-            realms: DashMap::new(),
-        }
+        Self { realms: DashMap::new() }
     }
 
     fn realm(&self, id: RealmId) -> Arc<MemRealm> {
@@ -37,7 +35,13 @@ struct MemRealm {
 
 #[async_trait]
 impl StateStorage for MemoryStorage {
-    async fn update_realm_room_kv(&self, realm_id: RealmId, room_id: RoomId, key: &str, value: &Value) -> AppResult<bool> {
+    async fn update_realm_room_kv(
+        &self,
+        realm_id: RealmId,
+        room_id: RoomId,
+        key: &str,
+        value: &Value,
+    ) -> AppResult<bool> {
         let realm = self.realm(realm_id);
         let mut inner = realm.realm_room_kv.entry(room_id).or_insert_with(HashMap::new);
         inner.insert(key.to_string(), value.clone());
@@ -61,7 +65,13 @@ impl StateStorage for MemoryStorage {
         Ok(true)
     }
 
-    async fn update_realm_object_kv(&self, realm_id: RealmId, object_id: ObjectId, key: &str, value: &Value) -> AppResult<bool> {
+    async fn update_realm_object_kv(
+        &self,
+        realm_id: RealmId,
+        object_id: ObjectId,
+        key: &str,
+        value: &Value,
+    ) -> AppResult<bool> {
         let realm = self.realm(realm_id);
         let mut inner = realm.realm_object_kv.entry(object_id).or_insert_with(HashMap::new);
         inner.insert(key.to_string(), value.clone());
@@ -91,7 +101,13 @@ impl StateStorage for MemoryStorage {
         Ok(())
     }
 
-    async fn record_travel(&self, _realm_id: RealmId, _account_id: AccountId, _from: RoomId, _to: RoomId) -> AppResult<()> {
+    async fn record_travel(
+        &self,
+        _realm_id: RealmId,
+        _account_id: AccountId,
+        _from: RoomId,
+        _to: RoomId,
+    ) -> AppResult<()> {
         Ok(())
     }
 }

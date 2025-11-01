@@ -1,6 +1,6 @@
-use crate::db::error::DbError;
 use crate::db::DbResult;
-use crate::models::types::{AccountId, RealmId, BlueprintId};
+use crate::db::error::DbError;
+use crate::models::types::{AccountId, BlueprintId, RealmId};
 use chrono::{DateTime, Utc};
 use tokio_postgres::Row;
 
@@ -136,16 +136,15 @@ impl Realm {
             _ => return Err(DbError::Decode("invalid realm.kind".into())),
         };
 
-            Ok(Realm {
-                id: row.try_get("id")?,
-                bp_id: row.try_get("bp_id")?,
-                title: row.try_get("title")?,
-                kind,
-                created_at: row.try_get("created_at")?,
-            })
+        Ok(Realm {
+            id: row.try_get("id")?,
+            bp_id: row.try_get("bp_id")?,
+            title: row.try_get("title")?,
+            kind,
+            created_at: row.try_get("created_at")?,
+        })
     }
 }
-
 
 //
 // /// Router that defines how to access realm backends based on realm policy

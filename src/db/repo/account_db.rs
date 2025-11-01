@@ -1,5 +1,5 @@
 use crate::db::repo::account::AccountRepo;
-use crate::db::{map_row_opt, Db, DbResult};
+use crate::db::{Db, DbResult, map_row_opt};
 use crate::models::account::Account;
 use crate::models::types::AccountId;
 use std::sync::Arc;

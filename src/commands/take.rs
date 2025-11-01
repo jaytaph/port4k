@@ -97,19 +97,24 @@ async fn take_from_container(ctx: Arc<CmdCtx>, item_name: &str, container_name: 
     };
 
     // Find the container object
-    let container = room_view
-        .objects
-        .iter()
-        .find(|obj| obj.name.to_ascii_lowercase().contains(&container_name.to_ascii_lowercase()));
+    let container = room_view.objects.iter().find(|obj| {
+        obj.name
+            .to_ascii_lowercase()
+            .contains(&container_name.to_ascii_lowercase())
+    });
 
     let Some(container) = container else {
-        ctx.output.line(&format!("You don't see any '{}' here.", container_name)).await;
+        ctx.output
+            .line(&format!("You don't see any '{}' here.", container_name))
+            .await;
         return Ok(());
     };
 
     // Check if container has loot
     let Some(loot) = &container.loot else {
-        ctx.output.line(&format!("The {} doesn't contain anything.", container.name)).await;
+        ctx.output
+            .line(&format!("The {} doesn't contain anything.", container.name))
+            .await;
         return Ok(());
     };
 
@@ -121,7 +126,9 @@ async fn take_from_container(ctx: Arc<CmdCtx>, item_name: &str, container_name: 
     });
 
     if !has_item {
-        ctx.output.line(&format!("There is no {} in the {}.", item_name, container.name)).await;
+        ctx.output
+            .line(&format!("There is no {} in the {}.", item_name, container.name))
+            .await;
         return Ok(());
     }
 
@@ -130,7 +137,9 @@ async fn take_from_container(ctx: Arc<CmdCtx>, item_name: &str, container_name: 
     // 2. Create an ItemInstance with location = player inventory
     // 3. Remove the item from the container's loot (if once=true)
     // 4. Save changes to database
-    ctx.output.line(&format!("You take the {} from the {}.", item_name, container.name)).await;
+    ctx.output
+        .line(&format!("You take the {} from the {}.", item_name, container.name))
+        .await;
 
     Ok(())
 }

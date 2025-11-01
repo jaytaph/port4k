@@ -22,6 +22,7 @@ mod debug_cmd;
 mod examine;
 mod fallback;
 mod go;
+mod inventory;
 mod login;
 mod logout;
 mod look;
@@ -31,7 +32,6 @@ mod register;
 mod search;
 mod take;
 mod who;
-mod inventory;
 
 pub type CommandResult = Result<(), CommandError>;
 

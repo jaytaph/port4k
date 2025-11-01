@@ -4,13 +4,13 @@ use crate::error::{AppResult, DomainError};
 use crate::lua::{LUA_CMD_TIMEOUT, LuaJob, LuaResult, ScriptHook};
 use crate::models::room::{RoomView, build_room_view_impl};
 use crate::models::types::{AccountId, Direction, ExitId, ObjectId, RealmId, RoomId};
+use crate::services::inventory::LootConfig;
 use crate::state::session::Cursor;
 use rand::seq::IndexedRandom;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
-use crate::services::inventory::LootConfig;
 
 pub struct RoomService {
     room_repo: Arc<dyn RoomRepo>,
@@ -37,20 +37,11 @@ impl RoomService {
         }
     }
 
-    pub async fn get_by_id(
-        &self,
-        realm_id: RealmId,
-        account_id: AccountId,
-        room_id: RoomId,
-    ) -> AppResult<RoomView> {
+    pub async fn get_by_id(&self, realm_id: RealmId, account_id: AccountId, room_id: RoomId) -> AppResult<RoomView> {
         self.build_room_view(realm_id, account_id, room_id).await
     }
 
-    pub async fn get_room_id_by_key(
-        &self,
-        realm_id: RealmId,
-        room_key: &str,
-    ) -> AppResult<Option<RoomId>> {
+    pub async fn get_room_id_by_key(&self, realm_id: RealmId, room_key: &str) -> AppResult<Option<RoomId>> {
         // Find realm first
         let realm = match self.realm_repo.get(realm_id).await? {
             Some(r) => r,
@@ -171,12 +162,9 @@ impl RoomService {
                 };
 
                 // Instantiate if not already done
-                self.inventory_service.instantiate_loot(
-                    realm_id,
-                    object.id,
-                    account_id,
-                    &loot_config
-                ).await?;
+                self.inventory_service
+                    .instantiate_loot(realm_id, object.id, account_id, &loot_config)
+                    .await?;
             }
         }
 

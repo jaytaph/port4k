@@ -1,6 +1,6 @@
-use tokio_postgres::Row;
 use crate::db::DbResult;
-use crate::models::types::{AccountId, BlueprintId, ItemId, ObjectId, RoomId, RealmId};
+use crate::models::types::{AccountId, BlueprintId, ItemId, ObjectId, RealmId, RoomId};
+use tokio_postgres::Row;
 
 #[derive(Debug, Clone)]
 pub struct Item {
@@ -45,7 +45,6 @@ impl Item {
             stackable: row.try_get("stackable")?,
             nouns: row.try_get("nouns")?,
         })
-
     }
 }
 
