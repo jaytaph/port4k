@@ -50,7 +50,7 @@ async fn ws_handler(socket: WebSocket, registry: Arc<Registry>, lua_tx: mpsc::Se
 
     io_bundle.output.system(BANNER).await;
     io_bundle.output.system(ENTRY).await;
-    io_bundle.output.prompt("> ".to_string()).await;
+    io_bundle.output.set_prompt("> ".to_string()).await;
 
     let ctx = Arc::new(CmdCtx {
         registry: registry.clone(),

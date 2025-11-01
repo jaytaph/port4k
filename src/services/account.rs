@@ -28,6 +28,10 @@ impl AccountService {
         Ok(self.repo.get_by_username(username).await?.is_some())
     }
 
+    pub async fn exists_email(&self, email: &str) -> AppResult<bool> {
+        Ok(self.repo.get_by_email(email).await?.is_some())
+    }
+
     pub async fn login(&self, username: &str, password: &str) -> LoginResult<Account> {
         // Validate username input
         match Account::validate_username(username) {

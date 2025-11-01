@@ -59,12 +59,17 @@ pub struct LineEditor {
     pub history: Vec<String>,
     hist_ix: Option<usize>, // index into history while navigating (None = editing new line)
     cfg: EditorConfig,
+    mask_char: Option<char>, // if Some(c), display c instead of actual chars (for password input)
 }
 
 impl LineEditor {
     /// Create a new editor with the given prompt and default config.
     pub fn new(prompt: impl Into<String>) -> Self {
         Self::with_config(prompt, EditorConfig::default())
+    }
+
+    pub fn set_mask(&mut self, mask: Option<char>) {
+        self.mask_char = mask;
     }
 
     /// Create a new editor with custom config.
@@ -77,6 +82,7 @@ impl LineEditor {
             history: Vec::new(),
             hist_ix: None,
             cfg,
+            mask_char: None,
         }
     }
 
@@ -124,7 +130,7 @@ impl LineEditor {
                 let line = std::mem::take(&mut self.buf);
                 self.cursor = 0;
                 self.hist_ix = None;
-                if !line.trim().is_empty() {
+                if !line.trim().is_empty() && self.mask_char.is_none() {
                     self.push_history(line.clone());
                 }
                 EditEvent::Line(line)
@@ -329,21 +335,33 @@ impl LineEditor {
     /// - clear-to-EOL
     /// - move cursor left if needed to position within buffer
     pub fn repaint_line(&self) -> String {
-        let mut s = String::new();
-        s.push('\r');
-        s.push_str(&self.prompt);
-        s.push_str(&self.buf);
-        s.push_str("\x1b[K"); // clear to end of line
-
-        // Move cursor back from end to desired position
-        let target = self.prompt.len() + self.cursor;
-        let current = self.prompt.len() + self.buf.len();
-        if current > target {
-            let back = current - target;
-            s.push_str(&format!("\x1b[{}D", back));
-        }
-        s
+        let visible = self.visible_buffer();
+        format!("{}{}", self.prompt, visible)
     }
+
+    pub fn visible_buffer(&self) -> String {
+        if let Some(mask) = self.mask_char {
+            std::iter::repeat(mask).take(self.buf.chars().count()).collect()
+        } else {
+            self.buf.clone()
+        }
+    }
+
+    // let mut s = String::new();
+    //     s.push('\r');
+    //     s.push_str(&self.prompt);
+    //     s.push_str(&self.buf);
+    //     s.push_str("\x1b[K"); // clear to end of line
+    //
+    //     // Move cursor back from end to desired position
+    //     let target = self.prompt.len() + self.cursor;
+    //     let current = self.prompt.len() + self.buf.len();
+    //     if current > target {
+    //         let back = current - target;
+    //         s.push_str(&format!("\x1b[{}D", back));
+    //     }
+    //     s
+    // }
 
     /// Access current buffer (e.g., for preview or external validation).
     pub fn buffer(&self) -> &str {

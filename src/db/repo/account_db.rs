@@ -31,6 +31,21 @@ impl AccountRepo for AccountRepository {
         )
     }
 
+    async fn get_by_email(&self, email: &str) -> DbResult<Option<Account>> {
+        let client = self.db.get_client().await?;
+
+        let stmt = client
+            .prepare_cached(" SELECT * FROM accounts WHERE email = $1 ")
+            .await?;
+
+        let row_opt = client.query_opt(&stmt, &[&email]).await?;
+        map_row_opt(
+            row_opt,
+            Account::try_from_row,
+            &format!("AccountRepo::get_by_email email={}", email),
+        )
+    }
+
     async fn get_by_id(&self, account_id: AccountId) -> DbResult<Option<Account>> {
         let client = self.db.get_client().await?;
 

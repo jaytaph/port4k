@@ -16,6 +16,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::SendError;
+use crate::state::interactive::InteractiveState;
 
 mod blueprint;
 mod debug_cmd;
@@ -131,6 +132,18 @@ impl CmdCtx {
     pub fn room_view(&self) -> AppResult<Arc<RoomView>> {
         Ok(self.cursor()?.room)
     }
+
+    pub fn get_interactive(&self) -> InteractiveState {
+        self.sess.read().interactive_state()
+    }
+
+    pub fn set_interactive(&self, state: InteractiveState) {
+        self.sess.write().set_interactive_state(state);
+    }
+
+    pub fn clear_interactive(&self) {
+        self.set_interactive(InteractiveState::None)
+    }
 }
 
 const ANONYMOUS_COMMANDS: [Verb; 6] = [
@@ -151,7 +164,18 @@ pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
         return Ok(());
     }
 
+    // Check if we are inside an interactive state (registration wizard etc)
+    match ctx.get_interactive() {
+        InteractiveState::None => {
+            // No interactive state, proceed as normal
+        }
+        st => {
+            return process_interactive_state(st, raw, ctx).await;
+        }
+    }
+
     let intent = parse_command(raw);
+    dbg!(&intent);
 
     // Permission check
     match permission_check(&intent, ctx.clone()) {
@@ -170,6 +194,13 @@ pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
 
     // Let's parse the verb and call the correct command handler
     match intent.verb {
+        // --- Core anonymous commands ---
+        Verb::Login => login::login(ctx.clone(), intent).await,
+        Verb::Register => register::register(ctx.clone(), intent).await,
+        Verb::Quit => {
+            ctx.output.system("Goodbye! Connection closed by user.").await;
+            Ok(())
+        }
         Verb::Close => {
             ctx.output.system("Goodbye! Connection closed by user.").await;
             Ok(())
@@ -178,48 +209,27 @@ pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
             ctx.output.system(help_text()).await;
             Ok(())
         }
+        // --- Core logined commands ---
         Verb::Look => look::look(ctx.clone(), intent).await,
         Verb::Examine => examine::examine(ctx.clone(), intent).await,
         Verb::Search => search::search(ctx.clone(), intent).await,
         Verb::Take => take::take(ctx.clone(), intent).await,
-        Verb::Drop => {
-            ctx.output.system("Drop command not implemented yet.").await;
-            Ok(())
-        }
+        Verb::Drop => { ctx.output.system("Drop command not implemented yet.").await; Ok(()) }
         Verb::Open => open::open(ctx.clone(), intent).await,
-        Verb::Unlock => {
-            ctx.output.system("Unlock command not implemented yet.").await;
-            Ok(())
-        }
-        Verb::Lock => {
-            ctx.output.system("Lock command not implemented yet.").await;
-            Ok(())
-        }
-        Verb::Use => {
-            ctx.output.system("Use command not implemented yet.").await;
-            Ok(())
-        }
-        Verb::Put => {
-            ctx.output.system("Put command not implemented yet.").await;
-            Ok(())
-        }
-        Verb::Talk => {
-            ctx.output.system("Talk command not implemented yet.").await;
-            Ok(())
-        }
+        Verb::Unlock => { ctx.output.system("Unlock command not implemented yet.").await; Ok(()) }
+        Verb::Lock => { ctx.output.system("Lock command not implemented yet.").await; Ok(()) }
+        Verb::Use => { ctx.output.system("Use command not implemented yet.").await; Ok(()) }
+        Verb::Put => { ctx.output.system("Put command not implemented yet.").await; Ok(()) }
+        Verb::Talk => { ctx.output.system("Talk command not implemented yet.").await; Ok(()) }
         Verb::Go => go::go(ctx.clone(), intent).await,
         Verb::Inventory => inventory::inventory(ctx.clone(), intent).await,
-        Verb::Quit => {
-            ctx.output.system("Goodbye! Connection closed by user.").await;
-            Ok(())
-        }
         Verb::Who => who::who(ctx.clone()).await,
         Verb::Logout => logout::logout(ctx.clone(), intent).await,
-        Verb::Login => login::login(ctx.clone(), intent).await,
-        Verb::Register => register::register(ctx.clone(), intent).await,
+
+        // --- Admin commands ---
         Verb::LuaRepl => lua::repl(ctx.clone()).await,
 
-        // Fallback (Lua on_command)
+        // --- Fallback for unimplemented commands ---
         Verb::Custom(_) => fallback::fallback(ctx.clone(), intent).await,
     }
 }
@@ -278,4 +288,24 @@ fn permission_check(intent: &Intent, ctx: Arc<CmdCtx>) -> PermissionResult {
     }
 
     Ok(())
+}
+
+
+async fn process_interactive_state(
+    st: InteractiveState,
+    raw: &str,
+    ctx: Arc<CmdCtx>
+) -> CommandResult {
+    match st {
+        InteractiveState::LoginAskUsername => {
+            login::continue_with_username(ctx.clone(), raw).await
+        }
+        InteractiveState::LoginAskPassword { username } => {
+            login::continue_with_password(ctx.clone(), username, raw).await
+        }
+        InteractiveState::Register(reg_state) => {
+            register::continue_register(ctx.clone(), reg_state, raw).await
+        }
+        InteractiveState::None => Ok(()),
+    }
 }

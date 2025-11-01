@@ -3,8 +3,7 @@ use crate::error::AppResult;
 use crate::input::readline::{EditEvent, LineEditor};
 use crate::lua::table::format_lua_value;
 use crate::lua::{LuaJob, LuaResult};
-use crate::net::AppCtx;
-use crate::net::output::OutputHandle;
+use crate::net::{AppCtx, InputMode};
 use crate::util::telnet::{TelnetIn, TelnetMachine};
 use crate::{Registry, Session, process_command};
 use parking_lot::RwLock;
@@ -22,7 +21,8 @@ pub async fn handle_connection(
     let mut reader = BufReader::new(read_half);
     let mut editor = LineEditor::new("> ");
 
-    update_prompt(sess.clone(), ctx.output.clone(), &mut editor).await;
+    // Set initial prompt
+    ctx.output.restore_prompt().await;
 
     read_loop(&mut reader, telnet, &mut editor, ctx.clone(), sess.clone()).await?;
     cleanup(sess.clone(), ctx.registry.clone()).await;
@@ -77,37 +77,44 @@ async fn handle_data_byte(
     sess: Arc<RwLock<Session>>,
     ctx: Arc<AppCtx>,
 ) -> AppResult<()> {
+
+    {
+        // Set input mask based on session mode
+        let s = sess.read();
+
+        // Set current prompt
+        editor.set_prompt(s.prompt());
+
+        // Set input masking
+        match s.input_mode() {
+            InputMode::Normal => editor.set_mask(None),
+            InputMode::Hidden(c) => editor.set_mask(Some(c)),
+        }
+    }
+
     match editor.handle_byte(b) {
         EditEvent::None => {}
         EditEvent::Redraw => {
-            update_prompt(sess.clone(), ctx.output.clone(), editor).await;
+            // Redraw because of some input
+            ctx.output.draw_line(editor.repaint_line()).await;
         }
         EditEvent::Line(line) => {
             let raw = line.trim();
 
             let in_repl = sess.read().is_in_lua();
-
             if in_repl {
                 handle_repl_input(raw, ctx.clone(), sess.clone()).await?;
-                // ctx.output.line("\n\n").await;
-                update_prompt(sess.clone(), ctx.output.clone(), editor).await;
                 return Ok(());
             }
 
             // // Move to a fresh line before emitting any output
             ctx.output.line("\n\n").await;
 
-            // // Try login flow first; if handled, we just repaint
-            // if try_handle_login(raw, reader, telnet, ctx.clone(), sess.clone()).await? == LoginOutcome::Handled {
-            //     update_prompt(sess.clone(), ctx.output.clone(), editor).await;
-            //     return Ok(());
-            // }
-
             // Otherwise, dispatch as a normal command
             dispatch_command(raw, ctx.clone(), sess.clone()).await?;
 
-            // Update prompt
-            update_prompt(sess.clone(), ctx.output.clone(), editor).await;
+            // // Update prompt
+            // update_prompt(sess.clone(), editor).await;
         }
     }
     Ok(())
@@ -138,143 +145,6 @@ async fn dispatch_command(raw: &str, ctx: Arc<AppCtx>, sess: Arc<RwLock<Session>
         }
     }
     Ok(())
-}
-
-// #[derive(PartialEq, Eq)]
-// enum LoginOutcome {
-//     Handled,
-//     NotHandled,
-// }
-//
-// /// Return `Handled` if login flow consumed the command
-// async fn try_handle_login(
-//     raw: &str,
-//     reader: &mut BufReader<OwnedReadHalf>,
-//     telnet: &mut TelnetMachine,
-//     ctx: Arc<AppCtx>,
-//     sess: Arc<RwLock<Session>>,
-// ) -> AppResult<LoginOutcome> {
-//     // Only handle `login <username>` with exactly one arg here
-//     let Some(rest) = raw.strip_prefix("login ") else {
-//         return Ok(LoginOutcome::NotHandled);
-//     };
-//     let parts: Vec<&str> = rest.split_whitespace().collect();
-//     if parts.len() != 1 {
-//         return Ok(LoginOutcome::NotHandled);
-//     }
-//
-//     if sess.read().is_logged_in() {
-//         ctx.output.system("Already logged in.").await;
-//         return Ok(LoginOutcome::Handled);
-//     }
-//
-//     let username = parts[0];
-//
-//     if Account::validate_username(username).is_err() {
-//         ctx.output.system("Invalid username.").await;
-//         return Ok(LoginOutcome::Handled);
-//     };
-//
-//     if !ctx.registry.services.account.exists(username).await? {
-//         ctx.output
-//             .system("No such user. Try `register <name> <password>`.")
-//             .await;
-//         return Ok(LoginOutcome::Handled);
-//     }
-//
-//     // We need special handling here to avoid echoing the password
-//     ctx.output.system("Password: ").await;
-//     let pw = read_secret_line(reader, telnet, ctx.clone()).await?;
-//
-//     if pw.is_empty() {
-//         // Keep the old behavior: end the connection when empty password
-//         return Ok(LoginOutcome::Handled);
-//     }
-//
-//     let password = pw.trim_matches(['\r', '\n']);
-//     let account = ctx.registry.services.auth.authenticate(username, password).await?;
-//
-//     sess.write().login(account.clone(), realm, None).await?;
-//     ctx.registry.set_online(&account, true).await;
-//
-//     ctx.output
-//         .system(format!("Welcome, {}! Type `look` or `help`.", account.username))
-//         .await;
-//     Ok(LoginOutcome::Handled)
-// }
-
-fn generate_prompt(sess: Arc<RwLock<Session>>, prompt: &str) -> String {
-    let s = sess.read();
-    if s.is_in_lua() {
-        return "lua> ".to_string();
-    }
-
-    prompt.to_string()
-}
-
-async fn update_prompt(sess: Arc<RwLock<Session>>, output: OutputHandle, editor: &mut LineEditor) {
-    let prompt_text = generate_prompt(
-        sess.clone(),
-        "{c:bright_yellow:blue} {v:account.name:Not logged in} [{rv:title:Nowhere}] @ {v:wall_time} {c} # ",
-    );
-    editor.set_prompt(&prompt_text);
-
-    output.prompt(editor.repaint_line()).await;
-}
-
-#[allow(unused)]
-/// Read a single line (CR or LF) from the Telnet stream WITHOUT echoing.
-/// Backspace/Delete are handled locally. NAWS events update the session.
-/// Returns the collected bytes as a String (ASCII/UTF-8 expected).
-async fn read_secret_line(
-    reader: &mut BufReader<OwnedReadHalf>,
-    telnet: &mut TelnetMachine,
-    ctx: Arc<AppCtx>,
-) -> std::io::Result<String> {
-    let mut out = Vec::<u8>::new();
-    let mut one = [0u8; 1];
-
-    loop {
-        let n = reader.read(&mut one).await?;
-        if n == 0 {
-            break;
-        } // disconnected
-
-        let response = telnet.push(one[0]);
-
-        if let Some(bytes) = response.response {
-            ctx.output.raw(bytes).await;
-        }
-
-        if let Some(evt) = response.event {
-            match evt {
-                TelnetIn::Data(b) => {
-                    match b {
-                        b'\r' | b'\n' => {
-                            // Move to the next line visually, but DO NOT reveal password
-                            ctx.output.line("\n").await;
-                            break;
-                        }
-                        0x7F | 0x08 => {
-                            // Backspace/Delete: remove last byte if any; no echo of backspace either
-                            out.pop();
-                        }
-                        _ => {
-                            // Only accept printable ASCII; ignore others for secrets
-                            if (0x20..0x7F).contains(&b) {
-                                out.push(b);
-                            }
-                        }
-                    }
-                }
-                TelnetIn::Naws { .. } => {
-                    // Ignore NAWS reactive during password entry
-                }
-            }
-        }
-    }
-
-    Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
 async fn handle_repl_input(raw: &str, ctx: Arc<AppCtx>, sess: Arc<RwLock<Session>>) -> AppResult<()> {

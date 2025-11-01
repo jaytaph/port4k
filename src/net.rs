@@ -15,3 +15,9 @@ struct AppCtx {
     registry: Arc<Registry>,
     lua_tx: mpsc::Sender<LuaJob>,
 }
+
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+pub enum InputMode {
+    Normal,
+    Hidden(char),  // masked with for instance '*'
+}

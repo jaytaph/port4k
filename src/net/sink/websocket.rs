@@ -47,10 +47,16 @@ where
             OutFrame::System(s) => WsFrame::System { text: s },
             OutFrame::RoomView { content } => WsFrame::RoomView { content },
             OutFrame::Prompt(s) => WsFrame::Prompt { text: s },
+            OutFrame::InputMode(_) => {
+                return Err(anyhow::Error::msg(
+                    "InputMode frame not supported over WebSocket sink",
+                ));
+            }
             OutFrame::ClearScreen => WsFrame::ClearScreen,
             OutFrame::Raw(_) => {
                 return Err(anyhow::Error::msg("Raw frame not supported over WebSocket sink"));
             }
+            OutFrame::RepaintLine(line) => WsFrame::Line { text: line },
         };
 
         let env = WsEnvelope { seq, frame: payload };

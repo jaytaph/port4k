@@ -221,6 +221,21 @@ impl TelnetMachine {
             }
         }
     }
+
+    pub async fn set_echo<W: AsyncWrite + Unpin>(
+        &mut self,
+        w: &mut W,
+        enabled: bool,
+    ) -> std::io::Result<()> {
+        if enabled {
+            // go back to: server will echo -> client stops local echo
+            send_will(w, ECHO).await
+        } else {
+            // tell client: we won't echo -> client might start local echo,
+            // BUT since we're in password mode we also just don't echo bytes back.
+            send_wont(w, ECHO).await
+        }
+    }
 }
 
 // Helper functions to build IAC response bytes
