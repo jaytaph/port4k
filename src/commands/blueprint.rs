@@ -10,6 +10,7 @@ use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use std::sync::Arc;
 
+#[allow(unused)]
 pub async fn blueprint(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.is_empty() {
         ctx.output.system(USAGE).await;
@@ -34,6 +35,7 @@ pub async fn blueprint(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     }
 }
 
+#[allow(unused)]
 pub(super) const USAGE: &str = concat!(
     "\x1b[1;36mUsage:\x1b[0m\n",
     "  \x1b[32m@bp\x1b[0m \x1b[1;33mnew\x1b[0m ",

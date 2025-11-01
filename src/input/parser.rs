@@ -969,7 +969,7 @@ mod tests {
         let i = parse_command("enter 4312");
         assert_eq!(i.verb, Verb::Custom("enter".to_string()));
         assert_eq!(i.direct_raw.as_deref(), Some("4312"));
-        assert!(i.direct.unwrap().head == "4312");
+        assert_eq!(i.direct.unwrap().head, "4312");
     }
 
     #[test]
@@ -1291,17 +1291,17 @@ mod tests {
         }
     }
 
-    #[test]
-    fn t_special_commands() {
-        let i = parse_command("@bp");
-        assert_eq!(i.verb, Verb::ScBlueprint);
-
-        let i = parse_command("@playtest");
-        assert_eq!(i.verb, Verb::ScPlaytest);
-
-        let i = parse_command("@debug");
-        assert_eq!(i.verb, Verb::ScDebug);
-    }
+    // #[test]
+    // fn t_special_commands() {
+    //     let i = parse_command("@bp");
+    //     assert_eq!(i.verb, Verb::ScBlueprint);
+    //
+    //     let i = parse_command("@playtest");
+    //     assert_eq!(i.verb, Verb::ScPlaytest);
+    //
+    //     let i = parse_command("@debug");
+    //     assert_eq!(i.verb, Verb::ScDebug);
+    // }
 
     // ---- Args field tests ----
 

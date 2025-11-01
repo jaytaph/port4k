@@ -56,6 +56,7 @@ pub async fn handle_shell_cmd(cmd: ShellCmd, ctx: Arc<CmdCtx>) -> CommandResult 
     Ok(())
 }
 
+#[allow(unused)]
 async fn dump_json_or_debug<T: Serialize + core::fmt::Debug>(label: &str, value: &T) -> String {
     let rendered = serde_json::to_string_pretty(value).unwrap_or_else(|_| format!("{:#?}", value));
 

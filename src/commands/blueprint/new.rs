@@ -2,6 +2,7 @@ use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use std::sync::Arc;
 
+#[allow(unused)]
 pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.len() < 3 {
         ctx.output.system(super::USAGE).await;

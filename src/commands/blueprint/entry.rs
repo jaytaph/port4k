@@ -6,6 +6,7 @@ use crate::input::parser::Intent;
 use crate::util::args::parse_bp_room_key;
 use std::sync::Arc;
 
+#[allow(unused)]
 pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.len() < 2 {
         ctx.output.system(USAGE).await;

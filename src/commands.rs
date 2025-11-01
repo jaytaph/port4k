@@ -1,6 +1,6 @@
 use crate::db::error::DbError;
 use crate::error::{AppResult, DomainError};
-use crate::input::parser::{Verb, parse_command};
+use crate::input::parser::{Intent, Verb, parse_command};
 use crate::input::shell::{handle_shell_cmd, parse_shell_cmd};
 use crate::lua::LuaJob;
 use crate::models::account::Account;
@@ -133,6 +133,17 @@ impl CmdCtx {
     }
 }
 
+const ANONYMOUS_COMMANDS: [Verb; 6] = [
+    Verb::Help,
+    Verb::Login,
+    Verb::Register,
+    Verb::LuaRepl,
+    Verb::Close,
+    Verb::Quit,
+];
+
+const ADMIN_COMMANDS: [Verb; 1] = [Verb::LuaRepl];
+
 pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
     // See if we match a shell command, and handle it if so
     if let Some(shell) = parse_shell_cmd(raw) {
@@ -141,6 +152,23 @@ pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
     }
 
     let intent = parse_command(raw);
+
+    // Permission check
+    match permission_check(&intent, ctx.clone()) {
+        Ok(_) => {}
+        Err(PermissionError::NotLoggedIn) => {
+            ctx.output.system("You must be logged in to use that command.").await;
+            return Ok(());
+        }
+        Err(PermissionError::PermissionDenied) => {
+            ctx.output
+                .system("You do not have permission to use that command.")
+                .await;
+            return Ok(());
+        }
+    }
+
+    // Let's parse the verb and call the correct command handler
     match intent.verb {
         Verb::Close => {
             ctx.output.system("Goodbye! Connection closed by user.").await;
@@ -190,10 +218,8 @@ pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
         Verb::Login => login::login(ctx.clone(), intent).await,
         Verb::Register => register::register(ctx.clone(), intent).await,
         Verb::LuaRepl => lua::repl(ctx.clone()).await,
-        // Verb::ScBlueprint => blueprint::blueprint(ctx.clone(), intent).await,
-        // // Verb::ScScript => script::script(ctx.clone(), intent).await,
-        // Verb::ScDebug => debug_cmd::debug_cmd(ctx.clone(), intent).await,
-        // Fallback (e.g., playtest Lua on_command)
+
+        // Fallback (Lua on_command)
         Verb::Custom(_) => fallback::fallback(ctx.clone(), intent).await,
     }
 }
@@ -225,4 +251,31 @@ pub fn help_text() -> String {
         fg_green = ansi::FG_GREEN,
         reset = ansi::RESET,
     )
+}
+
+#[derive(Debug)]
+enum PermissionError {
+    NotLoggedIn,
+    PermissionDenied,
+}
+
+type PermissionResult = Result<(), PermissionError>;
+
+fn permission_check(intent: &Intent, ctx: Arc<CmdCtx>) -> PermissionResult {
+    let is_logged_in = ctx.is_logged_in();
+
+    // Check for anonymous-only commands
+    if !is_logged_in && !ANONYMOUS_COMMANDS.contains(&intent.verb) {
+        return Err(PermissionError::NotLoggedIn);
+    }
+
+    // Check for admin-only commands
+    if ADMIN_COMMANDS.contains(&intent.verb) {
+        let account = ctx.account().map_err(|_| PermissionError::NotLoggedIn)?;
+        if !account.is_admin() {
+            return Err(PermissionError::PermissionDenied);
+        }
+    }
+
+    Ok(())
 }

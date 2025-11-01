@@ -5,8 +5,10 @@ use crate::input::parser::Intent;
 use crate::util::args::{normalize_dir, parse_bp_room_key};
 use std::sync::Arc;
 
+#[allow(unused)]
 const USAGE: &str = "Usage:\n  @bp exit add <bp>:<from> <dir> <bp>:<to> [locked]\n";
 
+#[allow(unused)]
 pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     // args layout: [ "@bp", "exit", <sub_cmd>, ... ]
     let [_, _, sub_cmd, rest @ ..] = &*intent.args else {

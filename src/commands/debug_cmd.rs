@@ -2,8 +2,10 @@ use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
 use std::sync::Arc;
 
+#[allow(unused)]
 const USAGE: &'static str = "Usage: debug <where|col>\n";
 
+#[allow(unused)]
 pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.len() < 2 {
         ctx.output.system(USAGE).await;

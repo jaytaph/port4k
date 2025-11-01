@@ -3,11 +3,13 @@ use crate::input::parser::Intent;
 use crate::util::args::parse_bp_room_key;
 use std::sync::Arc;
 
+#[allow(unused)]
 const USAGE: &str = "Usage:
   @bp room add <bp>:<room> \"Title\" \"Body\"
   @bp room lock <bp>:<room>
   @bp room unlock <bp>:<room>\n";
 
+#[allow(unused)]
 pub async fn run(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     if intent.args.len() < 2 {
         ctx.output.system(USAGE).await;

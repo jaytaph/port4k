@@ -4,6 +4,13 @@ use crate::models::account::Account;
 use std::sync::Arc;
 
 pub async fn register(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
+    if ctx.is_logged_in() {
+        ctx.output
+            .system("You are already logged in. Logout before registering a new account.")
+            .await;
+        return Ok(());
+    }
+
     if intent.args.len() < 3 {
         ctx.output.system("Usage: register <name> <email> <password>").await;
         return Ok(());

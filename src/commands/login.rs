@@ -39,6 +39,13 @@ const MOTD: &str = r#"
 "#;
 
 pub async fn login(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
+    if ctx.is_logged_in() {
+        ctx.output
+            .system("You are already logged in. Logout before logging in again.")
+            .await;
+        return Ok(());
+    }
+
     // Step 1: Validate input
     if intent.args.len() < 3 {
         ctx.output.line("Login failed. Check your username and password.").await;

@@ -222,6 +222,7 @@ async fn update_prompt(sess: Arc<RwLock<Session>>, output: OutputHandle, editor:
     output.prompt(editor.repaint_line()).await;
 }
 
+#[allow(unused)]
 /// Read a single line (CR or LF) from the Telnet stream WITHOUT echoing.
 /// Backspace/Delete are handled locally. NAWS events update the session.
 /// Returns the collected bytes as a String (ASCII/UTF-8 expected).

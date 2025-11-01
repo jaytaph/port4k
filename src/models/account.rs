@@ -141,6 +141,10 @@ impl Account {
         }
         Ok(())
     }
+
+    pub fn is_admin(&self) -> bool {
+        matches!(self.role, AccountRole::Admin)
+    }
 }
 
 pub struct UserRealmData {
