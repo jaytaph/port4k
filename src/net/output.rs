@@ -1,4 +1,5 @@
 use crate::Session;
+use crate::net::InputMode;
 use crate::net::sink::ClientSink;
 use crate::net::sink::telnet::TelnetSink;
 use crate::net::sink::websocket::WebSocketSink;
@@ -21,9 +22,15 @@ pub enum OutFrame {
     /// System prompt from the game engine, not world related
     System(String),
     /// Room view content
-    RoomView { content: String },
+    RoomView {
+        content: String,
+    },
     /// Display prompt line
     Prompt(String),
+    // Should input be shown or hidden
+    InputMode(InputMode),
+    /// Repaint the current input prompt line (new input has been added)
+    RepaintLine(String),
     /// Clear screen
     ClearScreen,
     /// Raw bytes for telnet IAC sequences
@@ -57,6 +64,7 @@ impl OutputHandle {
     pub async fn line(&self, s: impl Into<String>) {
         let vars = generate_render_vars(self.sess.clone());
         let rendered = render_template(&s.into(), &vars, MAX_TERMINAL_WIDTH);
+
         let _ = self
             .tx
             .send(OutEvent::Frame(OutFrame::Line(rendered), self.next_seq()))
@@ -66,6 +74,7 @@ impl OutputHandle {
     pub async fn system(&self, s: impl Into<String>) {
         let vars = generate_render_vars(self.sess.clone());
         let rendered = render_template(&s.into(), &vars, MAX_TERMINAL_WIDTH);
+
         let _ = self
             .tx
             .send(OutEvent::Frame(OutFrame::System(rendered), self.next_seq()))
@@ -75,6 +84,7 @@ impl OutputHandle {
     pub async fn room_view(&self, content: impl Into<String>) {
         let vars = generate_render_vars(self.sess.clone());
         let rendered = render_template(&content.into(), &vars, MAX_TERMINAL_WIDTH);
+
         let _ = self
             .tx
             .send(OutEvent::Frame(
@@ -84,9 +94,42 @@ impl OutputHandle {
             .await;
     }
 
-    pub async fn prompt(&self, s: impl Into<String>) {
+    pub async fn input_mode(&self, mode: InputMode) {
+        {
+            let mut s = self.sess.write();
+            s.set_input_mode(mode);
+        }
+
+        let _ = self
+            .tx
+            .send(OutEvent::Frame(OutFrame::InputMode(mode), self.next_seq()))
+            .await;
+    }
+
+    pub async fn restore_prompt(&self) {
         let vars = generate_render_vars(self.sess.clone());
-        let rendered = render_template(&s.into(), &vars, MAX_TERMINAL_WIDTH);
+        let rendered = render_template(self.sess.read().default_user_prompt(), &vars, MAX_TERMINAL_WIDTH);
+
+        {
+            let mut s = self.sess.write();
+            s.set_prompt(rendered.clone());
+        }
+
+        let _ = self
+            .tx
+            .send(OutEvent::Frame(OutFrame::Prompt(rendered), self.next_seq()))
+            .await;
+    }
+
+    pub async fn set_prompt(&self, prompt: impl Into<String>) {
+        let vars = generate_render_vars(self.sess.clone());
+        let rendered = render_template(&prompt.into(), &vars, MAX_TERMINAL_WIDTH);
+
+        {
+            let mut s = self.sess.write();
+            s.set_prompt(rendered.clone());
+        }
+
         let _ = self
             .tx
             .send(OutEvent::Frame(OutFrame::Prompt(rendered), self.next_seq()))
@@ -105,6 +148,13 @@ impl OutputHandle {
         let _ = self
             .tx
             .send(OutEvent::Frame(OutFrame::Line(rendered), self.next_seq()))
+            .await;
+    }
+
+    pub async fn draw_line(&self, s: impl Into<String>) {
+        let _ = self
+            .tx
+            .send(OutEvent::Frame(OutFrame::RepaintLine(s.into()), self.next_seq()))
             .await;
     }
 }

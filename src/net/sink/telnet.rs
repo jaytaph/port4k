@@ -1,3 +1,4 @@
+use crate::net::InputMode;
 use crate::net::output::OutFrame;
 use crate::net::sink::ClientSink;
 use async_trait::async_trait;
@@ -20,6 +21,14 @@ where
 {
     async fn send_frame(&mut self, frame: OutFrame, _seq: u64) -> anyhow::Result<()> {
         match frame {
+            OutFrame::InputMode(InputMode::Normal) => {
+                // Client may echo again
+                self.writer.write_all(&[255, 252, 1]).await?; // IAC wont echo
+            }
+            OutFrame::InputMode(InputMode::Hidden(_mask)) => {
+                // No echo
+                self.writer.write_all(&[255, 251, 1]).await?; // IAC will echo
+            }
             OutFrame::Line(s) => {
                 for line in s.lines() {
                     // normal line + newline
@@ -65,6 +74,11 @@ where
             OutFrame::Raw(bytes) => {
                 // Directly write raw bytes (e.g. telnet IAC sequences)
                 self.writer.write_all(&bytes).await?;
+            }
+            OutFrame::RepaintLine(line) => {
+                // Carriage return, clear line, write line
+                self.writer.write_all(b"\r\x1b[0K").await?;
+                self.writer.write_all(line.as_bytes()).await?;
             }
         }
 

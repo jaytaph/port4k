@@ -2,7 +2,12 @@ use crate::models::account::Account;
 use crate::models::realm::Realm;
 use crate::models::room::RoomView;
 use crate::models::types::{AccountId, RealmId, RoomId};
+use crate::net::InputMode;
+use crate::state::interactive::InteractiveState;
 use std::sync::Arc;
+
+const DEFAULT_USER_PROMPT: &str =
+    "{c:bright_yellow:blue} {v:account.name:Not logged in} [{rv:title:Nowhere}] @ {v:wall_time} {c} # ";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnState {
@@ -60,6 +65,14 @@ pub struct Session {
     /// Current connection state
     state: ConnState,
 
+    // Current input mode (visible, hidden, masked)
+    input_mode: InputMode,
+    // Current prompt used in the session
+    prompt: String,
+    /// The default user prompt (template)
+    default_user_prompt: String,
+    // Are we currently in an interactive prompt? (login/registration wizard etc.)
+    interactive_state: InteractiveState,
     // Are we currently in the lua repl?
     in_lua_repl: bool,
 
@@ -80,6 +93,10 @@ impl Session {
             protocol,
             account: None,
             state: ConnState::PreLogin,
+            input_mode: InputMode::Normal,
+            prompt: "> ".to_string(),
+            default_user_prompt: DEFAULT_USER_PROMPT.to_string(),
+            interactive_state: InteractiveState::None,
             cursor: None,
             prev_cursors: Vec::new(),
             tty_cols: None,
@@ -142,5 +159,34 @@ impl Session {
             (Some(c), Some(r)) => Some((c, r)),
             _ => None,
         }
+    }
+
+    pub fn interactive_state(&self) -> InteractiveState {
+        self.interactive_state.clone()
+    }
+
+    pub fn set_interactive_state(&mut self, state: InteractiveState) {
+        self.interactive_state = state;
+    }
+
+    pub fn input_mode(&self) -> InputMode {
+        self.input_mode
+    }
+
+    pub fn set_input_mode(&mut self, mode: InputMode) {
+        self.input_mode = mode;
+    }
+
+    pub fn prompt(&self) -> &str {
+        &self.prompt
+    }
+
+    /// Sets the RENDERED prompt
+    pub fn set_prompt<S: Into<String>>(&mut self, p: S) {
+        self.prompt = p.into();
+    }
+
+    pub fn default_user_prompt(&self) -> &str {
+        &self.default_user_prompt
     }
 }

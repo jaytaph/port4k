@@ -2,21 +2,19 @@ mod connection;
 mod crlf_wrapper;
 mod slow_writer;
 
+use crate::banner::{BANNER, ENTRY};
 use crate::error::{AppResult, InfraError};
 use crate::lua::LuaJob;
 use crate::net::AppCtx;
+use crate::net::output::init_session_for_telnet;
 use crate::net::telnet::connection::handle_connection;
+use crate::net::telnet::crlf_wrapper::CrlfWriter;
 use crate::state::session::Protocol;
+use crate::util::telnet::TelnetMachine;
 use crate::{Registry, Session};
 use parking_lot::RwLock;
 use std::sync::Arc;
-// use std::time::Duration;
-use crate::banner::{BANNER, ENTRY};
-use crate::net::output::init_session_for_telnet;
-use crate::net::telnet::crlf_wrapper::CrlfWriter;
 use tokio::sync::mpsc;
-// use crate::net::telnet::slow_writer::{Pace, SlowWriter};
-use crate::util::telnet::TelnetMachine;
 
 /// Run the telnet server
 pub async fn serve(addr: std::net::SocketAddr, registry: Arc<Registry>, lua_tx: mpsc::Sender<LuaJob>) -> AppResult<()> {
@@ -79,7 +77,7 @@ async fn handle_telnet_connection(
 
     io_bundle.output.system(BANNER).await;
     io_bundle.output.system(ENTRY).await;
-    io_bundle.output.prompt("> ".to_string()).await;
+    // io_bundle.output.prompt("> ".to_string()).await;
 
     let ctx = Arc::new(AppCtx {
         registry: registry.clone(),

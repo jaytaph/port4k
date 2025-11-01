@@ -5,7 +5,7 @@ pub async fn repl(ctx: Arc<CmdCtx>) -> CommandResult {
     ctx.output
         .system("Entering Lua REPL... Type '.quit' or '.exit' to leave")
         .await;
-    ctx.output.prompt("lua> ").await;
+    ctx.output.set_prompt("lua> ").await;
 
     // Mark the session as being in REPL mode
     {
