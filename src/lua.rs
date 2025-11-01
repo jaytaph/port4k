@@ -179,11 +179,12 @@ pub enum LuaJob {
 pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sender<LuaJob> {
     let (tx, mut rx) = mpsc::channel::<LuaJob>(64);
 
-    std::thread::spawn(async move || {
+    std::thread::spawn(move || {
         let lua = init_lua().expect("cannot init lua");
         lua.sandbox(true).expect("cannot sandbox lua");
 
         while let Some(job) = rx.blocking_recv() {
+            println!("*************** LUA JOB TRIGGERED ***************");
             match job {
                 LuaJob::OnEnter {
                     output_handle,
@@ -191,13 +192,13 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                     account_id,
                     reply,
                 } => {
-                    let ctx = LuaArgContext::new(
+                    let ctx = rt_handle.block_on(LuaArgContext::new(
                         output_handle.clone(),
                         Some(*cursor),
                         Some(account_id),
                         registry.clone(),
                         rt_handle.clone(),
-                    ).await;
+                    ));
                     handle_room_script(&lua, &ctx, ScriptHook::OnEnter, reply);
                 }
                 LuaJob::OnFirstEnter {
@@ -206,13 +207,13 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                     account_id,
                     reply,
                 } => {
-                    let ctx = LuaArgContext::new(
+                    let ctx = rt_handle.block_on(LuaArgContext::new(
                         output_handle.clone(),
                         Some(*cursor),
                         Some(account_id),
                         registry.clone(),
                         rt_handle.clone(),
-                    ).await;
+                    ));
                     handle_room_script(&lua, &ctx, ScriptHook::OnFirstEnter, reply);
                 }
                 LuaJob::OnLeave {
@@ -221,13 +222,13 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                     account_id,
                     reply,
                 } => {
-                    let ctx = LuaArgContext::new(
+                    let ctx = rt_handle.block_on(LuaArgContext::new(
                         output_handle.clone(),
                         Some(*cursor),
                         Some(account_id),
                         registry.clone(),
                         rt_handle.clone(),
-                    ).await;
+                    ));
                     handle_room_script(&lua, &ctx, ScriptHook::OnLeave, reply);
                 }
                 LuaJob::OnObject {
@@ -238,13 +239,13 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                     obj,
                     reply,
                 } => {
-                    let ctx = LuaArgContext::new(
+                    let ctx = rt_handle.block_on(LuaArgContext::new(
                         output_handle.clone(),
                         Some(*cursor),
                         Some(account_id),
                         registry.clone(),
                         rt_handle.clone(),
-                    ).await;
+                    ));
                     handle_object_script(&lua, &ctx, &intent, &obj, reply);
                 }
                 LuaJob::OnCommand {
@@ -254,13 +255,13 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                     intent,
                     reply,
                 } => {
-                    let ctx = LuaArgContext::new(
+                    let ctx = rt_handle.block_on(LuaArgContext::new(
                         output_handle.clone(),
                         Some(*cursor),
                         Some(account_id),
                         registry.clone(),
                         rt_handle.clone(),
-                    ).await;
+                    ));
                     handle_command_script(&lua, &ctx, &intent, reply);
                 }
                 LuaJob::ReplEval {
@@ -270,13 +271,13 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                     code,
                     reply,
                 } => {
-                    let ctx = LuaArgContext::new(
+                    let ctx = rt_handle.block_on(LuaArgContext::new(
                         output_handle.clone(),
                         Some(*cursor),
                         Some(account_id),
                         registry.clone(),
                         rt_handle.clone(),
-                    ).await;
+                    ));
                     _ = handle_repl_eval(&lua, &ctx, &code, reply);
                 }
             };
@@ -307,9 +308,14 @@ impl LuaArgContext {
         registry: Arc<Registry>,
         rt_handle: Handle,
     ) -> Self {
-        let boxed_account = match registry.services.account.get_by_id(account_id.unwrap()).await {
-            Ok(Some(acc)) => Some(Box::new(acc)),
-            _ => None,
+        let boxed_account = match account_id {
+            None => None,
+            Some(account_id) => {
+                match registry.services.account.get_by_id(account_id).await {
+                    Ok(Some(account)) => Some(Box::new(account)),
+                    _ => None,
+                }
+            }
         };
 
         LuaArgContext {

@@ -240,7 +240,12 @@ impl RoomService {
                     reply: tx,
                 })
                 .await
-                .map_err(Box::from)?;
+                .map_err(Box::from)?
+                // .map_err(|e| {
+                //     panic!("{}", e.to_string());
+                //     Box::from(e)
+                // })?
+            ;
         }
 
         match timeout(LUA_CMD_TIMEOUT, rx).await {

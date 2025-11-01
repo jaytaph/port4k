@@ -30,17 +30,7 @@ impl AccountRepo for AccountRepository {
     async fn get_by_id(&self, account_id: AccountId) -> DbResult<Option<Account>> {
         let client = self.db.get_client().await?;
 
-        let stmt = client
-            .prepare_cached(
-                r#"
-            SELECT id, username, email, role, password_hash, created_at, last_login,
-                current_realm_id, current_room_id, xp, health, coins,
-                inventory, flags
-            FROM accounts
-            WHERE id = $1
-        "#,
-            )
-            .await?;
+        let stmt = client.prepare_cached("SELECT * FROM accounts WHERE id = $1").await?;
 
         let row_opt = client.query_opt(&stmt, &[&account_id]).await?;
         row_opt.as_ref().map(Account::try_from_row).transpose()

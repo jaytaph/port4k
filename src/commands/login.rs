@@ -120,7 +120,7 @@ async fn resolve_realm_id(ctx: &Arc<CmdCtx>, account: &Account) -> AppResult<Rea
         .await
     {
         Ok(Some(realm)) => Ok(realm.id),
-        Err(e) => panic!("{}", e.to_string()),
+        // Err(e) => panic!("{}", e.to_string()),
         _ => fail_login(ctx, "Default realm not found.").await,
     }
 }
