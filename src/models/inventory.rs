@@ -1,4 +1,4 @@
-use crate::models::types::{AccountId, BlueprintId, ItemId, ObjectId, RoomId, ZoneId};
+use crate::models::types::{AccountId, BlueprintId, ItemId, ObjectId, RoomId, RealmId};
 
 #[derive(Debug, Clone)]
 pub struct Item {
@@ -31,14 +31,14 @@ pub struct Item {
 }
 
 /// Item instance in the game world
-/// This is an actual item that exists in a zone with a location
+/// This is an actual item that exists in a realm with a location
 #[derive(Debug, Clone)]
 pub struct ItemInstance {
     /// Instance ID (from items.id)
     pub instance_id: ItemId,
 
-    /// Zone this instance belongs to
-    pub zone_id: ZoneId,
+    /// Realm this instance belongs to
+    pub realm_id: RealmId,
 
     /// Reference to catalog definition
     pub catalog_id: ItemId,

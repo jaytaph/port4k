@@ -1,1 +1,0 @@
-ALTER TABLE public.bp_rooms DROP COLUMN IF EXISTS o;

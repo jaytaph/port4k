@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 echo "* Installing refinery_cli..."
 cargo install refinery_cli
 
@@ -33,4 +35,5 @@ psql "$DATABASE_URL" -f ./seeds/seed.sql
 
 echo "* Importing 'the hub' blueprint..."
 cargo run --bin import-yaml -- --bp-key hub --owner system --subdir rooms --entry-room cell_block
+cargo run --bin create-realm -- --bp-key hub --title "Live World" --key "live_world" --owner system --kind live
 

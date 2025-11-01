@@ -1,6 +1,5 @@
 use crate::commands::{CmdCtx, CommandResult};
 use crate::input::parser::Intent;
-use crate::state::session::ConnState;
 use std::sync::Arc;
 
 pub async fn logout(ctx: Arc<CmdCtx>, _intent: Intent) -> CommandResult {
@@ -9,12 +8,7 @@ pub async fn logout(ctx: Arc<CmdCtx>, _intent: Intent) -> CommandResult {
         return Ok(());
     }
 
-    {
-        let mut s = ctx.sess.write();
-        s.state = ConnState::PreLogin;
-        s.account = None;
-        s.cursor = None;
-    }
+    ctx.sess.write().logout();
 
     ctx.output.system("You have been logged out.").await;
     Ok(())

@@ -11,7 +11,7 @@ pub trait RoomRepo: Send + Sync {
     async fn blueprint_by_key(&self, bp_key: &str) -> DbResult<Blueprint>;
 
     async fn room_by_id(&self, bp_id: BlueprintId, room_id: RoomId) -> DbResult<BlueprintRoom>;
-    async fn room_by_key(&self, key: &BlueprintAndRoomKey) -> DbResult<BlueprintRoom>;
+    async fn get_room_id_by_key(&self, bp_id: BlueprintId, room_key: &str) -> DbResult<Option<RoomId>>;
 
     async fn room_exits(&self, room_id: RoomId) -> DbResult<Vec<BlueprintExit>>;
     async fn room_objects(&self, room_id: RoomId) -> DbResult<Vec<BlueprintObject>>;

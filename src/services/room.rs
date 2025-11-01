@@ -1,10 +1,9 @@
 use crate::commands::CmdCtx;
-use crate::db::repo::{RoomRepo, UserRepo, ZoneRepo};
+use crate::db::repo::{AccountRepo, RealmRepo, RoomRepo, UserRepo};
 use crate::error::{AppResult, DomainError};
 use crate::lua::{LUA_CMD_TIMEOUT, LuaJob, LuaResult, ScriptHook};
 use crate::models::room::{RoomView, build_room_view_impl};
-use crate::models::types::{AccountId, Direction, ExitId, ObjectId, RoomId, ZoneId};
-use crate::models::zone::ZoneContext;
+use crate::models::types::{AccountId, Direction, ExitId, ObjectId, RealmId, RoomId};
 use crate::state::session::Cursor;
 use rand::seq::IndexedRandom;
 use std::collections::HashMap;
@@ -15,32 +14,59 @@ use crate::services::inventory::LootConfig;
 
 pub struct RoomService {
     room_repo: Arc<dyn RoomRepo>,
-    zone_repo: Arc<dyn ZoneRepo>,
+    realm_repo: Arc<dyn RealmRepo>,
     user_repo: Arc<dyn UserRepo>,
+    account_repo: Arc<dyn AccountRepo>,
     inventory_service: Arc<crate::services::inventory::InventoryService>,
 }
 
 impl RoomService {
     pub fn new(
         room_repo: Arc<dyn RoomRepo>,
-        zone_repo: Arc<dyn ZoneRepo>,
+        realm_repo: Arc<dyn RealmRepo>,
         user_repo: Arc<dyn UserRepo>,
+        account_repo: Arc<dyn AccountRepo>,
         inventory_service: Arc<crate::services::inventory::InventoryService>,
     ) -> Self {
         Self {
             room_repo,
-            zone_repo,
+            realm_repo,
             user_repo,
+            account_repo,
             inventory_service,
         }
     }
 
+    pub async fn get_by_id(
+        &self,
+        realm_id: RealmId,
+        account_id: AccountId,
+        room_id: RoomId,
+    ) -> AppResult<RoomView> {
+        self.build_room_view(realm_id, account_id, room_id).await
+    }
+
+    pub async fn get_room_id_by_key(
+        &self,
+        realm_id: RealmId,
+        room_key: &str,
+    ) -> AppResult<Option<RoomId>> {
+        // Find realm first
+        let realm = match self.realm_repo.get(realm_id).await? {
+            Some(r) => r,
+            None => return Err(DomainError::NotFound("Realm not found".into())),
+        };
+
+        let room_id = self.room_repo.get_room_id_by_key(realm.bp_id, room_key).await?;
+        Ok(room_id)
+    }
+
     pub async fn hint_consider(&self, cursor: &Cursor, trigger: &str) -> AppResult<Option<String>> {
-        let current_visit = cursor.room_view.visit_count;
-        let rv = &cursor.room_view;
+        let current_visit = cursor.room.visit_count;
+        let rv = &cursor.room;
         let room_id = cursor.room_id;
         let account_id = cursor.account_id;
-        let zone_id = cursor.zone_id;
+        let realm_id = cursor.realm_id;
 
         let mut result = None;
 
@@ -67,7 +93,7 @@ impl RoomService {
                 if hint.once.unwrap_or(false) {
                     self.user_repo
                         .set_room_kv(
-                            zone_id,
+                            realm_id,
                             room_id,
                             account_id,
                             &format!("hint_shown_{}", hint.id),
@@ -80,7 +106,7 @@ impl RoomService {
                 if hint.cooldown.is_some() {
                     self.user_repo
                         .set_room_kv(
-                            zone_id,
+                            realm_id,
                             room_id,
                             account_id,
                             &format!("hint_last_visit_{}", hint.id),
@@ -95,7 +121,7 @@ impl RoomService {
     }
 
     pub async fn hint_trigger(&self, cursor: &Cursor, trigger: &str) -> AppResult<Option<String>> {
-        let rv = &cursor.room_view;
+        let rv = &cursor.room;
 
         // collect all entries that have hint.when == trigger
         let hints: Vec<_> = rv.blueprint.hints.iter().filter(|hint| hint.when == trigger).collect();
@@ -112,16 +138,16 @@ impl RoomService {
     // Travel to the given room
     pub async fn enter_room(&self, ctx: Arc<CmdCtx>, c: &Cursor) -> AppResult<()> {
         // Enter the current room
-        ctx.sess.write().cursor = Some(c.clone());
+        ctx.sess.write().set_cursor(Some(c.clone()));
 
         // Increase visit count and last visit timestamp
         self.user_repo
-            .inc_room_kv(ctx.zone_id()?, ctx.room_id()?, ctx.account_id()?, "__visit_count", 1)
+            .inc_room_kv(ctx.realm_id()?, ctx.room_id()?, ctx.account_id()?, "__visit_count", 1)
             .await?;
         let ts = serde_json::Value::Number(serde_json::Number::from(chrono::Utc::now().timestamp()));
         self.user_repo
             .set_room_kv(
-                ctx.zone_id()?,
+                ctx.realm_id()?,
                 ctx.room_id()?,
                 ctx.account_id()?,
                 "__last_visited_at",
@@ -129,23 +155,12 @@ impl RoomService {
             )
             .await?;
 
-        // Reload room view after updating visit count
-        let rv = self
-            .build_room_view(&ctx.zone_ctx()?, ctx.account_id()?, ctx.room_id()?)
-            .await?;
-        {
-            let mut sess = ctx.sess.write();
-            let cursor = sess
-                .cursor
-                .as_mut()
-                .ok_or_else(|| DomainError::InternalError("Cursor not able to mutate".into()))?;
-            cursor.room_view = rv;
-        }
+        // self.reload_cursor(ctx.cursor()?).await?;
 
         // Spawn loot found in the room
-        for object in &ctx.cursor()?.room_view.objects {
+        for object in &ctx.cursor()?.room.objects {
             if let Some(loot_config) = &object.loot {
-                let zone_id = ctx.zone_id()?;
+                let realm_id = ctx.realm_id()?;
                 let account_id = ctx.account_id()?;
 
                 let loot_config = LootConfig {
@@ -157,7 +172,7 @@ impl RoomService {
 
                 // Instantiate if not already done
                 self.inventory_service.instantiate_loot(
-                    zone_id,
+                    realm_id,
                     object.id,
                     account_id,
                     &loot_config
@@ -168,7 +183,23 @@ impl RoomService {
         // Enter or First enter lua hooks
         self.lua_on_enter(ctx.clone()).await?;
 
+        // self.reload_cursor(&ctx.cursor()?).await?;
+
         Ok(())
+    }
+
+    pub async fn create_cursor(&self, realm_id: RealmId, room_id: RoomId, account_id: AccountId) -> AppResult<Cursor> {
+        let Some(account) = self.account_repo.get_by_id(account_id).await? else {
+            return Err(DomainError::NotFound("Account not found".into()));
+        };
+
+        let Some(realm) = self.realm_repo.get(realm_id).await? else {
+            return Err(DomainError::NotFound("Realm not found".into()));
+        };
+        let room_view = self.build_room_view(realm_id, account_id, room_id).await?;
+
+        let cursor = Cursor::new(realm, room_view, account);
+        Ok(cursor)
     }
 
     pub async fn exit_room(&self, ctx: Arc<CmdCtx>) -> AppResult<()> {
@@ -193,7 +224,7 @@ impl RoomService {
                 .send(LuaJob::OnFirstEnter {
                     output_handle,
                     cursor: Box::new(ctx.cursor()?),
-                    account: ctx.account()?,
+                    account_id: ctx.account_id()?,
                     reply: tx,
                 })
                 .await
@@ -205,7 +236,7 @@ impl RoomService {
                 .send(LuaJob::OnEnter {
                     output_handle,
                     cursor: Box::new(ctx.cursor()?),
-                    account: ctx.account()?,
+                    account_id: ctx.account_id()?,
                     reply: tx,
                 })
                 .await
@@ -215,7 +246,7 @@ impl RoomService {
         match timeout(LUA_CMD_TIMEOUT, rx).await {
             Ok(Ok(lua_result)) => match lua_result {
                 LuaResult::Failed(msg) => {
-                    let s = format!("{{c:yellow:bright_red}}Lua script failuer: {msg}{{c}}");
+                    let s = format!("{{c:yellow:bright_red}}Lua script failure: {msg}{{c}}");
                     ctx.output.system(s).await;
                     return Ok(());
                 }
@@ -248,7 +279,7 @@ impl RoomService {
             .send(LuaJob::OnLeave {
                 output_handle,
                 cursor: Box::new(ctx.cursor()?),
-                account: ctx.account()?,
+                account_id: ctx.account_id()?,
                 reply: tx,
             })
             .await
@@ -276,7 +307,7 @@ impl RoomService {
 
     pub async fn set_exit_locked(
         &self,
-        zone_id: ZoneId,
+        realm_id: RealmId,
         room_id: RoomId,
         account_id: AccountId,
         exit_dir: Direction,
@@ -285,7 +316,7 @@ impl RoomService {
         match self.exit_by_direction(room_id, exit_dir).await? {
             Some(exit_id) => {
                 self.user_repo
-                    .set_exit_locked(zone_id, room_id, account_id, exit_id, locked)
+                    .set_exit_locked(realm_id, room_id, account_id, exit_id, locked)
                     .await?;
                 Ok(())
             }
@@ -295,7 +326,7 @@ impl RoomService {
 
     pub async fn is_exit_locked(
         &self,
-        zone_id: ZoneId,
+        realm_id: RealmId,
         room_id: RoomId,
         account_id: AccountId,
         exit_dir: Direction,
@@ -304,7 +335,7 @@ impl RoomService {
             Some(exit_id) => {
                 let locked = self
                     .user_repo
-                    .is_exit_locked(zone_id, room_id, account_id, exit_id)
+                    .is_exit_locked(realm_id, room_id, account_id, exit_id)
                     .await?;
                 Ok(locked)
             }
@@ -314,15 +345,15 @@ impl RoomService {
 
     pub async fn set_exit_locked_shared(
         &self,
-        zone_id: ZoneId,
+        realm_id: RealmId,
         room_id: RoomId,
         exit_dir: Direction,
         locked: bool,
     ) -> AppResult<()> {
         match self.exit_by_direction(room_id, exit_dir).await? {
             Some(exit_id) => {
-                self.zone_repo
-                    .set_exit_locked(zone_id, room_id, exit_id, locked)
+                self.realm_repo
+                    .set_exit_locked(realm_id, room_id, exit_id, locked)
                     .await?;
                 Ok(())
             }
@@ -332,24 +363,28 @@ impl RoomService {
 
     pub async fn build_room_view(
         &self,
-        zone_ctx: &ZoneContext,
+        realm_id: RealmId,
         account_id: AccountId,
         room_id: RoomId,
     ) -> AppResult<RoomView> {
         // Get blueprint room data
-        let bp_room = self.room_repo.room_by_id(zone_ctx.blueprint.id, room_id).await?;
+        let Some(realm) = self.realm_repo.get(realm_id).await? else {
+            return Err(DomainError::NotFound("Realm not found".into()));
+        };
+
+        let bp_room = self.room_repo.room_by_id(realm.bp_id, room_id).await?;
         let bp_exits = self.room_repo.room_exits(room_id).await?;
         let bp_objs = self.room_repo.room_objects(room_id).await?;
         let bp_room_kv = self.room_repo.room_kv(room_id).await?;
         let bp_scripts = self.room_repo.room_scripts(room_id).await?;
 
         // Get zone info
-        let zone_room_kv = self.zone_repo.room_kv(zone_ctx.zone.id, room_id).await?;
-        let zone_obj_kv = self.zone_repo.obj_kv(zone_ctx.zone.id, room_id).await?;
+        let zone_room_kv = self.realm_repo.room_kv(realm_id, room_id).await?;
+        let zone_obj_kv = self.realm_repo.obj_kv(realm_id, room_id).await?;
 
         // get account info
-        let user_room_kv = self.user_repo.room_kv(zone_ctx.zone.id, room_id, account_id).await?;
-        let user_obj_kv = self.user_repo.obj_kv(zone_ctx.zone.id, room_id, account_id).await?;
+        let user_room_kv = self.user_repo.room_kv(realm_id, room_id, account_id).await?;
+        let user_obj_kv = self.user_repo.obj_kv(realm_id, room_id, account_id).await?;
 
         // @todo: not filled yet
         let zone_qty = HashMap::new();
@@ -374,26 +409,26 @@ impl RoomService {
 
     pub async fn set_object_state(
         &self,
-        zone_id: ZoneId,
+        realm_id: RealmId,
         account_id: AccountId,
         object_id: ObjectId,
         key: &str,
         val: &serde_json::Value,
     ) -> AppResult<()> {
         self.user_repo
-            .set_object_kv(zone_id, account_id, object_id, key, val)
+            .set_object_kv(realm_id, account_id, object_id, key, val)
             .await?;
         Ok(())
     }
 
     pub async fn set_object_state_shared(
         &self,
-        zone_id: ZoneId,
+        realm_id: RealmId,
         object_id: ObjectId,
         key: &str,
         val: &serde_json::Value,
     ) -> AppResult<()> {
-        self.zone_repo.set_object_kv(zone_id, object_id, key, val).await?;
+        self.realm_repo.set_object_kv(realm_id, object_id, key, val).await?;
         Ok(())
     }
 }

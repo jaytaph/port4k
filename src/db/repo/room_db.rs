@@ -53,21 +53,26 @@ impl RoomRepo for RoomRepository {
         BlueprintRoom::try_from_row(&row)
     }
 
-    async fn room_by_key(&self, key: &BlueprintAndRoomKey) -> DbResult<BlueprintRoom> {
+    async fn get_room_id_by_key(&self, bp_id: BlueprintId, room_key: &str) -> DbResult<Option<RoomId>> {
         let client = self.db.get_client().await?;
-        let row = client
-            .query_one(
+
+        let row_opt = client
+            .query_opt(
                 r#"
-            SELECT r.id, r.bp_id, r.key, r.title, r.body, r.lockdown, r.short, r.hints
+            SELECT r.id
             FROM bp_rooms r
-            JOIN blueprints bp ON bp.id = r.bp_id
-            WHERE bp.key = $1 AND r.key = $2
+            WHERE r.bp_id = $1 AND r.key = $2
             "#,
-                &[&key.bp_key, &key.room_key],
+                &[&bp_id, &room_key],
             )
             .await?;
 
-        BlueprintRoom::try_from_row(&row)
+        if let Some(row) = row_opt {
+            Ok(Some(row.get::<_, RoomId>(0)))
+        } else {
+            Ok(None)
+        }
+
     }
 
     async fn room_exits(&self, room_id: RoomId) -> DbResult<Vec<BlueprintExit>> {

@@ -1,9 +1,8 @@
+use std::sync::Arc;
 use crate::models::account::Account;
 use crate::models::room::RoomView;
-use crate::models::types::{AccountId, RoomId, ZoneId};
-use crate::models::zone::ZoneContext;
-use serde::Serialize;
-use serde::ser::SerializeStruct;
+use crate::models::types::{AccountId, RealmId, RoomId};
+use crate::models::realm::Realm;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnState {
@@ -22,26 +21,29 @@ pub enum Protocol {
 
 #[derive(Debug, Clone)]
 pub struct Cursor {
-    pub zone_id: ZoneId,
+    /// Realm information
+    pub realm_id: RealmId,
+    pub realm: Arc<Realm>,
+
+    /// Room information
     pub room_id: RoomId,
+    pub room: Arc<RoomView>,
+
+    /// Account information
     pub account_id: AccountId,
-    pub zone_ctx: ZoneContext,
-    pub room_view: RoomView,
+    pub account: Arc<Account>,
 }
 
-impl Serialize for Cursor {
-    // We don't want to serialize the entire ZoneContext and RoomView (too much data)
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut state = serializer.serialize_struct("Cursor", 3)?;
-        state.serialize_field("zone_ctx.zone.key", &self.zone_ctx.zone.key)?;
-        state.serialize_field("zone_ctx.blueprint.key", &self.zone_ctx.blueprint.key)?;
-        state.serialize_field("zone_id", &self.zone_id)?;
-        state.serialize_field("room_id", &self.room_id)?;
-        state.serialize_field("account_id", &self.account_id)?;
-        state.end()
+impl Cursor {
+    pub(crate) fn new(realm: Realm, room: RoomView, account: Account) -> Self {
+        Self {
+            realm_id: realm.id,
+            realm: Arc::new(realm),
+            room_id: room.blueprint.id,
+            room: Arc::new(room),
+            account_id: account.id,
+            account: Arc::new(account),
+        }
     }
 }
 
@@ -51,26 +53,24 @@ pub struct Session {
     pub session_started: std::time::Instant,
 
     /// Protocol used by the client
-    pub protocol: Protocol,
+    #[allow(unused)]
+    protocol: Protocol,
     /// User Account (if logged in)
-    pub account: Option<Account>,
+    account: Option<Arc<Account>>,
     /// Current connection state
-    pub state: ConnState,
-
-    // Which map am I?
-    pub zone_ctx: Option<ZoneContext>,
+    state: ConnState,
 
     // Are we currently in the lua repl?
-    pub in_lua_repl: bool,
+    in_lua_repl: bool,
 
     // Where am I (on the map)?
-    pub cursor: Option<Cursor>,
+    cursor: Option<Cursor>,
     // Previous cursors (for "back" command)
-    pub prev_cursors: Vec<Cursor>,
+    prev_cursors: Vec<Cursor>,
 
     // Terminal size (if known)
-    pub tty_cols: Option<usize>,
-    pub tty_rows: Option<usize>,
+    tty_cols: Option<usize>,
+    tty_rows: Option<usize>,
 }
 
 impl Session {
@@ -81,11 +81,66 @@ impl Session {
             account: None,
             state: ConnState::PreLogin,
             cursor: None,
-            zone_ctx: None,
             prev_cursors: Vec::new(),
             tty_cols: None,
             tty_rows: None,
             in_lua_repl: false,
+        }
+    }
+
+    pub fn is_logged_in(&self) -> bool {
+        self.state == ConnState::LoggedIn && self.account.is_some()
+    }
+
+    pub fn get_account(&self) -> Option<Arc<Account>> {
+        self.account.clone()
+    }
+
+    pub fn get_cursor(&self) -> Option<Cursor> {
+        self.cursor.clone()
+    }
+
+    pub fn has_cursor(&self) -> bool {
+        self.cursor.is_some()
+    }
+
+    pub fn set_cursor(&mut self, cursor: Option<Cursor>) {
+        if let Some(c) = &self.cursor {
+            self.prev_cursors.push(c.clone());
+        }
+        self.cursor = cursor;
+    }
+
+    pub fn login(&mut self, account: Account, realm: Realm, room: RoomView) {
+        let acc = Arc::new(account);
+        self.account = Some(acc.clone());
+        self.state = ConnState::LoggedIn;
+        self.cursor = Some(Cursor::new(realm, room, (*acc).clone()));
+    }
+
+    pub fn logout(&mut self) {
+        self.account = None;
+        self.state = ConnState::PreLogin;
+        self.cursor = None;
+        self.prev_cursors.clear();
+    }
+
+    pub fn in_lua(&mut self, in_repl: bool) {
+        self.in_lua_repl = in_repl;
+    }
+    pub fn is_in_lua(&self) -> bool {
+        self.in_lua_repl
+    }
+
+    pub fn set_tty(&mut self, cols: usize, rows: usize) {
+        self.tty_cols = Some(cols);
+        self.tty_rows = Some(rows);
+    }
+
+    pub fn get_tty(&self) -> Option<(usize, usize)> {
+        match (self.tty_cols, self.tty_rows) {
+            (Some(c), Some(r)) => Some((c, r)),
+            _ => None,
         }
     }
 }

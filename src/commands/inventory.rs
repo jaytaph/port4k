@@ -3,10 +3,10 @@ use std::sync::Arc;
 use crate::input::parser::Intent;
 
 pub async fn inventory(ctx: Arc<CmdCtx>, _intent: Intent) -> CommandResult {
-    let zone_id = ctx.zone_id()?;
+    let realm_id = ctx.realm_id()?;
     let account_id = ctx.account_id()?;
 
-    let items = ctx.registry.services.inventory.get_player_inventory(zone_id, account_id).await?;
+    let items = ctx.registry.services.inventory.get_player_inventory(realm_id, account_id).await?;
     if items.is_empty() {
         ctx.output.line("Your inventory is empty.").await;
         return Ok(());

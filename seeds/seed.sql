@@ -13,6 +13,8 @@ VALUES
 ON CONFLICT (username) DO NOTHING;
 
 
-INSERT INTO public.zones (id, key, title, kind, created_at) VALUES ('16b896de-7ba8-4d90-bec5-ccf06ca9cc5d', 'hub', 'The Hub', 'live', '2025-10-10 12:00:00.000000 +00:00');
+-- INSERT INTO public.realms (
+--     id, bp_id, key, title, kind, created_at
+-- ) VALUES ('68e25b7c-b1c1-431a-963c-80efb09b15e6', 'hub', 'hub', 'The Hub', 'live', '2025-10-10 12:00:00.000000 +00:00');
 
 COMMIT;

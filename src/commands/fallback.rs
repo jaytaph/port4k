@@ -8,7 +8,7 @@ use tokio::time::timeout;
 pub async fn fallback(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     // let account = ctx.account()?;
     let cursor = ctx.cursor()?;
-    let account = ctx.account()?;
+    let account_id = ctx.account_id()?;
     let output_handle = ctx.output.clone();
 
     // We send the onCommand job. The job will check if we actually have a onCommand script in the room
@@ -16,7 +16,7 @@ pub async fn fallback(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     ctx.lua_tx
         .send(LuaJob::OnCommand {
             output_handle,
-            account,
+            account_id,
             cursor: Box::new(cursor),
             intent: Box::new(intent),
             reply: tx,

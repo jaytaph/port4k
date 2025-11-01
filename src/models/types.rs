@@ -84,7 +84,7 @@ macro_rules! define_id {
 
 define_id!(AccountId);
 define_id!(CharacterId);
-define_id!(ZoneId);
+define_id!(RealmId);
 define_id!(BlueprintId);
 define_id!(RoomId);
 define_id!(ObjectId);

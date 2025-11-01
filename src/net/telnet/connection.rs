@@ -3,11 +3,10 @@ use crate::error::AppResult;
 use crate::input::readline::{EditEvent, LineEditor};
 use crate::lua::table::format_lua_value;
 use crate::lua::{LuaJob, LuaResult};
-use crate::models::account::Account;
 use crate::net::AppCtx;
 use crate::net::output::OutputHandle;
 use crate::util::telnet::{TelnetIn, TelnetMachine};
-use crate::{ConnState, Registry, Session, process_command};
+use crate::{Registry, Session, process_command};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, BufReader};
@@ -63,20 +62,17 @@ async fn read_loop(
 }
 
 async fn cleanup(sess: Arc<RwLock<Session>>, registry: Arc<Registry>) {
-    let account_opt = {
-        let sess = sess.read();
-        sess.account.clone()
+    let Some(account) = sess.read().get_account()  else {
+        return;
     };
 
-    if let Some(a) = account_opt {
-        registry.set_online(&a, false).await;
-    }
+    registry.set_online(&account, false).await;
 }
 
 async fn handle_data_byte(
     b: u8,
-    reader: &mut BufReader<OwnedReadHalf>,
-    telnet: &mut TelnetMachine,
+    _reader: &mut BufReader<OwnedReadHalf>,
+    _telnet: &mut TelnetMachine,
     editor: &mut LineEditor,
     sess: Arc<RwLock<Session>>,
     ctx: Arc<AppCtx>,
@@ -89,7 +85,7 @@ async fn handle_data_byte(
         EditEvent::Line(line) => {
             let raw = line.trim();
 
-            let in_repl = sess.read().in_lua_repl;
+            let in_repl = sess.read().is_in_lua();
 
             if in_repl {
                 handle_repl_input(raw, ctx.clone(), sess.clone()).await?;
@@ -101,11 +97,11 @@ async fn handle_data_byte(
             // // Move to a fresh line before emitting any output
             ctx.output.line("\n\n").await;
 
-            // Try login flow first; if handled, we just repaint
-            if try_handle_login(raw, reader, telnet, ctx.clone(), sess.clone()).await? == LoginOutcome::Handled {
-                update_prompt(sess.clone(), ctx.output.clone(), editor).await;
-                return Ok(());
-            }
+            // // Try login flow first; if handled, we just repaint
+            // if try_handle_login(raw, reader, telnet, ctx.clone(), sess.clone()).await? == LoginOutcome::Handled {
+            //     update_prompt(sess.clone(), ctx.output.clone(), editor).await;
+            //     return Ok(());
+            // }
 
             // Otherwise, dispatch as a normal command
             dispatch_command(raw, ctx.clone(), sess.clone()).await?;
@@ -119,8 +115,7 @@ async fn handle_data_byte(
 
 async fn handle_naws(cols: u16, rows: u16, sess: Arc<RwLock<Session>>) {
     let mut s = sess.write();
-    s.tty_cols = Some(cols as usize);
-    s.tty_rows = Some(rows as usize);
+    s.set_tty(cols as usize, rows as usize);
 }
 
 async fn dispatch_command(raw: &str, ctx: Arc<AppCtx>, sess: Arc<RwLock<Session>>) -> AppResult<()> {
@@ -142,84 +137,76 @@ async fn dispatch_command(raw: &str, ctx: Arc<AppCtx>, sess: Arc<RwLock<Session>
     Ok(())
 }
 
-#[derive(PartialEq, Eq)]
-enum LoginOutcome {
-    Handled,
-    NotHandled,
-}
-
-/// Return `Handled` if login flow consumed the command
-async fn try_handle_login(
-    raw: &str,
-    reader: &mut BufReader<OwnedReadHalf>,
-    telnet: &mut TelnetMachine,
-    ctx: Arc<AppCtx>,
-    sess: Arc<RwLock<Session>>,
-) -> AppResult<LoginOutcome> {
-    // Only handle `login <username>` with exactly one arg here
-    let Some(rest) = raw.strip_prefix("login ") else {
-        return Ok(LoginOutcome::NotHandled);
-    };
-    let parts: Vec<&str> = rest.split_whitespace().collect();
-    if parts.len() != 1 {
-        return Ok(LoginOutcome::NotHandled);
-    }
-
-    if sess.read().state == ConnState::LoggedIn {
-        ctx.output.system("Already logged in.").await;
-        return Ok(LoginOutcome::Handled);
-    }
-
-    let username = parts[0];
-
-    if Account::validate_username(username).is_err() {
-        ctx.output.system("Invalid username.").await;
-        return Ok(LoginOutcome::Handled);
-    };
-
-    if !ctx.registry.services.account.exists(username).await? {
-        ctx.output
-            .system("No such user. Try `register <name> <password>`.")
-            .await;
-        return Ok(LoginOutcome::Handled);
-    }
-
-    // We need special handling here to avoid echoing the password
-    ctx.output.system("Password: ").await;
-    let pw = read_secret_line(reader, telnet, ctx.clone()).await?;
-
-    if pw.is_empty() {
-        // Keep the old behavior: end the connection when empty password
-        return Ok(LoginOutcome::Handled);
-    }
-
-    let password = pw.trim_matches(['\r', '\n']);
-    let account = ctx.registry.services.auth.authenticate(username, password).await?;
-
-    {
-        let mut s = sess.write();
-        s.account = Some(account.clone());
-        s.state = ConnState::LoggedIn;
-    }
-    ctx.registry.set_online(&account, true).await;
-
-    ctx.output
-        .system(format!("Welcome, {}! Type `look` or `help`.", account.username))
-        .await;
-    Ok(LoginOutcome::Handled)
-}
+// #[derive(PartialEq, Eq)]
+// enum LoginOutcome {
+//     Handled,
+//     NotHandled,
+// }
+//
+// /// Return `Handled` if login flow consumed the command
+// async fn try_handle_login(
+//     raw: &str,
+//     reader: &mut BufReader<OwnedReadHalf>,
+//     telnet: &mut TelnetMachine,
+//     ctx: Arc<AppCtx>,
+//     sess: Arc<RwLock<Session>>,
+// ) -> AppResult<LoginOutcome> {
+//     // Only handle `login <username>` with exactly one arg here
+//     let Some(rest) = raw.strip_prefix("login ") else {
+//         return Ok(LoginOutcome::NotHandled);
+//     };
+//     let parts: Vec<&str> = rest.split_whitespace().collect();
+//     if parts.len() != 1 {
+//         return Ok(LoginOutcome::NotHandled);
+//     }
+//
+//     if sess.read().is_logged_in() {
+//         ctx.output.system("Already logged in.").await;
+//         return Ok(LoginOutcome::Handled);
+//     }
+//
+//     let username = parts[0];
+//
+//     if Account::validate_username(username).is_err() {
+//         ctx.output.system("Invalid username.").await;
+//         return Ok(LoginOutcome::Handled);
+//     };
+//
+//     if !ctx.registry.services.account.exists(username).await? {
+//         ctx.output
+//             .system("No such user. Try `register <name> <password>`.")
+//             .await;
+//         return Ok(LoginOutcome::Handled);
+//     }
+//
+//     // We need special handling here to avoid echoing the password
+//     ctx.output.system("Password: ").await;
+//     let pw = read_secret_line(reader, telnet, ctx.clone()).await?;
+//
+//     if pw.is_empty() {
+//         // Keep the old behavior: end the connection when empty password
+//         return Ok(LoginOutcome::Handled);
+//     }
+//
+//     let password = pw.trim_matches(['\r', '\n']);
+//     let account = ctx.registry.services.auth.authenticate(username, password).await?;
+//
+//     sess.write().login(account.clone(), realm, None).await?;
+//     ctx.registry.set_online(&account, true).await;
+//
+//     ctx.output
+//         .system(format!("Welcome, {}! Type `look` or `help`.", account.username))
+//         .await;
+//     Ok(LoginOutcome::Handled)
+// }
 
 fn generate_prompt(sess: Arc<RwLock<Session>>, prompt: &str) -> String {
     let s = sess.read();
-    if s.in_lua_repl {
+    if s.is_in_lua() {
         return "lua> ".to_string();
     }
 
     prompt.to_string()
-
-    // // No room view vars in prompt generation
-    // let vars = RenderVars::new(sess.clone(), None);
-    // render_template(prompt, &vars, 80)
 }
 
 async fn update_prompt(sess: Arc<RwLock<Session>>, output: OutputHandle, editor: &mut LineEditor) {
@@ -288,11 +275,7 @@ async fn read_secret_line(
 
 async fn handle_repl_input(raw: &str, ctx: Arc<AppCtx>, sess: Arc<RwLock<Session>>) -> AppResult<()> {
     if matches!(raw, ".quit" | ".exit" | ".q") {
-        {
-            let mut s = sess.write();
-            s.in_lua_repl = false;
-        }
-
+        sess.write().in_lua(false);
         ctx.output.system("Exiting Lua REPL.").await;
         return Ok(());
     }
@@ -310,14 +293,22 @@ async fn handle_repl_input(raw: &str, ctx: Arc<AppCtx>, sess: Arc<RwLock<Session
 
     let (reply_tx, reply_rx) = oneshot::channel();
 
+    let Some(c) = sess.read().get_cursor() else {
+        ctx.output.system("No active cursor; cannot execute Lua code.").await;
+        return Ok(());
+    };
+    let Some(a) = sess.read().get_account() else {
+        ctx.output.system("No active account; cannot execute Lua code.").await;
+        return Ok(());
+    };
+
     let job = LuaJob::ReplEval {
         output_handle: ctx.output.clone(),
-        account: sess.read().account.clone().unwrap().clone(),
-        cursor: Box::new(sess.read().cursor.clone().unwrap().clone()),
+        cursor: Box::new(c),
+        account_id: a.id,
         code: raw.to_string(),
         reply: reply_tx,
     };
-
     _ = ctx.lua_tx.send(job).await;
 
     // New line for enter

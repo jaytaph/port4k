@@ -4,6 +4,6 @@ pub mod character;
 pub mod inventory;
 pub mod room;
 pub mod types;
-pub mod zone;
+pub mod realm;
 
 mod room_helpers;

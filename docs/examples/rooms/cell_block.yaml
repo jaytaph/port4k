@@ -1,5 +1,6 @@
 version: 5
 id: cell_block
+uuid: "68e25b7c-b1c1-431a-963c-80efb09b15e6"
 name: Cell Block
 short: "A narrow detention cell with failing systems."
 description: |

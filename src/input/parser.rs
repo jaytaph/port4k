@@ -40,9 +40,9 @@ pub enum Verb {
     LuaRepl,
     Register,
     /// Special commands starting with '@'
-    ScBlueprint,
-    ScPlaytest,
-    ScDebug,
+    // ScBlueprint,
+    // ScPlaytest,
+    // ScDebug,
     /// Custom verb not in our known list
     Custom(String),
 }
@@ -71,9 +71,9 @@ impl Verb {
             Verb::Logout => "logout",
             Verb::Register => "register",
             Verb::LuaRepl => "lua",
-            Verb::ScBlueprint => "@bp",
-            Verb::ScPlaytest => "@playtest",
-            Verb::ScDebug => "@debug",
+            // Verb::ScBlueprint => "@bp",
+            // Verb::ScPlaytest => "@playtest",
+            // Verb::ScDebug => "@debug",
             Verb::Custom(s) => s.as_str(),
         }
     }
@@ -463,10 +463,10 @@ fn verb_map() -> HashMap<&'static str, Verb> {
     m.insert("logout", Logout);
     m.insert("register", Register);
 
-    // Special commands starting with '@'
-    m.insert("@bp", ScBlueprint);
-    m.insert("@playtest", ScPlaytest);
-    m.insert("@debug", ScDebug);
+    // // Special commands starting with '@'
+    // m.insert("@bp", ScBlueprint);
+    // m.insert("@playtest", ScPlaytest);
+    // m.insert("@debug", ScDebug);
 
     m
 }
@@ -967,7 +967,6 @@ mod tests {
     #[test]
     fn t_enter_simple_code() {
         let i = parse_command("enter 4312");
-        dbg!(&i);
         assert_eq!(i.verb, Verb::Custom("enter".to_string()));
         assert_eq!(i.direct_raw.as_deref(), Some("4312"));
         assert!(i.direct.unwrap().head == "4312");

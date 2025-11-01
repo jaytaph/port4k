@@ -4,12 +4,13 @@ use crate::renderer::RenderVars;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use crate::game::{xp_to_level, xp_to_level_name};
 
 /// Returns a list of variables available for rendering templates.
 pub fn generate_render_vars(sess: Arc<RwLock<Session>>) -> RenderVars {
     // We only add roomview vars when session.cursor.roomview is Some
-    let room_view = match sess.read().cursor.as_ref() {
-        Some(cursor) => get_roomview_vars(&cursor.room_view),
+    let room_view = match sess.read().get_cursor().as_ref() {
+        Some(cursor) => get_roomview_vars(&cursor.room),
         None => HashMap::new(),
     };
 
@@ -37,18 +38,20 @@ fn get_global_vars(sess: Arc<RwLock<Session>>) -> HashMap<String, String> {
     vars.insert("now_utc".to_string(), chrono::Utc::now().to_rfc3339());
     vars.insert("now_local".to_string(), chrono::Local::now().to_rfc3339());
 
-    if let Some(account) = sess.read().account.as_ref() {
+    if let Some(account) = sess.read().get_account().as_ref() {
         vars.insert("account.name".to_string(), account.username.to_string());
         vars.insert("account.role".to_string(), account.role.to_string());
-        // vars.insert("account.xp".to_string(), format!("{}", account.xp));
-        // vars.insert("account.health".to_string(), format!("{}", account.health));
-        // vars.insert("account.coins".to_string(), format!("{}", account.coins));
+        vars.insert("account.xp".to_string(), format!("{}", account.xp));
+        vars.insert("account.xp_level".to_string(), format!("{}", xp_to_level(account.xp)));
+        vars.insert("account.xp_level_name".to_string(), format!("{}", xp_to_level_name(account.xp)));
+        vars.insert("account.health".to_string(), format!("{}", account.health));
+        vars.insert("account.coins".to_string(), format!("{}", account.coins));
     }
-    if let Some(cursor) = sess.read().cursor.as_ref() {
-        vars.insert("cursor.zone".to_string(), cursor.zone_ctx.zone.title.to_string());
+    if let Some(cursor) = sess.read().get_cursor().as_ref() {
+        vars.insert("cursor.realm".to_string(), cursor.realm.title.to_string());
         vars.insert(
             "cursor.room.title".to_string(),
-            cursor.room_view.blueprint.title.to_string(),
+            cursor.room.blueprint.title.to_string(),
         );
         // vars.insert("cursor.view".to_string(), cursor.room.title.to_string());
     }

@@ -10,7 +10,6 @@ pub enum ShellCmd {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DbgTarget {
     RoomView,
-    Cursor,
 }
 
 pub fn parse_shell_cmd(input: &str) -> Option<ShellCmd> {
@@ -27,7 +26,6 @@ pub fn parse_shell_cmd(input: &str) -> Option<ShellCmd> {
         "dbg" => {
             match it.next().unwrap_or("") {
                 "room_view" | "roomview" | "rv" => Some(ShellCmd::Dbg(DbgTarget::RoomView)),
-                "cursor" | "cur" => Some(ShellCmd::Dbg(DbgTarget::Cursor)),
                 "" => {
                     // default target (pick one or show help)
                     Some(ShellCmd::Dbg(DbgTarget::RoomView))
@@ -46,12 +44,9 @@ pub async fn handle_shell_cmd(cmd: ShellCmd, ctx: Arc<CmdCtx>) -> CommandResult 
     let result = match cmd {
         ShellCmd::Dbg(target) => match target {
             DbgTarget::RoomView => {
-                let room_view = ctx.room_view()?;
-                dump_json_or_debug("room_view", &room_view).await
-            }
-            DbgTarget::Cursor => {
-                let c = ctx.cursor()?;
-                dump_json_or_debug("cursor", &c).await
+                // let room_view = ctx.room_view()?;
+                // dump_json_or_debug("room_view", room_view).await
+                "roomview debug not yet supported"
             }
         },
     };

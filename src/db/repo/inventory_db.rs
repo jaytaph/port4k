@@ -1,7 +1,7 @@
 use crate::db::repo::inventory::InventoryRepo;
 use crate::db::{Db, DbError, DbResult};
 use crate::models::inventory::{Item, ItemInstance, ItemLocation};
-use crate::models::types::{AccountId, BlueprintId, ItemId, ObjectId, RoomId, ZoneId};
+use crate::models::types::{AccountId, BlueprintId, ItemId, ObjectId, RoomId, RealmId};
 use std::sync::Arc;
 
 pub struct InventoryRepository {
@@ -13,11 +13,11 @@ impl InventoryRepository {
         Self { db }
     }
 
-    /// Helper: Get blueprint_id for a zone
-    async fn get_blueprint_for_zone(&self, zone_id: ZoneId) -> DbResult<BlueprintId> {
+    /// Helper: Get blueprint_id for a realm
+    async fn get_blueprint_for_realm(&self, realm_id: RealmId) -> DbResult<BlueprintId> {
         let client = self.db.pool.get().await?;
         let row = client
-            .query_one("SELECT bp_id FROM zones WHERE id = $1", &[&zone_id])
+            .query_one("SELECT bp_id FROM realms WHERE id = $1", &[&realm_id])
             .await?;
         Ok(row.get(0))
     }
@@ -29,8 +29,8 @@ impl InventoryRepo for InventoryRepository {
     // CATALOG QUERIES
     // ========================================================================
 
-    async fn get_item_by_key(&self, zone_id: ZoneId, item_key: &str) -> DbResult<Item> {
-        let bp_id = self.get_blueprint_for_zone(zone_id).await?;
+    async fn get_item_by_key(&self, realm_id: RealmId, item_key: &str) -> DbResult<Item> {
+        let bp_id = self.get_blueprint_for_realm(realm_id).await?;
         let client = self.db.pool.get().await?;
 
         let row = client
@@ -94,8 +94,8 @@ impl InventoryRepo for InventoryRepository {
         })
     }
 
-    async fn find_item_by_noun(&self, zone_id: ZoneId, noun: &str) -> DbResult<Option<Item>> {
-        let bp_id = self.get_blueprint_for_zone(zone_id).await?;
+    async fn find_item_by_noun(&self, realm_id: RealmId, noun: &str) -> DbResult<Option<Item>> {
+        let bp_id = self.get_blueprint_for_realm(realm_id).await?;
         let client = self.db.pool.get().await?;
 
         let row = client
@@ -128,8 +128,8 @@ impl InventoryRepo for InventoryRepository {
         }))
     }
 
-    async fn get_zone_catalog(&self, zone_id: ZoneId) -> DbResult<Vec<Item>> {
-        let bp_id = self.get_blueprint_for_zone(zone_id).await?;
+    async fn get_realm_catalog(&self, realm_id: RealmId) -> DbResult<Vec<Item>> {
+        let bp_id = self.get_blueprint_for_realm(realm_id).await?;
         let client = self.db.pool.get().await?;
 
         let rows = client
@@ -176,7 +176,7 @@ impl InventoryRepo for InventoryRepository {
             .query_one(
                 r#"
                 SELECT
-                    i.id, i.zone_id, i.catalog_id,
+                    i.id, i.realm_id, i.catalog_id,
                     i.room_id, i.account_id, i.object_id, i.container_item_id,
                     i.quantity, i.condition, i.created_at, i.updated_at,
                     c.item_key, c.name, c.short, c.description, c.examine, c.stackable,
@@ -196,7 +196,7 @@ impl InventoryRepo for InventoryRepository {
 
         Ok(ItemInstance {
             instance_id: row.get(0),
-            zone_id: row.get(1),
+            realm_id: row.get(1),
             catalog_id: row.get(2),
             location,
             quantity: row.get(7),
@@ -213,20 +213,20 @@ impl InventoryRepo for InventoryRepository {
         })
     }
 
-    async fn has_item(&self, zone_id: ZoneId, account_id: AccountId, instance_id: ItemId) -> DbResult<bool> {
+    async fn has_item(&self, realm_id: RealmId, account_id: AccountId, instance_id: ItemId) -> DbResult<bool> {
         let client = self.db.pool.get().await?;
 
         let row = client
             .query_one(
-                "SELECT EXISTS(SELECT 1 FROM item_instances WHERE instance_id = $1 AND zone_id = $2 AND account_id = $3)",
-                &[&instance_id, &zone_id, &account_id],
+                "SELECT EXISTS(SELECT 1 FROM item_instances WHERE instance_id = $1 AND realm_id = $2 AND account_id = $3)",
+                &[&instance_id, &realm_id, &account_id],
             )
             .await?;
 
         Ok(row.get(0))
     }
 
-    async fn has_item_by_key(&self, zone_id: ZoneId, account_id: AccountId, item_key: &str) -> DbResult<bool> {
+    async fn has_item_by_key(&self, realm_id: RealmId, account_id: AccountId, item_key: &str) -> DbResult<bool> {
         let client = self.db.pool.get().await?;
 
         let row = client
@@ -235,19 +235,19 @@ impl InventoryRepo for InventoryRepository {
             SELECT EXISTS(
                 SELECT 1 FROM item_instances ii
                 JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
-                WHERE ii.zone_id = $1
+                WHERE ii.realm_id = $1
                     AND ii.account_id = $2
                     AND bp.item_key = $3
             )
             "#,
-                &[&zone_id, &account_id, &item_key],
+                &[&realm_id, &account_id, &item_key],
             )
             .await?;
 
         Ok(row.get(0))
     }
 
-    async fn has_item_by_noun(&self, zone_id: ZoneId, account_id: AccountId, noun: &str) -> DbResult<bool> {
+    async fn has_item_by_noun(&self, realm_id: RealmId, account_id: AccountId, noun: &str) -> DbResult<bool> {
         let client = self.db.pool.get().await?;
 
         let row = client
@@ -257,12 +257,12 @@ impl InventoryRepo for InventoryRepository {
                 SELECT 1 FROM item_instances ii
                 JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
                 JOIN bp_item_nouns n ON n.item_id = bp.id
-                WHERE ii.zone_id = $1
+                WHERE ii.realm_id = $1
                     AND ii.account_id = $2
                     AND LOWER(n.noun) = LOWER($3)
             )
             "#,
-                &[&zone_id, &account_id, &noun],
+                &[&realm_id, &account_id, &noun],
             )
             .await?;
 
@@ -273,14 +273,14 @@ impl InventoryRepo for InventoryRepository {
     // INVENTORY QUERIES
     // ========================================================================
 
-    async fn get_player_inventory(&self, zone_id: ZoneId, account_id: AccountId) -> DbResult<Vec<ItemInstance>> {
+    async fn get_player_inventory(&self, realm_id: RealmId, account_id: AccountId) -> DbResult<Vec<ItemInstance>> {
         let client = self.db.pool.get().await?;
 
         let rows = client
             .query(
                 r#"
             SELECT
-                ii.instance_id, ii.zone_id, ii.catalog_id,
+                ii.instance_id, ii.realm_id, ii.catalog_id,
                 ii.room_id, ii.account_id, ii.object_id, ii.container_item_id,
                 ii.quantity, ii.condition, ii.created_at, ii.updated_at,
                 bp.item_key, bp.name, bp.short, bp.description, bp.examine, bp.stackable,
@@ -288,11 +288,11 @@ impl InventoryRepo for InventoryRepository {
             FROM item_instances ii
             JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
             LEFT JOIN bp_item_nouns n ON n.item_id = bp.id
-            WHERE ii.zone_id = $1 AND ii.account_id = $2
+            WHERE ii.realm_id = $1 AND ii.account_id = $2
             GROUP BY ii.instance_id, bp.id
             ORDER BY bp.name
             "#,
-                &[&zone_id, &account_id],
+                &[&realm_id, &account_id],
             )
             .await?;
 
@@ -303,7 +303,7 @@ impl InventoryRepo for InventoryRepository {
 
                 Ok(ItemInstance {
                     instance_id: row.get(0),
-                    zone_id: row.get(1),
+                    realm_id: row.get(1),
                     catalog_id: row.get(2),
                     location,
                     quantity: row.get(7),
@@ -324,7 +324,7 @@ impl InventoryRepo for InventoryRepository {
 
     async fn find_item_in_player_inventory(
         &self,
-        zone_id: ZoneId,
+        realm_id: RealmId,
         account_id: AccountId,
         noun: &str,
     ) -> DbResult<Option<ItemInstance>> {
@@ -334,7 +334,7 @@ impl InventoryRepo for InventoryRepository {
             .query_opt(
                 r#"
                 SELECT
-                    i.id, i.zone_id, i.catalog_id,
+                    i.id, i.realm_id, i.catalog_id,
                     i.room_id, i.account_id, i.object_id, i.container_item_id,
                     i.quantity, i.condition, i.created_at, i.updated_at,
                     c.item_key, c.name, c.short, c.description, c.examine, c.stackable,
@@ -343,11 +343,11 @@ impl InventoryRepo for InventoryRepository {
                 JOIN bp_items_catalog c ON i.catalog_id = c.id
                 JOIN bp_item_nouns n ON n.item_id = c.id AND LOWER(n.noun) = LOWER($3)
                 LEFT JOIN bp_item_nouns n2 ON n2.item_id = c.id
-                WHERE i.zone_id = $1 AND i.account_id = $2
+                WHERE i.realm_id = $1 AND i.account_id = $2
                 GROUP BY i.id, c.id
                 LIMIT 1
                 "#,
-                &[&zone_id, &account_id, &noun],
+                &[&realm_id, &account_id, &noun],
             )
             .await?;
 
@@ -357,7 +357,7 @@ impl InventoryRepo for InventoryRepository {
 
             Ok(ItemInstance {
                 instance_id: r.get(0),
-                zone_id: r.get(1),
+                realm_id: r.get(1),
                 catalog_id: r.get(2),
                 location,
                 quantity: r.get(7),
@@ -378,7 +378,7 @@ impl InventoryRepo for InventoryRepository {
 
     async fn find_item_by_key_in_inventory(
         &self,
-        zone_id: ZoneId,
+        realm_id: RealmId,
         account_id: AccountId,
         item_key: &str,
     ) -> DbResult<Option<ItemInstance>> {
@@ -388,7 +388,7 @@ impl InventoryRepo for InventoryRepository {
             .query_opt(
                 r#"
             SELECT
-                ii.instance_id, ii.zone_id, ii.catalog_id,
+                ii.instance_id, ii.realm_id, ii.catalog_id,
                 ii.room_id, ii.account_id, ii.object_id, ii.container_item_id,
                 ii.quantity, ii.condition, ii.created_at, ii.updated_at,
                 bp.item_key, bp.name, bp.short, bp.description, bp.examine, bp.stackable,
@@ -396,11 +396,11 @@ impl InventoryRepo for InventoryRepository {
             FROM item_instances ii
             JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
             LEFT JOIN bp_item_nouns n ON n.item_id = bp.id
-            WHERE ii.zone_id = $1 AND ii.account_id = $2 AND bp.item_key = $3
+            WHERE ii.realm_id = $1 AND ii.account_id = $2 AND bp.item_key = $3
             GROUP BY ii.instance_id, bp.id
             LIMIT 1
             "#,
-                &[&zone_id, &account_id, &item_key],
+                &[&realm_id, &account_id, &item_key],
             )
             .await?;
 
@@ -410,7 +410,7 @@ impl InventoryRepo for InventoryRepository {
 
             Ok(ItemInstance {
                 instance_id: r.get(0),
-                zone_id: r.get(1),
+                realm_id: r.get(1),
                 catalog_id: r.get(2),
                 location,
                 quantity: r.get(7),
@@ -432,14 +432,14 @@ impl InventoryRepo for InventoryRepository {
     // ROOM QUERIES
     // ========================================================================
 
-    async fn get_room_items(&self, zone_id: ZoneId, room_id: RoomId) -> DbResult<Vec<ItemInstance>> {
+    async fn get_room_items(&self, realm_id: RealmId, room_id: RoomId) -> DbResult<Vec<ItemInstance>> {
         let client = self.db.pool.get().await?;
 
         let rows = client
             .query(
                 r#"
             SELECT
-                ii.instance_id, ii.zone_id, ii.catalog_id,
+                ii.instance_id, ii.realm_id, ii.catalog_id,
                 ii.room_id, ii.account_id, ii.object_id, ii.container_item_id,
                 ii.quantity, ii.condition, ii.created_at, ii.updated_at,
                 bp.item_key, bp.name, bp.short, bp.description, bp.examine, bp.stackable,
@@ -447,11 +447,11 @@ impl InventoryRepo for InventoryRepository {
             FROM item_instances ii
             JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
             LEFT JOIN bp_item_nouns n ON n.item_id = bp.id
-            WHERE ii.zone_id = $1 AND ii.room_id = $2
+            WHERE ii.realm_id = $1 AND ii.room_id = $2
             GROUP BY ii.instance_id, bp.id
             ORDER BY bp.name
             "#,
-                &[&zone_id, &room_id],
+                &[&realm_id, &room_id],
             )
             .await?;
 
@@ -462,7 +462,7 @@ impl InventoryRepo for InventoryRepository {
 
                 Ok(ItemInstance {
                     instance_id: row.get(0),
-                    zone_id: row.get(1),
+                    realm_id: row.get(1),
                     catalog_id: row.get(2),
                     location,
                     quantity: row.get(7),
@@ -481,14 +481,14 @@ impl InventoryRepo for InventoryRepository {
             .collect()
     }
 
-    async fn find_item_in_room(&self, zone_id: ZoneId, room_id: RoomId, noun: &str) -> DbResult<Option<ItemInstance>> {
+    async fn find_item_in_room(&self, realm_id: RealmId, room_id: RoomId, noun: &str) -> DbResult<Option<ItemInstance>> {
         let client = self.db.pool.get().await?;
 
         let row = client
             .query_opt(
                 r#"
             SELECT
-                ii.instance_id, ii.zone_id, ii.catalog_id,
+                ii.instance_id, ii.realm_id, ii.catalog_id,
                 ii.room_id, ii.account_id, ii.object_id, ii.container_item_id,
                 ii.quantity, ii.condition, ii.created_at, ii.updated_at,
                 bp.item_key, bp.name, bp.short, bp.description, bp.examine, bp.stackable,
@@ -497,11 +497,11 @@ impl InventoryRepo for InventoryRepository {
             JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
             JOIN bp_item_nouns n ON n.item_id = bp.id AND LOWER(n.noun) = LOWER($3)
             LEFT JOIN bp_item_nouns n2 ON n2.item_id = bp.id
-            WHERE ii.zone_id = $1 AND ii.room_id = $2
+            WHERE ii.realm_id = $1 AND ii.room_id = $2
             GROUP BY ii.instance_id, bp.id
             LIMIT 1
             "#,
-                &[&zone_id, &room_id, &noun],
+                &[&realm_id, &room_id, &noun],
             )
             .await?;
 
@@ -511,7 +511,7 @@ impl InventoryRepo for InventoryRepository {
 
             Ok(ItemInstance {
                 instance_id: r.get(0),
-                zone_id: r.get(1),
+                realm_id: r.get(1),
                 catalog_id: r.get(2),
                 location,
                 quantity: r.get(7),
@@ -534,14 +534,14 @@ impl InventoryRepo for InventoryRepository {
     // OBJECT/CONTAINER QUERIES
     // ========================================================================
 
-    async fn get_object_items(&self, zone_id: ZoneId, object_id: ObjectId) -> DbResult<Vec<ItemInstance>> {
+    async fn get_object_items(&self, realm_id: RealmId, object_id: ObjectId) -> DbResult<Vec<ItemInstance>> {
         let client = self.db.pool.get().await?;
 
         let rows = client
             .query(
                 r#"
             SELECT
-                ii.instance_id, ii.zone_id, ii.catalog_id,
+                ii.instance_id, ii.realm_id, ii.catalog_id,
                 ii.room_id, ii.account_id, ii.object_id, ii.container_item_id,
                 ii.quantity, ii.condition, ii.created_at, ii.updated_at,
                 bp.item_key, bp.name, bp.short, bp.description, bp.examine, bp.stackable,
@@ -549,11 +549,11 @@ impl InventoryRepo for InventoryRepository {
             FROM item_instances ii
             JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
             LEFT JOIN bp_item_nouns n ON n.item_id = bp.id
-            WHERE ii.zone_id = $1 AND ii.object_id = $2
+            WHERE ii.realm_id = $1 AND ii.object_id = $2
             GROUP BY ii.instance_id, bp.id
             ORDER BY bp.name
             "#,
-                &[&zone_id, &object_id],
+                &[&realm_id, &object_id],
             )
             .await?;
 
@@ -564,7 +564,7 @@ impl InventoryRepo for InventoryRepository {
 
                 Ok(ItemInstance {
                     instance_id: row.get(0),
-                    zone_id: row.get(1),
+                    realm_id: row.get(1),
                     catalog_id: row.get(2),
                     location,
                     quantity: row.get(7),
@@ -585,7 +585,7 @@ impl InventoryRepo for InventoryRepository {
 
     async fn find_item_in_object(
         &self,
-        zone_id: ZoneId,
+        realm_id: RealmId,
         object_id: ObjectId,
         noun: &str,
     ) -> DbResult<Option<ItemInstance>> {
@@ -595,7 +595,7 @@ impl InventoryRepo for InventoryRepository {
             .query_opt(
                 r#"
             SELECT
-                ii.instance_id, ii.zone_id, ii.catalog_id,
+                ii.instance_id, ii.realm_id, ii.catalog_id,
                 ii.room_id, ii.account_id, ii.object_id, ii.container_item_id,
                 ii.quantity, ii.condition, ii.created_at, ii.updated_at,
                 bp.item_key, bp.name, bp.short, bp.description, bp.examine, bp.stackable,
@@ -604,11 +604,11 @@ impl InventoryRepo for InventoryRepository {
             JOIN bp_items_catalog bp ON ii.catalog_id = bp.id
             JOIN bp_item_nouns n ON n.item_id = bp.id AND LOWER(n.noun) = LOWER($3)
             LEFT JOIN bp_item_nouns n2 ON n2.item_id = bp.id
-            WHERE ii.zone_id = $1 AND ii.object_id = $2
+            WHERE ii.realm_id = $1 AND ii.object_id = $2
             GROUP BY ii.instance_id, bp.id
             LIMIT 1
             "#,
-                &[&zone_id, &object_id, &noun],
+                &[&realm_id, &object_id, &noun],
             )
             .await?;
 
@@ -618,7 +618,7 @@ impl InventoryRepo for InventoryRepository {
 
             Ok(ItemInstance {
                 instance_id: r.get(0),
-                zone_id: r.get(1),
+                realm_id: r.get(1),
                 catalog_id: r.get(2),
                 location,
                 quantity: r.get(7),
@@ -643,7 +643,7 @@ impl InventoryRepo for InventoryRepository {
 
     async fn is_loot_instantiated(
         &self,
-        zone_id: ZoneId,
+        realm_id: RealmId,
         object_id: ObjectId,
         account_id: Option<AccountId>,
     ) -> DbResult<bool> {
@@ -654,12 +654,12 @@ impl InventoryRepo for InventoryRepository {
                 r#"
             SELECT EXISTS(
                 SELECT 1 FROM loot_instantiation_state
-                WHERE zone_id = $1
+                WHERE realm_id = $1
                     AND object_id = $2
                     AND account_id IS NOT DISTINCT FROM $3
             )
             "#,
-                &[&zone_id, &object_id, &account_id],
+                &[&realm_id, &object_id, &account_id],
             )
             .await?;
 
@@ -668,7 +668,7 @@ impl InventoryRepo for InventoryRepository {
 
     async fn mark_loot_instantiated(
         &self,
-        zone_id: ZoneId,
+        realm_id: RealmId,
         object_id: ObjectId,
         account_id: Option<AccountId>,
     ) -> DbResult<()> {
@@ -677,12 +677,12 @@ impl InventoryRepo for InventoryRepository {
         client
             .execute(
                 r#"
-            INSERT INTO loot_instantiation_state (zone_id, object_id, account_id, instantiated_at)
+            INSERT INTO loot_instantiation_state (realm_id, object_id, account_id, instantiated_at)
             VALUES ($1, $2, $3, NOW())
-            ON CONFLICT (zone_id, object_id, account_id)
+            ON CONFLICT (realm_id, object_id, account_id)
             DO UPDATE SET instantiated_at = NOW()
             "#,
-                &[&zone_id, &object_id, &account_id],
+                &[&realm_id, &object_id, &account_id],
             )
             .await?;
 
@@ -694,7 +694,7 @@ impl InventoryRepo for InventoryRepository {
 
     async fn spawn_item(
         &self,
-        zone_id: ZoneId,
+        realm_id: RealmId,
         item_key: &str,
         location: ItemLocation,
         quantity: i32,
@@ -702,9 +702,9 @@ impl InventoryRepo for InventoryRepository {
         let mut client = self.db.pool.get().await?;
         let transaction = client.transaction().await?;
 
-        // 1. Get bp_id for the zone
+        // 1. Get bp_id for the realm
         let bp_id: BlueprintId = transaction
-            .query_one("SELECT bp_id FROM zones WHERE id = $1", &[&zone_id])
+            .query_one("SELECT bp_id FROM realms WHERE id = $1", &[&realm_id])
             .await?
             .get(0);
 
@@ -727,14 +727,14 @@ impl InventoryRepo for InventoryRepository {
                 .query_opt(
                     "SELECT instance_id, quantity
                 FROM item_instances
-                WHERE zone_id = $1
+                WHERE realm_id = $1
                     AND catalog_id = $2
                     AND room_id IS NOT DISTINCT FROM $3
                     AND account_id IS NOT DISTINCT FROM $4
                     AND object_id IS NOT DISTINCT FROM $5
                     AND container_item_id IS NOT DISTINCT FROM $6
                 LIMIT 1",
-                    &[&zone_id, &catalog_id, &room_id, &account_id, &object_id, &container_item_id],
+                    &[&realm_id, &catalog_id, &room_id, &account_id, &object_id, &container_item_id],
                 )
                 .await?;
 
@@ -762,14 +762,14 @@ impl InventoryRepo for InventoryRepository {
         let row = transaction
             .query_one(
                 "INSERT INTO item_instances (
-                zone_id, catalog_id, item_key,
+                realm_id, catalog_id, item_key,
                 room_id, account_id, object_id, container_item_id,
                 quantity, created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
             RETURNING instance_id",
                 &[
-                    &zone_id,
+                    &realm_id,
                     &catalog_id,
                     &item_key,
                     &room_id,
@@ -798,12 +798,12 @@ impl InventoryRepo for InventoryRepository {
         // Get item info
         let item_row = transaction
             .query_one(
-                "SELECT zone_id, catalog_id, quantity FROM item_instances WHERE instance_id = $1",
+                "SELECT realm_id, catalog_id, quantity FROM item_instances WHERE instance_id = $1",
                 &[&instance_id],
             )
             .await?;
 
-        let zone_id: ZoneId = item_row.get(0);
+        let realm_id: RealmId = item_row.get(0);
         let catalog_id: ItemId = item_row.get(1);
         let quantity: i32 = item_row.get(2);
 
@@ -824,7 +824,7 @@ impl InventoryRepo for InventoryRepository {
                 .query_opt(
                     "SELECT instance_id, quantity
                 FROM item_instances
-                WHERE zone_id = $1
+                WHERE realm_id = $1
                     AND catalog_id = $2
                     AND instance_id != $3
                     AND room_id IS NOT DISTINCT FROM $4
@@ -832,7 +832,7 @@ impl InventoryRepo for InventoryRepository {
                     AND object_id IS NOT DISTINCT FROM $6
                     AND container_item_id IS NOT DISTINCT FROM $7
                 LIMIT 1",
-                    &[&zone_id, &catalog_id, &instance_id, &room_id, &account_id, &object_id, &container_item_id],
+                    &[&realm_id, &catalog_id, &instance_id, &room_id, &account_id, &object_id, &container_item_id],
                 )
                 .await?;
 
@@ -877,7 +877,7 @@ impl InventoryRepo for InventoryRepository {
     // ITEM MODIFICATION
     // ========================================================================
 
-    async fn consume_item(&self, _zone_id: ZoneId, _account_id: AccountId, instance_id: ItemId) -> DbResult<()> {
+    async fn consume_item(&self, _realm_id: RealmId, _account_id: AccountId, instance_id: ItemId) -> DbResult<()> {
         let client = self.db.pool.get().await?;
 
         // Get current quantity

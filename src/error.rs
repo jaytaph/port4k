@@ -80,6 +80,9 @@ pub enum DomainError {
 
     #[error("script lua error: {0}")]
     ScriptLua(#[from] mlua::Error),
+
+    #[error("login error: {0}")]
+    LoginError(String),
 }
 
 #[derive(Debug, Error)]
@@ -117,4 +120,19 @@ pub enum InfraError {
 
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
+}
+
+
+#[derive(Debug, Error)]
+pub enum LoginError {
+    #[error("user not found")]
+    UserNotFound,
+    #[error("invalid password")]
+    InvalidPassword,
+    #[error("account locked")]
+    AccountLocked,
+    #[error("too many attempts")]
+    TooManyAttempts,
+    #[error("internal error: {0}")]
+    InternalError(String)
 }

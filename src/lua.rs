@@ -6,7 +6,7 @@ use crate::input::parser::{Intent, NounPhrase, Preposition, Quantifier};
 use crate::lua::table::format_lua_value;
 use crate::models::account::Account;
 use crate::models::room::{ObjectLoot, ResolvedExit, ResolvedObject, RoomView};
-use crate::models::types::{Direction, ItemId};
+use crate::models::types::{AccountId, Direction, ItemId};
 use crate::net::output::OutputHandle;
 use crate::state::session::Cursor;
 use mlua::prelude::LuaError;
@@ -104,7 +104,7 @@ pub enum LuaJob {
         /// Output handle for text,
         output_handle: OutputHandle,
         /// Account of the user
-        account: Account,
+        account_id: AccountId,
         /// Cursor of the user
         cursor: Box<Cursor>,
         /// Return channel
@@ -115,7 +115,7 @@ pub enum LuaJob {
         /// Output handle for text,
         output_handle: OutputHandle,
         /// Account of the user
-        account: Account,
+        account_id: AccountId,
         /// Cursor of the user
         cursor: Box<Cursor>,
         /// Return channel
@@ -126,7 +126,7 @@ pub enum LuaJob {
         /// Output handle for text,
         output_handle: OutputHandle,
         /// Account of the user
-        account: Account,
+        account_id: AccountId,
         /// Cursor of the user
         cursor: Box<Cursor>,
         /// Return channel
@@ -137,7 +137,7 @@ pub enum LuaJob {
         /// Output handle for text,
         output_handle: OutputHandle,
         /// Account of the user
-        account: Account,
+        account_id: AccountId,
         /// Cursor of the user
         cursor: Box<Cursor>,
         /// Intent of the command
@@ -149,7 +149,7 @@ pub enum LuaJob {
         /// Output handle for text,
         output_handle: OutputHandle,
         /// Account of the user
-        account: Account,
+        account_id: AccountId,
         /// Cursor of the user
         cursor: Box<Cursor>,
         /// Intent of the command
@@ -166,7 +166,7 @@ pub enum LuaJob {
         /// Cursor of the user
         cursor: Box<Cursor>,
         /// Account of the user
-        account: Account,
+        account_id: AccountId,
         /// Given string to eval()
         code: String,
         /// Return channel
@@ -179,7 +179,7 @@ pub enum LuaJob {
 pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sender<LuaJob> {
     let (tx, mut rx) = mpsc::channel::<LuaJob>(64);
 
-    std::thread::spawn(move || {
+    std::thread::spawn(async move || {
         let lua = init_lua().expect("cannot init lua");
         lua.sandbox(true).expect("cannot sandbox lua");
 
@@ -188,52 +188,52 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                 LuaJob::OnEnter {
                     output_handle,
                     cursor,
-                    account,
+                    account_id,
                     reply,
                 } => {
                     let ctx = LuaArgContext::new(
                         output_handle.clone(),
                         Some(*cursor),
-                        Some(account),
+                        Some(account_id),
                         registry.clone(),
                         rt_handle.clone(),
-                    );
+                    ).await;
                     handle_room_script(&lua, &ctx, ScriptHook::OnEnter, reply);
                 }
                 LuaJob::OnFirstEnter {
                     output_handle,
                     cursor,
-                    account,
+                    account_id,
                     reply,
                 } => {
                     let ctx = LuaArgContext::new(
                         output_handle.clone(),
                         Some(*cursor),
-                        Some(account),
+                        Some(account_id),
                         registry.clone(),
                         rt_handle.clone(),
-                    );
+                    ).await;
                     handle_room_script(&lua, &ctx, ScriptHook::OnFirstEnter, reply);
                 }
                 LuaJob::OnLeave {
                     output_handle,
                     cursor,
-                    account,
+                    account_id,
                     reply,
                 } => {
                     let ctx = LuaArgContext::new(
                         output_handle.clone(),
                         Some(*cursor),
-                        Some(account),
+                        Some(account_id),
                         registry.clone(),
                         rt_handle.clone(),
-                    );
+                    ).await;
                     handle_room_script(&lua, &ctx, ScriptHook::OnLeave, reply);
                 }
                 LuaJob::OnObject {
                     output_handle,
                     cursor,
-                    account,
+                    account_id,
                     intent,
                     obj,
                     reply,
@@ -241,42 +241,42 @@ pub fn start_lua_worker(rt_handle: Handle, registry: Arc<Registry>) -> mpsc::Sen
                     let ctx = LuaArgContext::new(
                         output_handle.clone(),
                         Some(*cursor),
-                        Some(account),
+                        Some(account_id),
                         registry.clone(),
                         rt_handle.clone(),
-                    );
+                    ).await;
                     handle_object_script(&lua, &ctx, &intent, &obj, reply);
                 }
                 LuaJob::OnCommand {
                     output_handle,
                     cursor,
-                    account,
+                    account_id,
                     intent,
                     reply,
                 } => {
                     let ctx = LuaArgContext::new(
                         output_handle.clone(),
                         Some(*cursor),
-                        Some(account),
+                        Some(account_id),
                         registry.clone(),
                         rt_handle.clone(),
-                    );
+                    ).await;
                     handle_command_script(&lua, &ctx, &intent, reply);
                 }
                 LuaJob::ReplEval {
                     output_handle,
                     cursor,
-                    account,
+                    account_id,
                     code,
                     reply,
                 } => {
                     let ctx = LuaArgContext::new(
                         output_handle.clone(),
                         Some(*cursor),
-                        Some(account),
+                        Some(account_id),
                         registry.clone(),
                         rt_handle.clone(),
-                    );
+                    ).await;
                     _ = handle_repl_eval(&lua, &ctx, &code, reply);
                 }
             };
@@ -300,19 +300,24 @@ struct LuaArgContext {
 }
 
 impl LuaArgContext {
-    fn new(
+    async fn new(
         output_handle: OutputHandle,
         cursor: Option<Cursor>,
-        account: Option<Account>,
+        account_id: Option<AccountId>,
         registry: Arc<Registry>,
         rt_handle: Handle,
     ) -> Self {
+        let boxed_account = match registry.services.account.get_by_id(account_id.unwrap()).await {
+            Ok(Some(acc)) => Some(Box::new(acc)),
+            _ => None,
+        };
+
         LuaArgContext {
             output_handle,
             registry,
             rt_handle,
             cursor: cursor.map(|c| Box::new(c)),
-            account: account.map(|a| Box::new(a)),
+            account: boxed_account,
         }
     }
 }
@@ -342,7 +347,7 @@ fn create_lua_env(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Result<Table> {
     //     env.set("account", create_lua_account_table(lua, &account)?)?;
     // }
     // if let Some(cursor) = arg_ctx.cursor.as_ref() {
-    //     env.set("room", create_lua_roomview_table(lua, &cursor.room_view)?)?;
+    //     env.set("room", create_lua_roomview_table(lua, &cursor.room)?)?;
     // }
 
     env.set("_ENV", env.clone())?;
@@ -406,8 +411,8 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
             let dir =
                 Direction::from_str(&dir).map_err(|_| LuaError::external(format!("Invalid direction: {}", dir)))?;
 
-            let zone_id = ctx.cursor.as_ref().unwrap().zone_ctx.zone.id;
-            let room_id = ctx.cursor.as_ref().unwrap().room_view.blueprint.id;
+            let realm_id = ctx.cursor.as_ref().unwrap().realm_id;
+            let room_id = ctx.cursor.as_ref().unwrap().room.blueprint.id;
             let account_id = ctx.account.as_ref().unwrap().id;
             let rt_handle = ctx.rt_handle.clone();
             let ctx = ctx.clone();
@@ -416,7 +421,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
                 ctx.registry
                     .services
                     .room
-                    .set_exit_locked(zone_id, room_id, account_id, dir, locked)
+                    .set_exit_locked(realm_id, room_id, account_id, dir, locked)
                     .await
                     .map_err(|e| LuaError::external(format!("Failed to set exit lock: {}", e)))
             })?;
@@ -432,9 +437,9 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
             let dir =
                 Direction::from_str(&dir).map_err(|_| LuaError::external(format!("Invalid direction: {}", dir)))?;
 
-            let zone_id = ctx.cursor.as_ref().unwrap().zone_ctx.zone.id;
+            let realm_id = ctx.cursor.as_ref().unwrap().realm_id;
             let account_id = ctx.account.as_ref().unwrap().id;
-            let room_id = ctx.cursor.as_ref().unwrap().room_view.blueprint.id;
+            let room_id = ctx.cursor.as_ref().unwrap().room.blueprint.id;
             let rt_handle = ctx.rt_handle.clone();
             let ctx = ctx.clone();
 
@@ -442,7 +447,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
                 ctx.registry
                     .services
                     .room
-                    .is_exit_locked(zone_id, room_id, account_id, dir)
+                    .is_exit_locked(realm_id, room_id, account_id, dir)
                     .await
                     .map_err(|e| LuaError::external(format!("Failed to check exit lock: {}", e)))
             })?;
@@ -462,8 +467,8 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
     port4k.set(
         "set_object_state",
         lua.create_function(move |_, (obj_key, k, v): (String, String, mlua::Value)| {
-            let rv = &ctx.cursor.as_ref().unwrap().room_view;
-            let zone_id = ctx.cursor.as_ref().unwrap().zone_ctx.zone.id;
+            let rv = &ctx.cursor.as_ref().unwrap().room;
+            let realm_id = ctx.cursor.as_ref().unwrap().realm_id;
             let account_id = ctx.account.as_ref().unwrap().id;
             let rt_handle = ctx.rt_handle.clone();
             let ctx = ctx.clone();
@@ -478,7 +483,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
                 ctx.registry
                     .services
                     .room
-                    .set_object_state(zone_id, account_id, obj.id, &k, &json_value)
+                    .set_object_state(realm_id, account_id, obj.id, &k, &json_value)
                     .await
                     .map_err(|e| LuaError::external(format!("Failed to set object state: {}", e)))?;
 
@@ -493,8 +498,8 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
     port4k.set(
         "set_object_state_shared",
         lua.create_function(move |lua, (obj_key, k, v): (String, String, mlua::Value)| {
-            let rv = &ctx.cursor.as_ref().unwrap().room_view;
-            let zone_id = ctx.cursor.as_ref().unwrap().zone_ctx.zone.id;
+            let rv = &ctx.cursor.as_ref().unwrap().room;
+            let realm_id = ctx.cursor.as_ref().unwrap().realm_id;
             let rt_handle = ctx.rt_handle.clone();
             let ctx = ctx.clone();
 
@@ -508,7 +513,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
                 ctx.registry
                     .services
                     .room
-                    .set_object_state_shared(zone_id, obj.id, &k, &json_value)
+                    .set_object_state_shared(realm_id, obj.id, &k, &json_value)
                     .await
                     .map_err(|e| LuaError::external(format!("Failed to set object state: {}", e)))?;
 
@@ -569,7 +574,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
     port4k.set(
         "current_room",
         lua.create_function(move |lua, ()| -> mlua::Result<mlua::Value> {
-            let t = create_lua_roomview_table(lua, &ctx.cursor.as_ref().unwrap().room_view).map(mlua::Value::Table)?;
+            let t = create_lua_roomview_table(lua, &ctx.cursor.as_ref().unwrap().room).map(mlua::Value::Table)?;
             Ok(t)
         })?,
     )?;
@@ -579,7 +584,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
     port4k.set(
         "player_has_item",
         lua.create_function(move |_, item_key: String| {
-            let zone_id = ctx.cursor.as_ref().unwrap().zone_ctx.zone.id;
+            let realm_id = ctx.cursor.as_ref().unwrap().realm_id;
             let account_id = ctx.account.as_ref().unwrap().id;
             let rt_handle = ctx.rt_handle.clone();
             let ctx = ctx.clone();
@@ -588,7 +593,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
                 ctx.registry
                     .services
                     .inventory
-                    .has_item_by_key(zone_id, account_id, &item_key)
+                    .has_item_by_key(realm_id, account_id, &item_key)
                     .await
                     .map_err(|e| LuaError::ExternalError(Arc::new(e)))
             })?;
@@ -613,7 +618,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
                 }
             };
 
-            let zone_id = ctx.cursor.as_ref().unwrap().zone_ctx.zone.id;
+            let realm_id = ctx.cursor.as_ref().unwrap().realm_id;
             let account_id = ctx.account.as_ref().unwrap().id;
             let rt_handle = ctx.rt_handle.clone();
             let ctx = ctx.clone();
@@ -622,7 +627,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
                 ctx.registry
                     .services
                     .inventory
-                    .consume_item(zone_id, account_id, instance_id)
+                    .consume_item(realm_id, account_id, instance_id)
                     .await
                     .map_err(|e| LuaError::external(format!("Failed to consume item: {}", e)))
             })?;
@@ -636,7 +641,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
     port4k.set(
         "give_item_to_player",
         lua.create_function(move |_, (item_key, quantity): (String, Option<i32>)| {
-            let zone_id = ctx.cursor.as_ref().unwrap().zone_ctx.zone.id;
+            let realm_id = ctx.cursor.as_ref().unwrap().realm_id;
             let account_id = ctx.account.as_ref().unwrap().id;
             let rt_handle = ctx.rt_handle.clone();
             let ctx = ctx.clone();
@@ -647,7 +652,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
                 ctx.registry
                     .services
                     .inventory
-                    .add_item(zone_id, account_id, &item_key, qty)
+                    .add_item(realm_id, account_id, &item_key, qty)
                     .await
                     .map_err(|e| LuaError::external(format!("Failed to give item: {}", e)))
             })?;
@@ -831,7 +836,7 @@ fn handle_room_script(lua: &Lua, ctx: &LuaArgContext, hook: ScriptHook, reply: S
     };
 
     let result = (|| -> AppResult<mlua::Value> {
-        let binding = cursor.room_view.scripts.get(&hook);
+        let binding = cursor.room.scripts.get(&hook);
         let src = binding.as_deref().map_or("", |s| s);
 
         if src.is_empty() {
@@ -842,11 +847,11 @@ fn handle_room_script(lua: &Lua, ctx: &LuaArgContext, hook: ScriptHook, reply: S
 
         let args = lua.create_table()?;
         args.set("account", create_lua_account_table(lua, ctx.account.as_ref().unwrap())?)?;
-        args.set("room", create_lua_roomview_table(lua, &cursor.room_view)?)?;
+        args.set("room", create_lua_roomview_table(lua, &cursor.room)?)?;
 
         let func: Function = lua
             .load(src)
-            .set_name(format!("{}:{}", cursor.room_view.blueprint.key, hook.as_str(),))
+            .set_name(format!("{}:{}", cursor.room.blueprint.key, hook.as_str(),))
             .set_environment(env)
             .eval()?;
 
@@ -885,7 +890,7 @@ fn handle_object_script(
         args.set("account", create_lua_account_table(lua, ctx.account.as_ref().unwrap())?)?;
         args.set("intent", create_lua_intent_table(lua, intent)?)?;
         args.set("object", create_lua_object_table(lua, obj)?)?;
-        args.set("room", create_lua_roomview_table(lua, &cursor.room_view)?)?;
+        args.set("room", create_lua_roomview_table(lua, &cursor.room)?)?;
 
         let func: Function = lua
             .load(src)
@@ -908,7 +913,7 @@ fn handle_command_script(lua: &Lua, ctx: &LuaArgContext, intent: &Intent, reply:
     };
 
     let result = (|| -> AppResult<mlua::Value> {
-        let binding = cursor.room_view.scripts.get(&ScriptHook::OnCommand);
+        let binding = cursor.room.scripts.get(&ScriptHook::OnCommand);
         let src = binding.as_deref().map_or("", |s| s);
 
         if src.is_empty() {
@@ -919,11 +924,11 @@ fn handle_command_script(lua: &Lua, ctx: &LuaArgContext, intent: &Intent, reply:
 
         let args = lua.create_table()?;
         args.set("intent", create_lua_intent_table(lua, intent)?)?;
-        args.set("room", create_lua_roomview_table(lua, &cursor.room_view)?)?;
+        args.set("room", create_lua_roomview_table(lua, &cursor.room)?)?;
 
         let func: Function = lua
             .load(src)
-            .set_name(format!("{}:on_command", cursor.room_view.blueprint.key))
+            .set_name(format!("{}:on_command", cursor.room.blueprint.key))
             .set_environment(env)
             .eval()?;
 

@@ -14,6 +14,8 @@ pub mod renderer;
 pub mod services;
 pub mod state;
 pub mod util;
+pub mod realm_manager;
+pub mod game;
 
 // Convenient re-exports (so call sites can do `port4k::Registry`, etc.)
 pub use commands::process_command;

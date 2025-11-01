@@ -26,7 +26,7 @@ pub async fn open(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
             ctx.lua_tx
                 .send(LuaJob::OnObject {
                     output_handle,
-                    account: ctx.account()?,
+                    account_id: ctx.account_id()?,
                     cursor: Box::new(ctx.cursor()?),
                     intent: Box::new(intent.clone()),
                     obj: Box::new(obj.clone()),

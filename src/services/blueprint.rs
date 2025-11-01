@@ -26,10 +26,10 @@ impl BlueprintService {
         Ok(bp_room)
     }
 
-    pub async fn room_by_key(&self, key: BlueprintAndRoomKey) -> AppResult<BlueprintRoom> {
-        let bp_room = self.repo.room_by_key(&key).await?;
-        Ok(bp_room)
-    }
+    // pub async fn room_by_key(&self, key: BlueprintAndRoomKey) -> AppResult<BlueprintRoom> {
+    //     let bp_room = self.repo.room_by_key(&key).await?;
+    //     Ok(bp_room)
+    // }
 
     pub async fn room_exits(&self, _bp_id: BlueprintId, room_id: RoomId) -> AppResult<Vec<BlueprintExit>> {
         let exits = self.repo.room_exits(room_id).await?;

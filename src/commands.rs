@@ -5,8 +5,7 @@ use crate::input::shell::{handle_shell_cmd, parse_shell_cmd};
 use crate::lua::LuaJob;
 use crate::models::account::Account;
 use crate::models::room::RoomView;
-use crate::models::types::{AccountId, RoomId, ZoneId};
-use crate::models::zone::ZoneContext;
+use crate::models::types::{AccountId, RealmId, RoomId};
 use crate::net::output::OutputHandle;
 use crate::services::ServiceError;
 use crate::state::session::{Cursor, Session};
@@ -28,7 +27,6 @@ mod logout;
 mod look;
 mod lua;
 mod open;
-mod playtest;
 mod register;
 mod search;
 mod take;
@@ -99,47 +97,39 @@ impl CmdCtx {
     }
 
     pub fn is_logged_in(&self) -> bool {
-        self.sess.try_read().is_some_and(|s| s.account.is_some())
+        self.sess.try_read().is_some_and(|s| s.get_account().is_some())
+    }
+
+    pub fn realm_id(&self) -> AppResult<RealmId> {
+        self.with_sess(|s| s.get_cursor().as_ref().map(|c| c.realm.id))
+            .and_then(|opt| opt.ok_or(DomainError::NotLoggedIn))
     }
 
     pub fn account_id(&self) -> AppResult<AccountId> {
-        self.with_sess(|s| s.account.as_ref().map(|a| a.id))
+        self.with_sess(|s| s.get_account().as_ref().map(|a| a.id))
             .and_then(|opt| opt.ok_or(DomainError::NotLoggedIn))
-    }
-
-    pub fn zone_id(&self) -> AppResult<ZoneId> {
-        self.zone_ctx().map(|z| z.zone.id)
     }
 
     pub fn room_id(&self) -> AppResult<RoomId> {
-        self.cursor().map(|c| c.room_view.blueprint.id)
+        self.cursor().map(|c| c.room.blueprint.id)
     }
 
-    pub fn account(&self) -> AppResult<Account> {
-        self.with_sess(|s| s.account.clone())
+    pub fn account(&self) -> AppResult<Arc<Account>> {
+        self.with_sess(|s| s.get_account())
             .and_then(|opt| opt.ok_or(DomainError::NotLoggedIn))
     }
 
-    pub fn has_zone_ctx(&self) -> bool {
-        self.sess.try_read().is_some_and(|s| s.zone_ctx.is_some())
-    }
-
-    pub fn zone_ctx(&self) -> AppResult<ZoneContext> {
-        self.with_sess(|s| s.zone_ctx.clone())
-            .and_then(|opt| opt.ok_or(DomainError::NoCurrentRoom))
-    }
-
     pub fn cursor(&self) -> AppResult<Cursor> {
-        self.with_sess(|s| s.cursor.clone())
+        self.with_sess(|s| s.get_cursor())
             .and_then(|opt| opt.ok_or(DomainError::NoCurrentRoom))
     }
 
     pub fn has_cursor(&self) -> bool {
-        self.sess.try_read().is_some_and(|s| s.cursor.is_some())
+        self.sess.try_read().is_some_and(|s| s.get_cursor().is_some())
     }
 
-    pub fn room_view(&self) -> AppResult<RoomView> {
-        Ok(self.cursor()?.room_view)
+    pub fn room_view(&self) -> AppResult<Arc<RoomView>> {
+        Ok(self.cursor()?.room)
     }
 }
 
@@ -200,10 +190,9 @@ pub async fn process_command(raw: &str, ctx: Arc<CmdCtx>) -> CommandResult {
         Verb::Login => login::login(ctx.clone(), intent).await,
         Verb::Register => register::register(ctx.clone(), intent).await,
         Verb::LuaRepl => lua::repl(ctx.clone()).await,
-        Verb::ScBlueprint => blueprint::blueprint(ctx.clone(), intent).await,
-        Verb::ScPlaytest => playtest::playtest(ctx.clone(), intent).await,
-        // Verb::ScScript => script::script(ctx.clone(), intent).await,
-        Verb::ScDebug => debug_cmd::debug_cmd(ctx.clone(), intent).await,
+        // Verb::ScBlueprint => blueprint::blueprint(ctx.clone(), intent).await,
+        // // Verb::ScScript => script::script(ctx.clone(), intent).await,
+        // Verb::ScDebug => debug_cmd::debug_cmd(ctx.clone(), intent).await,
         // Fallback (e.g., playtest Lua on_command)
         Verb::Custom(_) => fallback::fallback(ctx.clone(), intent).await,
     }

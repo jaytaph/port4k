@@ -10,7 +10,7 @@ pub async fn repl(ctx: Arc<CmdCtx>) -> CommandResult {
     // Mark the session as being in REPL mode
     {
         let mut sess = ctx.sess.write();
-        sess.in_lua_repl = true;
+        sess.in_lua(true);
     }
 
     // The actual REPL loop happens in your input handler

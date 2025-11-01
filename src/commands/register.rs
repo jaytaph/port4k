@@ -9,7 +9,7 @@ pub async fn register(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         return Ok(());
     }
 
-    let (username, email, pass) = (
+    let (username, _email, _pass) = (
         intent.args[0].as_str(),
         intent.args[1].as_str(),
         intent.args[2].as_str(),
@@ -19,14 +19,14 @@ pub async fn register(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         return Ok(());
     }
 
-    if !ctx.registry.services.auth.register(username, email, pass).await? {
-        ctx.output.system("That name or email is taken.").await;
-        return Ok(());
-    }
-    ctx.output.system("Account created successfully.").await;
-    ctx.output
-        .system(format!("You can now `login {} <password>`.", username))
-        .await;
+    // if !ctx.registry.services.auth.register(username, email, pass).await? {
+    //     ctx.output.system("That name or email is taken.").await;
+    //     return Ok(());
+    // }
+    // ctx.output.system("Account created successfully.").await;
+    // ctx.output
+    //     .system(format!("You can now `login {} <password>`.", username))
+    //     .await;
 
     Ok(())
 }

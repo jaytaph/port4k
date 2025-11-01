@@ -48,19 +48,19 @@ pub async fn debug_cmd(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         }
         "where" => {
             let account = ctx.account()?;
-            let username = account.username;
+            let username = account.username.clone();
 
             if !ctx.has_cursor() {
                 ctx.output
-                    .system("You have no cursor. Use 'go <zone>' to set one.")
+                    .system("You have no cursor. Use 'go <realm>' to set one.")
                     .await;
             }
 
             let cursor = ctx.cursor()?;
             ctx.output
                 .system(format!(
-                    "[debug] user={username} zone={} zone_kind: {:?} room: {}",
-                    cursor.zone_ctx.zone.title, cursor.zone_ctx.kind, cursor.room_view.blueprint.title
+                    "[debug] user={username} realm={} realm_kind: {:?} room: {}",
+                    cursor.realm.title, cursor.realm.kind, cursor.room.blueprint.title
                 ))
                 .await;
         }

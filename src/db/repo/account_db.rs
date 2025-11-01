@@ -20,13 +20,7 @@ impl AccountRepo for AccountRepository {
         let client = self.db.get_client().await?;
 
         let stmt = client
-            .prepare_cached(
-                r#"
-            SELECT id, username, email, password_hash, role, created_at, last_login
-            FROM accounts
-            WHERE username = $1
-            "#,
-            )
+            .prepare_cached(" SELECT * FROM accounts WHERE username = $1 ")
             .await?;
 
         let row_opt = client.query_opt(&stmt, &[&username]).await?;
@@ -40,7 +34,7 @@ impl AccountRepo for AccountRepository {
             .prepare_cached(
                 r#"
             SELECT id, username, email, role, password_hash, created_at, last_login,
-                zone_id, current_room_id, xp, health, coins,
+                current_realm_id, current_room_id, xp, health, coins,
                 inventory, flags
             FROM accounts
             WHERE id = $1
@@ -57,10 +51,10 @@ impl AccountRepo for AccountRepository {
 
         let stmt = client.prepare_cached(
             r#"
-            INSERT INTO accounts (username, email, password_hash, role, zone_id, current_room_id, xp, health, coins, inventory, flags)
+            INSERT INTO accounts (username, email, password_hash, role, current_realm_id, current_room_id, xp, health, coins, inventory, flags)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING id, username, role, created_at, last_login,
-                zone_id, current_room_id, xp, health, coins,
+                current_realm_id, current_room_id, xp, health, coins,
                 inventory, flags
             "#,
         ).await?;

@@ -1,8 +1,7 @@
 use crate::db::DbResult;
 use crate::db::error::DbError;
 use crate::error::{AppResult, DomainError};
-use crate::models::types::{AccountId, RoomId, ZoneId};
-use bytes;
+use crate::models::types::{AccountId, RoomId, RealmId};
 use postgres_types::private::BytesMut;
 use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::{Deserialize, Serialize};
@@ -16,12 +15,14 @@ pub enum AccountRole {
     User,    // Regular user
 }
 
+
+
 impl ToSql for AccountRole {
     fn to_sql(
         &self,
         ty: &Type,
-        out: &mut bytes::BytesMut,
-    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
         let s = match self {
             AccountRole::Admin => "admin",
             AccountRole::Builder => "builder",
@@ -40,7 +41,7 @@ impl ToSql for AccountRole {
 }
 
 impl FromSql<'_> for AccountRole {
-    fn from_sql(ty: &postgres_types::Type, raw: &[u8]) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let s = String::from_sql(ty, raw)?;
         match s.as_str() {
             "admin" => Ok(AccountRole::Admin),
@@ -81,22 +82,26 @@ pub struct Account {
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// Last login timestamp
     pub last_login: Option<chrono::DateTime<chrono::Utc>>,
+    /// Whether the account is locked due to too many failed login attempts
+    pub locked_out: bool,
+    /// Whether to show the message of the day on login
+    pub show_motd: bool,
+
+    /// realm/room where we currently are (if any)
+    pub current_realm_id: Option<RealmId>,
+    pub current_room_id: Option<RoomId>,
+    /// realm/room where we spawn into when ded
+    pub spawn_realm_id: Option<RealmId>,
+    pub spawn_room_id: Option<RoomId>,
+
+    // These settings are global per account and are inter-realm
+    pub health: u32,
+    pub xp: u32,
+    pub coins: u32,
 }
 
 impl Account {
     pub fn try_from_row(row: &Row) -> DbResult<Self> {
-        // let xp_i: i32 = row.try_get("xp")?;
-        // let health_i: i32 = row.try_get("health")?;
-        // let coins_i: i32 = row.try_get("coins")?;
-
-        // let xp = u32::try_from(xp_i).map_err(|_| DbError::Decode("xp < 0".into()))?;
-        // let health = u32::try_from(health_i).map_err(|_| DbError::Decode("health < 0".into()))?;
-        // let coins = u32::try_from(coins_i).map_err(|_| DbError::Decode("coins < 0".into()))?;
-
-        // Prefer decoding JSON directly if schema is jsonb array of text
-        // let inventory: Option<Vec<String>> = row.try_get("inventory").ok();
-        // let flags: Option<Vec<String>> = row.try_get("flags").ok();
-
         Ok(Self {
             id: row.try_get::<_, AccountId>("id")?,
             username: row.try_get("username")?,
@@ -105,13 +110,15 @@ impl Account {
             role: row.try_get("role")?,
             created_at: row.try_get("created_at")?,
             last_login: row.try_get("last_login")?,
-            // zone_id: row.try_get::<_, Option<ZoneId>>("zone_id")?,
-            // current_room_id: row.try_get::<_, Option<RoomId>>("current_room_id")?,
-            // xp,
-            // health,
-            // coins,
-            // inventory: inventory.unwrap_or_default(),
-            // flags: flags.unwrap_or_default(),
+            locked_out: row.try_get("locked_out")?,
+            show_motd: row.try_get("show_motd")?,
+            current_realm_id: row.try_get::<_, Option<RealmId>>("current_realm_id")?,
+            current_room_id: row.try_get::<_, Option<RoomId>>("current_room_id")?,
+            spawn_realm_id: row.try_get::<_, Option<RealmId>>("spawn_realm_id")?,
+            spawn_room_id: row.try_get::<_, Option<RoomId>>("spawn_room_id")?,
+            health: row.try_get::<_, i32>("health")?.try_into().map_err(|_| DbError::Decode("health < 0".into()))?,
+            xp: row.try_get::<_, i32>("xp")?.try_into().map_err(|_| DbError::Decode("xp < 0".into()))?,
+            coins: row.try_get::<_, i32>("coins")?.try_into().map_err(|_| DbError::Decode("coins < 0".into()))?,
         })
     }
 
@@ -133,64 +140,21 @@ impl Account {
     }
 }
 
-pub struct UserZoneData {
+pub struct UserRealmData {
     /// Account ID of the user
     pub account_id: AccountId,
-    /// Zone ID of the user
-    pub zone_id: Option<ZoneId>,
+    /// Realm ID of the user
+    pub realm_id: RealmId,
     /// Current room ID of the user
-    pub current_room_id: Option<RoomId>,
-    /// Experience points
-    pub xp: u32,
-    /// Health points
-    pub health: u32,
-    /// In-game currency
-    pub coins: u32,
+    pub current_room_id: RoomId,
 }
 
-impl UserZoneData {
+impl UserRealmData {
     pub fn try_from_row(row: &Row) -> DbResult<Self> {
-        let xp_i: i32 = row.try_get("xp")?;
-        let health_i: i32 = row.try_get("health")?;
-        let coins_i: i32 = row.try_get("coins")?;
-
-        let xp = u32::try_from(xp_i).map_err(|_| DbError::Decode("xp < 0".into()))?;
-        let health = u32::try_from(health_i).map_err(|_| DbError::Decode("health < 0".into()))?;
-        let coins = u32::try_from(coins_i).map_err(|_| DbError::Decode("coins < 0".into()))?;
-
-        // // Prefer decoding JSON directly if schema is jsonb array of text
-        // let inventory_json: Option<serde_json::Value> = row.try_get("inventory").ok();
-        // let mut items = Vec::new();
-        // if let Some(json) = inventory_json {
-        //     if let Some(array) = json.as_array() {
-        //         for item in array {
-        //             if let (Some(object_id), Some(quantity)) = (
-        //                 item.get("object_id").and_then(|v| v.as_str()),
-        //                 item.get("quantity").and_then(|v| v.as_u64()),
-        //             ) {
-        //                 items.push(InventoryItem {
-        //                     object_id: object_id.to_string(),
-        //                     quantity: quantity as u32,
-        //                 });
-        //             }
-        //         }
-        //     }
-        // }
-
         Ok(Self {
             account_id: row.try_get::<_, AccountId>("account_id")?,
-            zone_id: row.try_get::<_, Option<ZoneId>>("zone_id")?,
-            current_room_id: row.try_get::<_, Option<RoomId>>("current_room_id")?,
-            xp,
-            health,
-            coins,
-            // inventory: Inventory {
-            //     items,
-            //     max_item_count: row
-            //         .try_get::<_, i32>("max_item_count")?
-            //         .try_into()
-            //         .map_err(|_| DbError::Decode("max_item_count < 0".into()))?,
-            // },
+            realm_id: row.try_get::<_, RealmId>("realm_id")?,
+            current_room_id: row.try_get::<_, RoomId>("current_room_id")?,
         })
     }
 }

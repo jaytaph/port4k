@@ -564,7 +564,7 @@ pub struct ResolvedExit {
 }
 
 impl ResolvedExit {
-    pub fn is_visible_to(&self, _account: &crate::models::account::Account) -> bool {
+    pub fn is_visible_to(&self) -> bool {
         self.flags.is_visible()
     }
 

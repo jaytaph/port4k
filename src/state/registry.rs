@@ -1,13 +1,11 @@
 use crate::config::Config;
 use crate::db::Db;
-use crate::db::repo::ZoneRepo;
-use crate::db::repo::{AccountRepo, AccountRepository, RoomRepository, UserRepo, UserRepository, ZoneRepository};
+use crate::db::repo::{RealmRepo, RealmRepository};
+use crate::db::repo::{AccountRepo, AccountRepository, RoomRepository, UserRepo, UserRepository};
 use crate::db::repo::{InventoryRepo, InventoryRepository, RoomRepo};
 use crate::models::account::Account;
-use crate::models::zone::{DbBackend, MemoryBackend, ZoneRouter};
 use crate::services::{
-    AccountService, AuthService, BlueprintService, CursorService, InventoryService, NavigatorService, RoomService,
-    ZoneService,
+    AccountService, BlueprintService, InventoryService, RoomService, RealmService
 };
 use parking_lot::RwLock;
 use std::collections::BTreeSet;
@@ -17,18 +15,15 @@ pub struct Repos {
     pub account: Arc<dyn AccountRepo>,
     pub room: Arc<dyn RoomRepo>,
     pub user: Arc<dyn UserRepo>,
-    pub zone: Arc<dyn ZoneRepo>,
     pub inventory: Arc<dyn InventoryRepo>,
+    pub realm: Arc<dyn RealmRepo>,
 }
 
 pub struct Services {
-    pub auth: Arc<AuthService>,
     pub account: Arc<AccountService>,
     pub blueprint: Arc<BlueprintService>,
     pub room: Arc<RoomService>,
-    pub cursor: Arc<CursorService>,
-    pub navigator: Arc<NavigatorService>,
-    pub zone: Arc<ZoneService>,
+    pub realm: Arc<RealmService>,
     pub inventory: Arc<InventoryService>,
 }
 
@@ -38,7 +33,6 @@ pub struct Registry {
     pub services: Arc<Services>,
     pub config: Arc<Config>,
     pub online: RwLock<BTreeSet<String>>,
-    pub zone_router: Arc<ZoneRouter>,
 }
 
 impl Registry {
@@ -47,32 +41,26 @@ impl Registry {
             account: Arc::new(AccountRepository::new(db.clone())),
             room: Arc::new(RoomRepository::new(db.clone())),
             user: Arc::new(UserRepository::new(db.clone())),
-            zone: Arc::new(ZoneRepository::new(db.clone())),
             inventory: Arc::new(InventoryRepository::new(db.clone())),
+            realm: Arc::new(RealmRepository::new(db.clone())),
         });
-
-        let zone_db = Arc::new(DbBackend::new(db.clone()));
-        let zone_mem = Arc::new(MemoryBackend::new());
-        let zone_router = Arc::new(ZoneRouter::new(zone_db, zone_mem));
 
         let inventory_service = Arc::new(InventoryService::new(repos.inventory.clone()));
         let blueprint_service = Arc::new(BlueprintService::new(repos.room.clone()));
         let room_service = Arc::new(RoomService::new(
             repos.room.clone(),
-            repos.zone.clone(),
+            repos.realm.clone(),
             repos.user.clone(),
+            repos.account.clone(),
             inventory_service.clone(),
         ));
 
         let services = Arc::new(Services {
-            auth: Arc::new(AuthService::new(repos.account.clone())),
             account: Arc::new(AccountService::new(repos.account.clone())),
             blueprint: blueprint_service.clone(),
             inventory: inventory_service,
             room: room_service.clone(),
-            cursor: Arc::new(CursorService::new(zone_router.clone(), room_service.clone())),
-            navigator: Arc::new(NavigatorService::new(zone_router.clone())),
-            zone: Arc::new(ZoneService::new(repos.zone.clone(), room_service.clone())),
+            realm: Arc::new(RealmService::new(repos.realm.clone(), repos.user.clone())),
         });
 
         Self {
@@ -81,7 +69,6 @@ impl Registry {
             repos,
             services,
             online: RwLock::new(BTreeSet::new()),
-            zone_router: zone_router.clone(),
         }
     }
 
