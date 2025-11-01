@@ -1,5 +1,5 @@
 use crate::db::error::DbError;
-use crate::db::{Db, DbResult};
+use crate::db::{map_row, map_row_opt, Db, DbResult};
 use crate::models::room::Kv;
 use crate::models::types::{AccountId, ExitId, ObjectId, RealmId, RoomId};
 use crate::models::realm::Realm;
@@ -38,21 +38,21 @@ impl RealmRepo for RealmRepository {
         let client = self.db.get_client().await?;
 
         let rows = client
-            .query(
+            .query_opt(
                 r#"
-            SELECT id, bp_id, key, title, kind, created_at, owner_id
-            FROM realms
-            WHERE key = $1
-        "#,
+                    SELECT id, bp_id, key, title, kind, created_at, owner_id
+                    FROM realms
+                    WHERE key = $1
+                "#,
                 &[&key],
             )
             .await?;
 
-        if let Some(row) = rows.into_iter().next() {
-            Ok(Some(Realm::try_from_row(&row)?))
-        } else {
-            Ok(None)
-        }
+        map_row_opt(
+            rows,
+            Realm::try_from_row,
+            &format!("RealmRepo::get_by_key key={}", key)
+        )
     }
 
     async fn create(&self, realm: Realm) -> DbResult<Realm> {
@@ -91,12 +91,16 @@ impl RealmRepo for RealmRepository {
             )
             .await?;
 
-        let mut realms = Vec::new();
-        for row in rows {
-            realms.push(Realm::try_from_row(&row)?);
-        }
+        let realms: DbResult<Vec<Realm>> = rows
+            .into_iter()
+            .map(|row| { map_row(
+                &row,
+                Realm::try_from_row,
+                &format!("RealmRepo::find_by_owner owner_id={}", owner_id))
+            })
+            .collect();
 
-        Ok(realms)
+        realms
     }
 
     async fn room_kv(&self, realm_id: RealmId, room_id: RoomId) -> DbResult<Kv> {
@@ -134,7 +138,7 @@ impl RealmRepo for RealmRepository {
         for row in rows {
             let object_key: String = row.get("object_key");
             let kv_key: String = row.get("kv_key");
-            let value: serde_json::Value = row.get("value");
+            let value: Value = row.get("value");
 
             map.entry(object_key).or_default().insert(kv_key, value);
         }

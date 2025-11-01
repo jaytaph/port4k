@@ -1,6 +1,6 @@
 use crate::db::error::DbError;
 use crate::db::repo::{BlueprintAndRoomKey, RoomRepo};
-use crate::db::{Db, DbResult};
+use crate::db::{map_row, Db, DbResult};
 use crate::lua::ScriptHook;
 use crate::models::blueprint::Blueprint;
 use crate::models::room::{BlueprintExit, BlueprintObject, BlueprintRoom, Kv, RoomScripts};
@@ -33,7 +33,11 @@ impl RoomRepo for RoomRepository {
             )
             .await?;
 
-        Blueprint::try_from_row(&row)
+        map_row(
+            &row,
+            Blueprint::try_from_row,
+            &format!("RoomRepo::blueprint_by_key bp_key={}", bp_key)
+        )
     }
 
     async fn room_by_id(&self, bp_id: BlueprintId, room_id: RoomId) -> DbResult<BlueprintRoom> {
@@ -50,7 +54,11 @@ impl RoomRepo for RoomRepository {
             )
             .await?;
 
-        BlueprintRoom::try_from_row(&row)
+        map_row(
+            &row,
+            BlueprintRoom::try_from_row,
+            &format!("RoomRepo::room_by_id bp_id={}, room_id={}", bp_id, room_id)
+        )
     }
 
     async fn get_room_id_by_key(&self, bp_id: BlueprintId, room_key: &str) -> DbResult<Option<RoomId>> {
@@ -101,11 +109,15 @@ impl RoomRepo for RoomRepository {
             )
             .await?;
 
-        let exits = rows
-            .iter()
-            .map(BlueprintExit::try_from_row)
-            .collect::<DbResult<Vec<_>>>()?;
-        Ok(exits)
+        let exits: DbResult<Vec<BlueprintExit>> = rows
+            .into_iter()
+            .map(|row| { map_row(
+                &row,
+                BlueprintExit::try_from_row,
+                &format!("RoomRepo::room_exits room_id={}", room_id))
+            })
+            .collect();
+        exits
     }
 
     async fn room_objects(&self, room_id: RoomId) -> DbResult<Vec<BlueprintObject>> {
@@ -135,12 +147,16 @@ impl RoomRepo for RoomRepository {
             )
             .await?;
 
-        let mut out = Vec::with_capacity(rows.len());
-        for row in rows {
-            let obj = BlueprintObject::try_from_row(&row)?;
-            out.push(obj);
-        }
-        Ok(out)
+
+        let objects: DbResult<Vec<BlueprintObject>> = rows
+            .into_iter()
+            .map(|row| { map_row(
+                &row,
+                BlueprintObject::try_from_row,
+                &format!("RoomRepo::room_objects room_id={}", room_id))
+            })
+            .collect();
+        objects
     }
 
     async fn room_scripts(&self, room_id: RoomId) -> DbResult<RoomScripts> {

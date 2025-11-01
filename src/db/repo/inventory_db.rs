@@ -1,5 +1,5 @@
 use crate::db::repo::inventory::InventoryRepo;
-use crate::db::{Db, DbError, DbResult};
+use crate::db::{map_row, map_row_opt, Db, DbError, DbResult};
 use crate::models::inventory::{Item, ItemInstance, ItemLocation};
 use crate::models::types::{AccountId, BlueprintId, ItemId, ObjectId, RoomId, RealmId};
 use std::sync::Arc;
@@ -49,17 +49,11 @@ impl InventoryRepo for InventoryRepository {
             )
             .await?;
 
-        Ok(Item {
-            id: row.get(0),
-            bp_id: row.get(1),
-            item_key: row.get(2),
-            name: row.get(3),
-            short: row.get(4),
-            description: row.get(5),
-            examine: row.get(6),
-            stackable: row.get(7),
-            nouns: row.get(8),
-        })
+        map_row(
+            &row,
+            Item::try_from_row,
+            &format!("InventoryRepo::get_item_by_key realm_id={} item_key={}", realm_id, item_key),
+        )
     }
 
     async fn get_item_by_id(&self, catalog_id: ItemId) -> DbResult<Item> {
@@ -81,17 +75,11 @@ impl InventoryRepo for InventoryRepository {
             )
             .await?;
 
-        Ok(Item {
-            id: row.get(0),
-            bp_id: row.get(1),
-            item_key: row.get(2),
-            name: row.get(3),
-            short: row.get(4),
-            description: row.get(5),
-            examine: row.get(6),
-            stackable: row.get(7),
-            nouns: row.get(8),
-        })
+        map_row(
+            &row,
+            Item::try_from_row,
+            &format!("InventoryRepo::get_item_by_id item_id={}", catalog_id),
+        )
     }
 
     async fn find_item_by_noun(&self, realm_id: RealmId, noun: &str) -> DbResult<Option<Item>> {
@@ -115,17 +103,11 @@ impl InventoryRepo for InventoryRepository {
             )
             .await?;
 
-        Ok(row.map(|r| Item {
-            id: r.get(0),
-            bp_id: r.get(1),
-            item_key: r.get(2),
-            name: r.get(3),
-            short: r.get(4),
-            description: r.get(5),
-            examine: r.get(6),
-            stackable: r.get(7),
-            nouns: r.get(8),
-        }))
+        map_row_opt(
+            row,
+            Item::try_from_row,
+            &format!("InventoryRepo::find_item_by_noun realm_id={} noun={}", realm_id, noun),
+        )
     }
 
     async fn get_realm_catalog(&self, realm_id: RealmId) -> DbResult<Vec<Item>> {
@@ -149,20 +131,17 @@ impl InventoryRepo for InventoryRepository {
             )
             .await?;
 
-        Ok(rows
+
+        let items: DbResult<Vec<Item>> = rows
             .into_iter()
-            .map(|row| Item {
-                id: row.get(0),
-                bp_id: row.get(1),
-                item_key: row.get(2),
-                name: row.get(3),
-                short: row.get(4),
-                description: row.get(5),
-                examine: row.get(6),
-                stackable: row.get(7),
-                nouns: row.get(8),
+            .map(|row| { map_row(
+                &row,
+                Item::try_from_row,
+                &format!("InventoryRepo::get_realm_catalog realm_id={}", realm_id))
             })
-            .collect())
+            .collect();
+
+        items
     }
 
     // ========================================================================

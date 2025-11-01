@@ -1,6 +1,6 @@
 use crate::db::error::DbError;
 use crate::db::DbResult;
-use crate::models::types::{AccountId, RealmId, BlueprintId, RoomId};
+use crate::models::types::{AccountId, RealmId, BlueprintId};
 use chrono::{DateTime, Utc};
 use tokio_postgres::Row;
 

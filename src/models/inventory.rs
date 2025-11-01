@@ -1,3 +1,5 @@
+use tokio_postgres::Row;
+use crate::db::DbResult;
 use crate::models::types::{AccountId, BlueprintId, ItemId, ObjectId, RoomId, RealmId};
 
 #[derive(Debug, Clone)]
@@ -28,6 +30,23 @@ pub struct Item {
 
     /// Whether multiple instances can stack
     pub stackable: bool,
+}
+
+impl Item {
+    pub(crate) fn try_from_row(row: &Row) -> DbResult<Item> {
+        Ok(Item {
+            id: row.try_get("id")?,
+            bp_id: row.try_get("bp_id")?,
+            item_key: row.try_get("item_key")?,
+            name: row.try_get("name")?,
+            short: row.try_get("short")?,
+            description: row.try_get("description")?,
+            examine: row.try_get("examine")?,
+            stackable: row.try_get("stackable")?,
+            nouns: row.try_get("nouns")?,
+        })
+
+    }
 }
 
 /// Item instance in the game world

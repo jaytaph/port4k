@@ -1,5 +1,5 @@
 use crate::db::repo::account::AccountRepo;
-use crate::db::{Db, DbResult};
+use crate::db::{map_row_opt, Db, DbResult};
 use crate::models::account::Account;
 use crate::models::types::AccountId;
 use std::sync::Arc;
@@ -24,7 +24,11 @@ impl AccountRepo for AccountRepository {
             .await?;
 
         let row_opt = client.query_opt(&stmt, &[&username]).await?;
-        row_opt.as_ref().map(Account::try_from_row).transpose()
+        map_row_opt(
+            row_opt,
+            Account::try_from_row,
+            &format!("AccountRepo::get_by_username username={}", username),
+        )
     }
 
     async fn get_by_id(&self, account_id: AccountId) -> DbResult<Option<Account>> {
@@ -33,7 +37,11 @@ impl AccountRepo for AccountRepository {
         let stmt = client.prepare_cached("SELECT * FROM accounts WHERE id = $1").await?;
 
         let row_opt = client.query_opt(&stmt, &[&account_id]).await?;
-        row_opt.as_ref().map(Account::try_from_row).transpose()
+        map_row_opt(
+            row_opt,
+            Account::try_from_row,
+            &format!("AccountRepo::get_by_id id={}", account_id),
+        )
     }
 
     async fn insert_account(&self, account: Account) -> DbResult<Account> {
