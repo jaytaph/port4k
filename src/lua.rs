@@ -69,7 +69,7 @@ impl ScriptHook {
         }
     }
 
-    pub fn from_str(s: &str) -> AppResult<Self> {
+    pub fn from_string(s: &str) -> AppResult<Self> {
         match s {
             "on_first_enter" => Ok(ScriptHook::OnFirstEnter),
             "on_enter" => Ok(ScriptHook::OnEnter),
@@ -94,7 +94,7 @@ impl From<DomainError> for LuaResult {
 
 impl From<mlua::Error> for LuaResult {
     fn from(error: mlua::Error) -> Self {
-        LuaResult::Failed(format!("mlua: {}", error.to_string()))
+        LuaResult::Failed(format!("mlua: {}", error))
     }
 }
 
@@ -320,7 +320,7 @@ impl LuaArgContext {
             output_handle,
             registry,
             rt_handle,
-            cursor: cursor.map(|c| Box::new(c)),
+            cursor: cursor.map(Box::new),
             account: boxed_account,
         }
     }
@@ -364,7 +364,7 @@ pub fn init_lua() -> anyhow::Result<Lua> {
     Ok(lua)
 }
 
-fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Result<mlua::Table> {
+fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Result<Table> {
     let port4k = lua.create_table()?;
 
     // port4k.say(text)
@@ -467,7 +467,6 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
     // port4k.set_object_state(obj_key: str, key: str, value: str) -> bool
     // Sets object state for the player
     let ctx = arg_ctx.clone();
-    let lua_clone = lua.clone();
     port4k.set(
         "set_object_state",
         lua.create_function(move |_, (obj_key, k, v): (String, String, mlua::Value)| {
@@ -482,7 +481,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
                     .object_by_key(&obj_key)
                     .ok_or_else(|| LuaError::external(format!("Object not found: {}", obj_key)))?;
 
-                let json_value = lua_value_to_json(&lua_clone, &v)?;
+                let json_value = lua_value_to_json(&v)?;
 
                 ctx.registry
                     .services
@@ -501,7 +500,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
     let ctx = arg_ctx.clone();
     port4k.set(
         "set_object_state_shared",
-        lua.create_function(move |lua, (obj_key, k, v): (String, String, mlua::Value)| {
+        lua.create_function(move |_, (obj_key, k, v): (String, String, mlua::Value)| {
             let rv = &ctx.cursor.as_ref().unwrap().room;
             let realm_id = ctx.cursor.as_ref().unwrap().realm_id;
             let rt_handle = ctx.rt_handle.clone();
@@ -512,7 +511,7 @@ fn create_port4k_function_table(lua: &Lua, arg_ctx: &LuaArgContext) -> mlua::Res
                     .object_by_key(&obj_key)
                     .ok_or_else(|| LuaError::external(format!("Object not found: {}", obj_key)))?;
 
-                let json_value = lua_value_to_json(&lua, &v)?;
+                let json_value = lua_value_to_json(&v)?;
 
                 ctx.registry
                     .services
@@ -694,7 +693,7 @@ fn create_lua_account_table(lua: &Lua, account: &Account) -> mlua::Result<Table>
         account.last_login.map(|dt| dt.to_rfc3339()).as_deref().unwrap_or(""),
     )?;
 
-    _ = set_lua_table_readonly!(t, lua);
+    set_lua_table_readonly!(t, lua);
     Ok(t)
 }
 
@@ -739,7 +738,7 @@ fn create_lua_roomview_table(lua: &Lua, rv: &RoomView) -> mlua::Result<Table> {
     }
     rt.set("state", kv_tbl)?;
 
-    _ = set_lua_table_readonly!(rt, lua);
+    set_lua_table_readonly!(rt, lua);
     Ok(rt)
 }
 
@@ -770,7 +769,7 @@ fn create_lua_object_table(lua: &Lua, obj: &ResolvedObject) -> mlua::Result<Tabl
     }
     ot.set("state", loot_tbl)?;
 
-    _ = set_lua_table_readonly!(ot, lua);
+    set_lua_table_readonly!(ot, lua);
     Ok(ot)
 }
 
@@ -813,7 +812,7 @@ fn create_lua_intent_table(lua: &Lua, intent: &Intent) -> mlua::Result<Table> {
     t.set("direction", intent.direction.as_ref().map(Direction::as_str))?;
     t.set("quantifier", intent.quantifier.as_ref().map(Quantifier::as_str))?;
 
-    _ = set_lua_table_readonly!(t, lua);
+    set_lua_table_readonly!(t, lua);
     Ok(t)
 }
 
@@ -841,7 +840,7 @@ fn handle_room_script(lua: &Lua, ctx: &LuaArgContext, hook: ScriptHook, reply: S
 
     let result = (|| -> AppResult<mlua::Value> {
         let binding = cursor.room.scripts.get(&hook);
-        let src = binding.as_deref().map_or("", |s| s);
+        let src = binding.map_or("", |s| s);
 
         if src.is_empty() {
             return Err(DomainError::Script("Empty script found".into()));
@@ -888,7 +887,7 @@ fn handle_object_script(
             return Err(DomainError::Script("Empty object use script found".into()));
         }
 
-        let env = create_lua_env(lua, &ctx)?;
+        let env = create_lua_env(lua, ctx)?;
 
         let args = lua.create_table()?;
         args.set("account", create_lua_account_table(lua, ctx.account.as_ref().unwrap())?)?;
@@ -918,7 +917,7 @@ fn handle_command_script(lua: &Lua, ctx: &LuaArgContext, intent: &Intent, reply:
 
     let result = (|| -> AppResult<mlua::Value> {
         let binding = cursor.room.scripts.get(&ScriptHook::OnCommand);
-        let src = binding.as_deref().map_or("", |s| s);
+        let src = binding.map_or("", |s| s);
 
         if src.is_empty() {
             return Err(DomainError::Script("Empty object use script found".into()));
@@ -951,7 +950,7 @@ fn handle_repl_eval(lua: &Lua, ctx: &LuaArgContext, code: &str, reply: Sender<Lu
         Ok::<_, mlua::Error>(env)
     })?;
 
-    let result = (|| -> Result<mlua::Value, mlua::Error> {
+    let result = {
         match lua
             .load(format!("return {}", code))
             .set_environment(ctx_table.clone())
@@ -960,7 +959,7 @@ fn handle_repl_eval(lua: &Lua, ctx: &LuaArgContext, code: &str, reply: Sender<Lu
             Ok(val) => Ok(val),
             Err(_) => lua.load(code).set_environment(ctx_table.clone()).eval(),
         }
-    })();
+    };
 
     match result {
         Ok(value) => {
@@ -968,7 +967,7 @@ fn handle_repl_eval(lua: &Lua, ctx: &LuaArgContext, code: &str, reply: Sender<Lu
             Ok(())
         }
         Err(err) => {
-            _ = reply.send(LuaResult::Failed(format!("Lua error: {}", err.to_string())));
+            _ = reply.send(LuaResult::Failed(format!("Lua error: {}", err)));
             Err(DomainError::ScriptLua(err))
         }
     }
@@ -986,7 +985,7 @@ fn send_lua_result(reply: Sender<LuaResult>, result: AppResult<mlua::Value>) {
 }
 
 // Convert serde_json::Value to mlua::Value
-fn json_to_lua<'lua>(lua: &'lua Lua, value: &serde_json::Value) -> mlua::Result<mlua::Value> {
+fn json_to_lua(lua: &Lua, value: &serde_json::Value) -> mlua::Result<mlua::Value> {
     match value {
         serde_json::Value::Null => Ok(mlua::Value::Nil),
         serde_json::Value::Bool(b) => Ok(mlua::Value::Boolean(*b)),
@@ -1017,7 +1016,7 @@ fn json_to_lua<'lua>(lua: &'lua Lua, value: &serde_json::Value) -> mlua::Result<
     }
 }
 
-fn lua_value_to_json(lua_ctx: &mlua::Lua, value: &mlua::Value) -> mlua::Result<serde_json::Value> {
+fn lua_value_to_json(value: &mlua::Value) -> mlua::Result<serde_json::Value> {
     use serde_json::Value as JsonValue;
 
     match value {
@@ -1051,7 +1050,7 @@ fn lua_value_to_json(lua_ctx: &mlua::Lua, value: &mlua::Value) -> mlua::Result<s
                 let mut arr = Vec::new();
                 for i in 1..=max_index {
                     let val: mlua::Value = t.get(i)?;
-                    arr.push(lua_value_to_json(lua_ctx, &val)?);
+                    arr.push(lua_value_to_json(&val)?);
                 }
                 Ok(JsonValue::Array(arr))
             } else {
@@ -1065,7 +1064,7 @@ fn lua_value_to_json(lua_ctx: &mlua::Lua, value: &mlua::Value) -> mlua::Result<s
                         mlua::Value::Number(n) => n.to_string(),
                         _ => return Err(LuaError::external("Table keys must be strings or numbers")),
                     };
-                    map.insert(key, lua_value_to_json(lua_ctx, &v)?);
+                    map.insert(key, lua_value_to_json(&v)?);
                 }
                 Ok(JsonValue::Object(map))
             }

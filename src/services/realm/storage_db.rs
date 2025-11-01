@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use std::sync::Arc;
 
+#[allow(unused)]
 pub struct DbStorage {
     realm_repo: Arc<dyn RealmRepo>,
     user_repo: Arc<dyn UserRepo>,
@@ -75,7 +76,7 @@ impl StateStorage for DbStorage {
     }
 
     async fn set_current_room(&self, realm_id: RealmId, account_id: AccountId, room_id: RoomId) -> AppResult<()> {
-        self.user_repo.set_current_room(realm_id, account_id, room_id).await;
+        _ = self.user_repo.set_current_room(realm_id, account_id, room_id).await;
         Ok(())
     }
 

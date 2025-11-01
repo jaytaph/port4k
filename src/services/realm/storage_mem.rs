@@ -7,6 +7,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[allow(unused)]
 pub struct MemoryStorage {
     realms: DashMap<RealmId, Arc<MemRealm>>,
 }
@@ -16,6 +17,7 @@ impl MemoryStorage {
         Self { realms: DashMap::new() }
     }
 
+    #[allow(unused)]
     fn realm(&self, id: RealmId) -> Arc<MemRealm> {
         self.realms
             .entry(id)
@@ -24,6 +26,7 @@ impl MemoryStorage {
     }
 }
 
+#[allow(unused)]
 #[derive(Default)]
 struct MemRealm {
     realm_room_kv: DashMap<RoomId, HashMap<String, Value>>,
@@ -43,7 +46,7 @@ impl StateStorage for MemoryStorage {
         value: &Value,
     ) -> AppResult<bool> {
         let realm = self.realm(realm_id);
-        let mut inner = realm.realm_room_kv.entry(room_id).or_insert_with(HashMap::new);
+        let mut inner = realm.realm_room_kv.entry(room_id).or_default();
         inner.insert(key.to_string(), value.clone());
         Ok(true)
     }
@@ -57,10 +60,7 @@ impl StateStorage for MemoryStorage {
         value: &Value,
     ) -> AppResult<bool> {
         let realm = self.realm(realm_id);
-        let mut inner = realm
-            .user_room_kv
-            .entry((room_id, account_id))
-            .or_insert_with(HashMap::new);
+        let mut inner = realm.user_room_kv.entry((room_id, account_id)).or_default();
         inner.insert(key.to_string(), value.clone());
         Ok(true)
     }
@@ -73,7 +73,7 @@ impl StateStorage for MemoryStorage {
         value: &Value,
     ) -> AppResult<bool> {
         let realm = self.realm(realm_id);
-        let mut inner = realm.realm_object_kv.entry(object_id).or_insert_with(HashMap::new);
+        let mut inner = realm.realm_object_kv.entry(object_id).or_default();
         inner.insert(key.to_string(), value.clone());
         Ok(true)
     }
@@ -87,10 +87,7 @@ impl StateStorage for MemoryStorage {
         value: &Value,
     ) -> AppResult<bool> {
         let realm = self.realm(realm_id);
-        let mut inner = realm
-            .user_object_kv
-            .entry((object_id, account_id))
-            .or_insert_with(HashMap::new);
+        let mut inner = realm.user_object_kv.entry((object_id, account_id)).or_default();
         inner.insert(key.to_string(), value.clone());
         Ok(true)
     }

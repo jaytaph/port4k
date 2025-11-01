@@ -13,10 +13,10 @@ pub async fn take(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     let what = &intent.direct.as_ref().unwrap().head;
 
     // Case 1: "take X from Y" - taking from a container
-    if let Some(Preposition::From) = intent.preposition {
-        if let Some(target) = &intent.target {
-            return take_from_container(ctx, what, &target.head).await;
-        }
+    if let Some(Preposition::From) = intent.preposition
+        && let Some(target) = &intent.target
+    {
+        return take_from_container(ctx, what, &target.head).await;
     }
 
     // Case 2: Regular "take X" - from room or ground

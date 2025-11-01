@@ -45,7 +45,7 @@ fn get_global_vars(sess: Arc<RwLock<Session>>) -> HashMap<String, String> {
         vars.insert("account.xp_level".to_string(), format!("{}", xp_to_level(account.xp)));
         vars.insert(
             "account.xp_level_name".to_string(),
-            format!("{}", xp_to_level_name(account.xp)),
+            xp_to_level_name(account.xp).to_string(),
         );
         vars.insert("account.health".to_string(), format!("{}", account.health));
         vars.insert("account.coins".to_string(), format!("{}", account.coins));
@@ -111,8 +111,8 @@ fn yesno(b: bool) -> &'static str {
 //     if vs.is_empty() { "none".to_string() } else { vs.join(", ") }
 // }
 
-/// Turn names into safe, stable keys: "Blast Door" -> "blast_door"
-/// (from: get_roomview_vars)
+// /// Turn names into safe, stable keys: "Blast Door" -> "blast_door"
+// /// (from: get_roomview_vars)
 // fn slug(s: &str) -> String {
 //     let mut out = String::with_capacity(s.len());
 //     for ch in s.chars() {

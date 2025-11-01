@@ -2,6 +2,7 @@ use crate::db::DbResult;
 use crate::db::error::DbError;
 use crate::models::types::{AccountId, BlueprintId, RealmId};
 use chrono::{DateTime, Utc};
+use std::fmt::Display;
 use tokio_postgres::Row;
 
 /// Type of realm defines what is allowed and how it is persisted.
@@ -15,12 +16,12 @@ pub enum RealmKind {
     Test { owner: AccountId },
 }
 
-impl RealmKind {
-    pub fn to_string(&self) -> String {
+impl Display for RealmKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RealmKind::Live => "live".to_string(),
-            RealmKind::Draft => "draft".to_string(),
-            RealmKind::Test { .. } => "test".to_string(),
+            RealmKind::Live => write!(f, "live"),
+            RealmKind::Draft => write!(f, "draft"),
+            RealmKind::Test { .. } => write!(f, "test"),
         }
     }
 }

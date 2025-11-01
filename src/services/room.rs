@@ -278,11 +278,8 @@ impl RoomService {
             .await
             .map_err(Box::from)?;
 
-        match timeout(LUA_CMD_TIMEOUT, rx).await {
-            Err(e) => {
-                ctx.output.system(format!("The room doesn't react ({e})")).await;
-            }
-            Ok(_) => {}
+        if let Err(e) = timeout(LUA_CMD_TIMEOUT, rx).await {
+            ctx.output.system(format!("The room doesn't react ({e})")).await;
         }
 
         Ok(())
@@ -385,8 +382,8 @@ impl RoomService {
 
         let rv = build_room_view_impl(
             &bp_room,
-            &bp_exits.as_slice(),
-            &bp_objs.as_slice(),
+            bp_exits.as_slice(),
+            bp_objs.as_slice(),
             &bp_scripts,
             &bp_room_kv,
             &zone_room_kv,

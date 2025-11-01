@@ -18,7 +18,7 @@ pub async fn open(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
     // Check if we are opening an object
     if let Some(obj) = rv.object_by_noun(&noun.head) {
         // Do we have a script attached? run that first
-        if let Some(_) = obj.on_use.as_ref() {
+        if obj.on_use.as_ref().is_some() {
             let (tx, rx) = oneshot::channel();
 
             let output_handle = ctx.output.clone();
@@ -41,11 +41,7 @@ pub async fn open(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
             {
                 LuaResult::Success(v) => {
                     // Only if returned "true" then we consider it handled
-                    if v.is_boolean() && v.as_boolean().unwrap_or(false) {
-                        handled = true;
-                    } else {
-                        handled = false;
-                    }
+                    handled = v.is_boolean() && v.as_boolean().unwrap_or(false);
                 }
                 LuaResult::Failed(msg) => {
                     ctx.output

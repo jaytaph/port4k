@@ -41,9 +41,8 @@ where
                     self.writer.write_all(line.as_bytes()).await?;
                     self.writer.write_all(b"\x1b[0m\r\n").await?;
 
-                    match extract_last_color_code(line) {
-                        Some(code) => last_color = code,
-                        None => {} // No ansi colors found, just keep last_color as is
+                    if let Some(code) = extract_last_color_code(line) {
+                        last_color = code
                     }
                 }
                 self.writer.write_all(b"\r\n").await?;
@@ -56,7 +55,7 @@ where
             }
             OutFrame::Prompt(p) => {
                 // Write prompt, but DON'T newline.
-                // Also maybe re-show input buffer later.
+                // Also, maybe re-show input buffer later.
                 self.writer.write_all(p.as_bytes()).await?;
             }
             OutFrame::ClearScreen => {

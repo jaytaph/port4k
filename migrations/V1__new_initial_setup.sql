@@ -1,3 +1,6 @@
+CREATE EXTENSION IF NOT EXISTS "citext" WITH SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
+
 -- =====================================================================
 --  ACCOUNTS (created first to break cycles)
 -- =====================================================================

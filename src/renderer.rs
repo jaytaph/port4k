@@ -159,7 +159,7 @@ fn render_single_pass(template: &str, vars: &RenderVars, opts: &RenderOptions) -
 }
 
 /// Regex for {o:<id>} tokens. <id> allows [A-Za-z0-9_-]
-static O_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{(?:o|obj):([A-Za-z0-9_\-]+)\}").unwrap());
+static O_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{(?:o|obj):([A-Za-z0-9_\-]+)}").unwrap());
 
 /// Resolve object labels for {o:id}. We try a few common key shapes so you
 /// don't have to change your `RenderVars` right away:
@@ -291,9 +291,9 @@ fn pad_string(s: &str, width: usize, alignment: Alignment) -> String {
     }
 }
 
-/// =======================
-/// ANSI-aware soft wrapper
-/// =======================
+// =======================
+// ANSI-aware soft wrapper
+// =======================
 
 static ANSI_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\x1B\[[0-9;]*m").unwrap());
 static WS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
@@ -373,11 +373,11 @@ fn process_token(
     width: usize,
     out: &mut String,
 ) {
-    let ws_vis = visible_len(&pending_ws);
+    let ws_vis = visible_len(pending_ws);
     let tok_vis = visible_len(word);
 
     if *line_vis == 0 {
-        line.push_str(&pending_ws); // preserve leading spaces
+        line.push_str(pending_ws); // preserve leading spaces
         line.push_str(word);
         *line_vis += tok_vis;
         pending_ws.clear();
@@ -386,7 +386,7 @@ fn process_token(
 
     if *line_vis + ws_vis + tok_vis <= width {
         // it fits: emit exact spaces then the word
-        line.push_str(&pending_ws);
+        line.push_str(pending_ws);
         line.push_str(word);
         *line_vis += ws_vis + tok_vis;
         pending_ws.clear();
@@ -461,7 +461,7 @@ mod tests {
             .insert("obj.toolkit.short".into(), "discarded toolkit".into());
 
         let tpl = "You notice a {o:toolkit} here.";
-        let out = super::render_template_with_opts(
+        let out = render_template_with_opts(
             tpl,
             &vars,
             &RenderOptions {
@@ -481,7 +481,7 @@ mod tests {
             .insert("obj.toolkit.short".into(), "discarded toolkit".into());
 
         let tpl = "You notice a {o:toolkit} here.";
-        let out = super::render_template_with_opts(
+        let out = render_template_with_opts(
             tpl,
             &vars,
             &RenderOptions {
@@ -501,7 +501,7 @@ mod tests {
             .insert("obj.map.short".into(), "{c:magenta}patched wall map{c}".into());
 
         let tpl = "On the bulkhead: {o:map}.";
-        let out = super::render_template_with_opts(
+        let out = render_template_with_opts(
             tpl,
             &vars,
             &RenderOptions {
@@ -519,7 +519,7 @@ mod tests {
     fn leaves_unknown_object_token_intact() {
         let vars = RenderVars::default();
         let tpl = "There might be a {o:nonexistent} here.";
-        let out = super::render_template_with_opts(
+        let out = render_template_with_opts(
             tpl,
             &vars,
             &RenderOptions {
@@ -537,7 +537,7 @@ mod tests {
         vars.room_view.insert("obj.loop.short".into(), "see {o:loop}".into());
 
         let tpl = "Loop? {o:loop}";
-        let out = super::render_template_with_opts(
+        let out = render_template_with_opts(
             tpl,
             &vars,
             &RenderOptions {

@@ -7,8 +7,8 @@ use crate::models::room::RoomView;
 use crate::models::types::{RealmId, RoomId};
 use std::sync::Arc;
 
-const DEFAULT_REALM_KEY: &'static str = "live_world";
-const DEFAULT_ROOM_KEY: &'static str = "cell_block";
+const DEFAULT_REALM_KEY: &str = "live_world";
+const DEFAULT_ROOM_KEY: &str = "cell_block";
 
 const MOTD: &str = r#"
 

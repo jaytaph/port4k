@@ -17,7 +17,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  DATABASE_URL: postgres://postgres:postgres@localhost:5432/port4k_test
+  DATABASE_URL: postgres://port4k:port4k@localhost:5432/port4k_test
 
 jobs:
   fmt:
@@ -84,8 +84,8 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: port4k
+          POSTGRES_PASSWORD: port4k
           POSTGRES_DB: port4k_test
         ports: ["5432:5432"]
         options: >-
@@ -119,7 +119,7 @@ jobs:
 
       - name: Run migrations
         if: hashFiles('migrations/**') != ''
-        run: refinery migrate -e "$DATABASE_URL" -p migrations
+        run: refinery migrate -e DATABASE_URL -p migrations
 
   tests:
     name: Test
@@ -133,12 +133,12 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: port4k
+          POSTGRES_PASSWORD: port4k
           POSTGRES_DB: port4k_test
         ports: ["5432:5432"]
         options: >-
-          --health-cmd="pg_isready -U postgres"
+          --health-cmd="pg_isready -U port4k"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20

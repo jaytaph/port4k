@@ -12,6 +12,7 @@ use std::sync::Arc;
 mod storage_db; // Persistent storage
 mod storage_mem; // Ephemeral storage
 
+#[allow(unused)]
 #[async_trait]
 pub trait StateStorage: Send + Sync {
     async fn update_realm_room_kv(
@@ -52,7 +53,9 @@ pub trait StateStorage: Send + Sync {
 
 pub struct RealmService {
     realm_repo: Arc<dyn RealmRepo>,
+    #[allow(unused)]
     db_storage: Arc<DbStorage>,
+    #[allow(unused)]
     mem_storage: Arc<MemoryStorage>,
 }
 

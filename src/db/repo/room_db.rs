@@ -166,7 +166,7 @@ impl RoomRepo for RoomRepository {
 
         let rows = client
             .query(
-                &format!("SELECT hook, script FROM bp_room_scripts WHERE room_id = $1"),
+                &"SELECT hook, script FROM bp_room_scripts WHERE room_id = $1".to_string(),
                 &[&room_id],
             )
             .await?;
@@ -174,7 +174,7 @@ impl RoomRepo for RoomRepository {
         let mut scripts = RoomScripts::new();
         for row in &rows {
             let hook_str = row.get::<_, String>(0);
-            let hook = ScriptHook::from_str(&hook_str)
+            let hook = ScriptHook::from_string(&hook_str)
                 .map_err(|_| DbError::Decode(format!("Invalid script hook: {}", hook_str)))?;
 
             scripts.insert(hook, row.get::<_, String>(1));

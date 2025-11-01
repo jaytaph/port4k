@@ -175,7 +175,7 @@ impl InventoryRepo for InventoryRepository {
             .await?;
 
         let location = ItemLocation::from_db_columns(row.get(3), row.get(4), row.get(5), row.get(6))
-            .map_err(|e| DbError::DataError(e))?;
+            .map_err(DbError::DataError)?;
 
         Ok(ItemInstance {
             instance_id: row.get(0),
@@ -282,7 +282,7 @@ impl InventoryRepo for InventoryRepository {
         rows.into_iter()
             .map(|row| {
                 let location = ItemLocation::from_db_columns(row.get(3), row.get(4), row.get(5), row.get(6))
-                    .map_err(|e| DbError::DataError(e))?;
+                    .map_err(DbError::DataError)?;
 
                 Ok(ItemInstance {
                     instance_id: row.get(0),
@@ -335,8 +335,8 @@ impl InventoryRepo for InventoryRepository {
             .await?;
 
         row.map(|r| {
-            let location = ItemLocation::from_db_columns(r.get(3), r.get(4), r.get(5), r.get(6))
-                .map_err(|e| DbError::DataError(e))?;
+            let location =
+                ItemLocation::from_db_columns(r.get(3), r.get(4), r.get(5), r.get(6)).map_err(DbError::DataError)?;
 
             Ok(ItemInstance {
                 instance_id: r.get(0),
@@ -388,8 +388,8 @@ impl InventoryRepo for InventoryRepository {
             .await?;
 
         row.map(|r| {
-            let location = ItemLocation::from_db_columns(r.get(3), r.get(4), r.get(5), r.get(6))
-                .map_err(|e| DbError::DataError(e))?;
+            let location =
+                ItemLocation::from_db_columns(r.get(3), r.get(4), r.get(5), r.get(6)).map_err(DbError::DataError)?;
 
             Ok(ItemInstance {
                 instance_id: r.get(0),
@@ -441,7 +441,7 @@ impl InventoryRepo for InventoryRepository {
         rows.into_iter()
             .map(|row| {
                 let location = ItemLocation::from_db_columns(row.get(3), row.get(4), row.get(5), row.get(6))
-                    .map_err(|e| DbError::DataError(e))?;
+                    .map_err(DbError::DataError)?;
 
                 Ok(ItemInstance {
                     instance_id: row.get(0),
@@ -494,8 +494,8 @@ impl InventoryRepo for InventoryRepository {
             .await?;
 
         row.map(|r| {
-            let location = ItemLocation::from_db_columns(r.get(3), r.get(4), r.get(5), r.get(6))
-                .map_err(|e| DbError::DataError(e))?;
+            let location =
+                ItemLocation::from_db_columns(r.get(3), r.get(4), r.get(5), r.get(6)).map_err(DbError::DataError)?;
 
             Ok(ItemInstance {
                 instance_id: r.get(0),
@@ -548,7 +548,7 @@ impl InventoryRepo for InventoryRepository {
         rows.into_iter()
             .map(|row| {
                 let location = ItemLocation::from_db_columns(row.get(3), row.get(4), row.get(5), row.get(6))
-                    .map_err(|e| DbError::DataError(e))?;
+                    .map_err(DbError::DataError)?;
 
                 Ok(ItemInstance {
                     instance_id: row.get(0),
@@ -601,8 +601,8 @@ impl InventoryRepo for InventoryRepository {
             .await?;
 
         row.map(|r| {
-            let location = ItemLocation::from_db_columns(r.get(3), r.get(4), r.get(5), r.get(6))
-                .map_err(|e| DbError::DataError(e))?;
+            let location =
+                ItemLocation::from_db_columns(r.get(3), r.get(4), r.get(5), r.get(6)).map_err(DbError::DataError)?;
 
             Ok(ItemInstance {
                 instance_id: r.get(0),

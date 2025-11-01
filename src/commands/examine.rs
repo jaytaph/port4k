@@ -7,11 +7,7 @@ pub async fn examine(ctx: Arc<CmdCtx>, intent: Intent) -> CommandResult {
         // examine object
         match handle_examine_object(ctx.clone(), &noun).await {
             Ok(_) => {}
-            Err(e) => {
-                ctx.output
-                    .system(format!("Error examining object: {}", e.to_string()))
-                    .await
-            }
+            Err(e) => ctx.output.system(format!("Error examining object: {}", e)).await,
         }
     } else {
         ctx.output.system("You must specify what you want to examine.").await;

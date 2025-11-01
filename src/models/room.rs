@@ -313,6 +313,7 @@ impl RoomView {
 }
 
 /// Builds up a complete room view by assembling blueprint, zone, and user data.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_room_view_impl(
     bp_room: &BlueprintRoom,
     bp_exits: &[BlueprintExit],

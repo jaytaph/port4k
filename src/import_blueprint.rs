@@ -132,14 +132,8 @@ struct ExitYaml {
     pub visible_when_locked: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 struct ScriptYaml(HashMap<ScriptHook, String>);
-
-impl Default for ScriptYaml {
-    fn default() -> Self {
-        ScriptYaml(HashMap::new())
-    }
-}
 
 // ====== Entry point ======
 
@@ -162,7 +156,7 @@ pub async fn import_blueprint_sub_dir(
     for (idx, path) in files.iter().enumerate() {
         println!("\n[{}/{}] Parsing: {}", idx + 1, files.len(), path.display());
 
-        let text = fs::read_to_string(&path).map_err(InfraError::from)?;
+        let text = fs::read_to_string(path).map_err(InfraError::from)?;
         let mut room: RoomYaml = serde_yaml::from_str(&text)?;
 
         // normalize "on_use"
@@ -367,7 +361,7 @@ async fn upsert_objects(tx: &Transaction<'_>, room_id: uuid::Uuid, objects: &[Ob
 
     for (pos, o) in objects.iter().enumerate() {
         let state_json = &o.state;
-        let flags_json = serde_json::to_value(&o.flags.as_ref().unwrap_or(&FlagsYaml::default()))?;
+        let flags_json = serde_json::to_value(o.flags.as_ref().unwrap_or(&FlagsYaml::default()))?;
         let controls_json = serde_json::to_value(&o.controls)?;
         let loot_json = serde_json::to_value(&o.loot)?;
 
@@ -487,7 +481,7 @@ async fn upsert_blueprint_items_catalog(
 
 async fn upsert_room_scripts(tx: &Transaction<'_>, room_id: uuid::Uuid, scripts: &ScriptYaml) -> AppResult<()> {
     // single-row table keyed by room_id
-    for (_, (hook, script)) in scripts.0.iter().enumerate() {
+    for (hook, script) in scripts.0.iter() {
         tx.execute(
             r#"
             INSERT INTO bp_room_scripts (room_id, hook, script)
