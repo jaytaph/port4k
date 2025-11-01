@@ -15,41 +15,23 @@ on:
       - "Cargo.lock"
       - "migrations/**"
 
+env:
+  CARGO_TERM_COLOR: always
+  DATABASE_URL: postgres://port4k:port4k@localhost:5432/port4k_test
+
 jobs:
-  build-test:
+  fmt:
+    name: Format (rustfmt)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        toolchain: [stable, beta]
-    env:
-      CARGO_TERM_COLOR: always
-      RUSTFLAGS: "-D warnings"
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/port4k_test
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: port4k_test
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.toolchain }}
-          components: rustfmt, clippy
+          toolchain: stable
+          components: rustfmt
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -63,24 +45,128 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
+      - name: Run rustfmt
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: Lint (clippy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  migrations:
+    name: Run DB migrations
+    runs-on: ubuntu-latest
+    needs: [fmt, clippy]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: port4k
+          POSTGRES_PASSWORD: port4k
+          POSTGRES_DB: port4k_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Install refinery_cli
+        run: cargo install refinery_cli || true
+
+      - name: Run migrations
+        if: hashFiles('migrations/**') != ''
+        run: refinery migrate -e DATABASE_URL -p migrations
+
+  tests:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: [fmt, clippy, migrations]
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [stable, beta]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: port4k
+          POSTGRES_PASSWORD: port4k
+          POSTGRES_DB: port4k_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U port4k"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ matrix.toolchain }}
+          restore-keys: ${{ runner.os }}-cargo-
+
       - name: Show rustc/cargo versions
         run: |
           rustc -V
           cargo -V
-
-      - name: Format (rustfmt)
-        run: cargo fmt --all -- --check
-
-      - name: Lint (clippy)
-        run: cargo clippy --all-targets --all-features -- -D warnings
-
-      # Optional: run DB migrations if you keep them in ./migrations via refinery
-      - name: Install refinery_cli (optional)
-        run: cargo install refinery_cli || true
-
-      - name: Run migrations (optional)
-        if: hashFiles('migrations/**') != ''
-        run: refinery migrate -e "$DATABASE_URL" -p migrations
 
       - name: Test
         run: cargo test --all --all-features --verbose

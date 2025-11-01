@@ -1,0 +1,188 @@
+version: 5
+id: observation_deck
+name: Observation Deck
+short: "A small alcove with viewports overlooking the docking ring."
+description: |
+  The alcove widens just enough for a bench beneath narrow reinforced viewports. Through the armored glass, Port4K's docking ring fills the view—so close you can see cargo loaders moving between ships. A patchy {o:navigation_chart} hangs beside the bench, and a {o:crew_locker} sits tucked beneath it. A {o:vent_grille} near the floor rattles faintly. The main corridor lies {o:east_exit}.
+
+state:
+  ambience: "quiet_hum"
+  view: "starfield"
+  deck_status: "intact"
+
+hints:
+  - id: chart
+    text: "Navigation charts often hide route notes—try reading or tracing markings."
+    when: first_look
+    once: true
+  - id: locker
+    text: "Crew lockers may require codes, tools, or a lucky shove."
+    when: enter
+    cooldown: 2
+  - id: grille
+    text: "A loose grille could conceal stashed items."
+    when: search
+    once: true
+  - id: viewport
+    text: "The viewport offers lore and orientation—try 'scan' here too."
+    when: manual
+
+objects:
+  - id: navigation_chart
+    nouns: ["chart", "map", "navigation chart", "nav chart"]
+    short: "patched navigation chart"
+    description: "A faded sector chart with hand-scratched updates."
+    examine: "Someone added a note: 'CREW locker code → mirrored from CELL override'."
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+        
+        if verb == "read" or verb == "examine" or verb == "scan" then
+          port4k.say("The annotations show patrol routes and docking lanes. One scribble hints: 'CREW locker code mirrors CELL override code'.")
+          return true
+        end
+        
+        return false
+      end
+
+  - id: crew_locker
+    nouns: ["locker", "storage", "box", "crew locker"]
+    short: "scuffed crew locker"
+    description: "A metal locker with a numeric keypad and dented side panel."
+    state:
+      locked: true
+      opened: false
+    examine: "Keypad shows smudges on 1, 2, 3, 4. The dented panel might pry with the right tool."
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+        
+        -- Enter code (mirrored from cell_block: 4312 → 2134)
+        if verb == "enter" and #args > 0 then
+          local code = table.concat(args, " ")
+          if code == "2134" then
+            port4k.set_object_state("crew_locker", "locked", false)
+            port4k.say("A chirp, then the lock releases with a soft clunk.")
+          else
+            port4k.say("The keypad buzzes angrily. Wrong code.")
+          end
+          return true
+        end
+        
+        -- Open/loot locker
+        if verb == "open" or verb == "loot" then
+          if ctx.object.state.locked then
+            if port4k.player_has_item("multi_spanner") then
+              port4k.say("You work the dent with the multi-spanner, flexing the frame just enough to pop the latch.")
+              port4k.set_object_state("crew_locker", "locked", false)
+            else
+              port4k.say("It's still locked. The frame looks susceptible to leverage… if you had the right tool.")
+              return true
+            end
+          end
+          
+          if not ctx.object.state.opened then
+            port4k.set_object_state("crew_locker", "opened", true)
+            port4k.give_item("energy_cell")
+            port4k.give_credits(25)
+            port4k.say("Inside you find an **energy cell** and a handful of station scrip.")
+          else
+            port4k.say("The locker is empty.")
+          end
+          return true
+        end
+        
+        return false
+      end
+
+  - id: vent_grille
+    nouns: ["vent", "grille", "grate", "vent grille"]
+    short: "loose vent grille"
+    description: "A rectangular grille with two missing screws."
+    state:
+      loosened: false
+      cache_taken: false
+    examine: "You can wiggle it; the screws are barely holding."
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+        
+        if verb == "unscrew" or verb == "open" or verb == "pry" then
+          if not ctx.object.state.loosened then
+            if port4k.player_has_item("fiber_probe") then
+              port4k.set_object_state("vent_grille", "loosened", true)
+              port4k.say("You lever the remaining screws with the fiber probe and ease the grille aside.")
+            else
+              port4k.say("You need something thin to work the screws—maybe a probe.")
+              return true
+            end
+          end
+          
+          if not ctx.object.state.cache_taken then
+            port4k.set_object_state("vent_grille", "cache_taken", true)
+            port4k.give_item("aurelite_fragment")
+            port4k.say("Behind the grille, a small pouch holds an **Aurelite fragment**—it glimmers faintly.")
+          else
+            port4k.say("Only dust and a few errant fasteners remain.")
+          end
+          return true
+        end
+        
+        return false
+      end
+
+  - id: east_exit
+    nouns: ["east", "corridor", "hallway"]
+    short: "corridor east"
+    description: "Light spills in from the main corridor."
+    examine: "You can hear the faint beep of a distant panel."
+
+exits:
+  - dir: east
+    to: "maintenance_corridor"
+    description: "Back to the maintenance corridor."
+    locked: false
+    visible_when_locked: true
+
+scripts:
+  on_enter: |
+    return function(ctx)
+      port4k.say("Through the viewports, Port4K's docking ring looms large—salvation meters away.")
+    end
+    
+  on_command: |
+    return function(ctx)
+      local verb = ctx.intent.verb
+      
+      if verb == "scan" then
+        port4k.say("Scan: no life signs; weak airflow through vent; minor EM noise from locker keypad.")
+        return true
+      end
+      
+      if verb == "look" and port4k.matches_noun(ctx.intent.args, {"window", "viewport", "glass", "view"}) then
+        port4k.say("Port4K's docking ring spans your view: ships of all sizes, cargo loaders, the warm glow of airlocks. Freedom.")
+        return true
+      end
+      
+      return false
+    end
+
+items_catalog:
+  - id: energy_cell
+    name: "Energy Cell"
+    nouns: ["energy cell", "cell", "power cell", "battery"]
+    short: "standard energy cell"
+    description: "A medium-capacity power cell, fully charged."
+    examine: "The indicator shows a full charge. Perfect for powering larger systems."
+    stackable: true
+
+  - id: aurelite_fragment
+    name: "Aurelite Fragment"
+    nouns: ["aurelite", "fragment", "aurelite fragment", "crystal"]
+    short: "gleaming Aurelite fragment"
+    description: "A small crystalline fragment that pulses with inner light."
+    examine: "Aurelite is rare—used in high-security authorization systems. This fragment still holds a charge."
+    stackable: false

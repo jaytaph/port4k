@@ -315,7 +315,7 @@ Key settings (env vars):
 * `PORT4K_TELNET` — Telnet bind address, e.g., `0.0.0.0:4000`.
 * `RUST_LOG` — logging (e.g., `info,port4k=debug`).
 
-ANSI color/theme and other toggles live in code for now; see `port4k-server/src/`.
+ANSI color/theme and other toggles live in code for now; see `./src/`.
 
 ## Development
 

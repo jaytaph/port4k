@@ -1,0 +1,274 @@
+version: 5
+id: docking_airlock
+name: Docking Airlock
+short: "The ship's outer airlock, pressurized and waiting."
+description: |
+  The transport brig's outer airlock—a cramped cylinder lined with pressure seals and warning stripes. Through the reinforced porthole in the outer hatch, Port4K's docking ring gleams with warm light and movement. Freedom is meters away.
+  
+  A {o:docking_interface} panel beside the hatch blinks amber. The {o:outer_hatch} itself is a massive composite door with hydraulic clamps. Emergency protocols have it locked from the inside. A small {o:diagnostic_port} sits at knee height, and overhead, a {o:status_display} cycles through system checks.
+  
+  The corridor {o:south_exit} leads back into the ship.
+
+state:
+  ambience: "pressurization_hiss"
+  pressure: "nominal"
+  airlock_status: "sealed"
+
+hints:
+  - id: interface_offline
+    text: "The docking interface needs power before it can sync with the station."
+    when: first_look
+    once: true
+  - id: multi_system
+    text: "Station airlocks require multiple systems: power, diagnostics, and authorization."
+    when: enter
+    cooldown: 3
+  - id: fragments
+    text: "Aurelite fragments are known to bypass certain authorization protocols..."
+    when: examine_hatch
+    once: true
+
+objects:
+  - id: docking_interface
+    nouns: ["interface", "panel", "docking panel", "console", "docking interface"]
+    short: "docking interface panel"
+    description: "A control panel with status lights and a touchscreen displaying synchronization protocols."
+    state:
+      powered: false
+      synced: false
+    examine: "The screen is dark. It needs a power cell to initialize the docking handshake."
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+        
+        -- Power the interface with energy_cell
+        if verb == "power" or (verb == "use" and port4k.matches_noun(args, {"cell", "energy"})) then
+          if ctx.object.state.powered then
+            port4k.say("The interface is already online, its screen glowing softly.")
+            return true
+          end
+          
+          if port4k.player_has_item("energy_cell") then
+            port4k.consume_item("energy_cell")
+            port4k.set_object_state("docking_interface", "powered", true)
+            port4k.emit_room("The interface hums to life. The touchscreen flickers: {c:cyan}STATION SYNC REQUIRED{c}")
+            return true
+          else
+            port4k.say("You need an energy cell to power this interface.")
+            return true
+          end
+        end
+        
+        -- Sync with station (requires powered + diagnostic_port connected)
+        if verb == "sync" or verb == "connect" or verb == "handshake" then
+          if not ctx.object.state.powered then
+            port4k.say("The interface is offline. Power it first.")
+            return true
+          end
+          
+          local port = ctx.room.objects.diagnostic_port
+          if not port.state.connected then
+            port4k.say("ERROR: Diagnostic link not established. Check the diagnostic port.")
+            return true
+          end
+          
+          if ctx.object.state.synced then
+            port4k.say("The interface already shows: {c:green}SYNC COMPLETE{c}")
+            return true
+          end
+          
+          port4k.set_object_state("docking_interface", "synced", true)
+          port4k.emit_room("Data streams across the screen. After a moment: {c:green}STATION HANDSHAKE COMPLETE{c}")
+          port4k.say("The docking clamps report ready. Only authorization remains.")
+          return true
+        end
+        
+        return false
+      end
+
+  - id: diagnostic_port
+    nouns: ["port", "diagnostic port", "diagnostic", "socket"]
+    short: "diagnostic port"
+    description: "A recessed socket for fiber-optic diagnostics probes."
+    state:
+      connected: false
+    examine: "Standard maintenance port. A fiber probe would establish the link to station systems."
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+        
+        if verb == "connect" or verb == "use" or (verb == "insert" and port4k.matches_noun(args, {"probe", "fiber"})) then
+          if ctx.object.state.connected then
+            port4k.say("The fiber probe is already connected, its tip glowing steadily.")
+            return true
+          end
+          
+          if port4k.player_has_item("fiber_probe") then
+            port4k.consume_item("fiber_probe")
+            port4k.set_object_state("diagnostic_port", "connected", true)
+            port4k.say("You insert the fiber probe. Diagnostic telemetry begins streaming.")
+            return true
+          else
+            port4k.say("You need a fiber probe to establish the diagnostic link.")
+            return true
+          end
+        end
+        
+        return false
+      end
+
+  - id: outer_hatch
+    nouns: ["hatch", "outer hatch", "door", "airlock door", "airlock"]
+    short: "massive outer hatch"
+    description: "The final barrier between your ship and Port4K station."
+    state:
+      locked: true
+      authorized: false
+    controls:
+      - exit:north.locked
+    examine: "Through the porthole you see docking ring lights. A security indicator glows red: {c:red}AUTHORIZATION REQUIRED{c}"
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+        
+        -- Authorize with aurelite_fragment
+        if verb == "authorize" or (verb == "use" and port4k.matches_noun(args, {"fragment", "aurelite"})) then
+          if ctx.object.state.authorized then
+            port4k.say("The hatch is already authorized; security indicator shows green.")
+            return true
+          end
+          
+          if not port4k.player_has_item("aurelite_fragment") then
+            port4k.say("You need an authorization token. Perhaps something rare...")
+            return true
+          end
+          
+          port4k.consume_item("aurelite_fragment")
+          port4k.set_object_state("outer_hatch", "authorized", true)
+          port4k.emit_room("You slot the Aurelite fragment into a hidden receptor. It pulses once, then the security indicator shifts to {c:green}AUTHORIZED{c}.")
+          return true
+        end
+        
+        -- Open the hatch (requires all systems ready)
+        if verb == "open" or verb == "unlock" then
+          local interface = ctx.room.objects.docking_interface
+          local powered = interface.state.powered
+          local synced = interface.state.synced
+          local authorized = ctx.object.state.authorized
+          
+          if not powered then
+            port4k.say("The hatch controls are dead. Power the docking interface first.")
+            return true
+          end
+          
+          if not synced then
+            port4k.say("ERROR: Station sync incomplete. Establish the diagnostic link and sync the interface.")
+            return true
+          end
+          
+          if not authorized then
+            port4k.say("SECURITY LOCKOUT: Authorization token required.")
+            return true
+          end
+          
+          -- ALL SYSTEMS GO
+          port4k.set_object_state("outer_hatch", "locked", false)
+          port4k.set_exit_locked("north", false)
+          port4k.emit_room("\n{c:bright_green}*** ALL SYSTEMS NOMINAL ***{c}")
+          port4k.emit_room("Hydraulics groan. The outer hatch's seals break with a hiss of equalizing pressure.")
+          port4k.emit_room("Warm air rushes in from Port4K. Through the opening, you hear distant voices, machinery, life.")
+          port4k.say("\n{c:yellow}The way north is now open. Your prison has become a doorway.{c}\n")
+          return true
+        end
+        
+        return false
+      end
+
+  - id: status_display
+    nouns: ["display", "status display", "screen", "monitor", "status"]
+    short: "overhead status display"
+    description: "A strip monitor showing system status in real-time."
+    examine: |
+      return function(ctx)
+        local interface = ctx.room.objects.docking_interface
+        local port = ctx.room.objects.diagnostic_port
+        local hatch = ctx.room.objects.outer_hatch
+        
+        local powered = interface.state.powered
+        local connected = port.state.connected
+        local synced = interface.state.synced
+        local authorized = hatch.state.authorized
+        
+        local status_lines = {}
+        table.insert(status_lines, "{c:cyan}=== AIRLOCK STATUS ==={c}")
+        table.insert(status_lines, "POWER: " .. (powered and "{c:green}ONLINE{c}" or "{c:red}OFFLINE{c}"))
+        table.insert(status_lines, "DIAGNOSTIC LINK: " .. (connected and "{c:green}CONNECTED{c}" or "{c:red}DISCONNECTED{c}"))
+        table.insert(status_lines, "STATION SYNC: " .. (synced and "{c:green}COMPLETE{c}" or "{c:yellow}PENDING{c}"))
+        table.insert(status_lines, "AUTHORIZATION: " .. (authorized and "{c:green}GRANTED{c}" or "{c:red}DENIED{c}"))
+        table.insert(status_lines, "{c:cyan}==================={c}")
+        
+        port4k.say(table.concat(status_lines, "\n"))
+        return true
+      end
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        if verb == "read" or verb == "check" or verb == "status" then
+          return ctx.room.objects.status_display.examine(ctx)
+        end
+        return false
+      end
+
+  - id: south_exit
+    nouns: ["south", "corridor", "ship"]
+    short: "corridor south"
+    description: "Back into the ship's interior."
+    examine: "The emergency lighting still strobes faintly down the corridor."
+
+exits:
+  - dir: south
+    to: "maintenance_corridor"
+    description: "Return to the maintenance corridor."
+    locked: false
+    visible_when_locked: true
+    
+  - dir: north
+    to: "cell_block"
+    description: "Through the open hatch: Port4K's docking ring awaits."
+    locked: true
+    visible_when_locked: true
+    flavor_locked: "The outer hatch is sealed. All airlock systems must be green before it will open."
+    flavor_unlocked: "Warm station air spills through the open hatch. You can hear the bustle of Port4K beyond."
+
+scripts:
+  on_enter: |
+    return function(ctx)
+      local hatch = ctx.room.objects.outer_hatch
+      local hatch_open = not hatch.state.locked
+      
+      if hatch_open then
+        port4k.say("The outer hatch stands open. Port4K's docking ring hums with activity beyond.")
+      else
+        port4k.say("Pressure seals hiss softly. The outer hatch remains stubbornly locked.")
+        port4k.say("Through the porthole, you glimpse salvation: Port4K station, just meters away.")
+      end
+    end
+    
+  on_command: |
+    return function(ctx)
+      local verb = ctx.intent.verb
+      
+      if verb == "status" or verb == "check" then
+        return ctx.room.objects.status_display.examine(ctx)
+      end
+      
+      if verb == "look" and port4k.matches_noun(ctx.intent.args, {"porthole", "window", "port"}) then
+        port4k.say("Through the thick glass: Port4K's docking ring, alive with ships and people. So close.")
+        return true
+      end
+      
+      return false
+    end

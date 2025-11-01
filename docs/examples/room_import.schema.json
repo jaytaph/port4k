@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://port4k.com/schema/room-v4.schema.json",
-  "title": "Port4k Room v4",
+  "$id": "https://port4k.com/schema/room-v5.schema.json",
+  "title": "Port4k Room v5",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "id", "name", "short", "description", "objects", "exits"],
   "properties": {
-    "version": { "const": 4 },
+    "version": { "const": 5 },
     "id": { "$ref": "#/$defs/Id" },
     "name": { "type": "string", "minLength": 1 },
     "short": { "type": "string", "minLength": 1 },
@@ -61,10 +61,18 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "name", "stackable"],
+        "required": ["id", "name", "nouns", "short", "description", "stackable"],
         "properties": {
           "id": { "$ref": "#/$defs/Id" },
           "name": { "type": "string", "minLength": 1 },
+          "nouns": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "short": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "examine": { "type": "string" },
           "stackable": { "type": "boolean" }
         }
       }
@@ -111,10 +119,11 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "hidden": { "type": "boolean" },
-            "revealed": { "type": "boolean" },
-            "takeable": { "type": "boolean" },
-            "stackable": { "type": "boolean" }
+            "locked": { "type": "boolean", "default": false },
+            "hidden": { "type": "boolean", "default": false },
+            "revealed": { "type": "boolean", "default": true },
+            "takeable": { "type": "boolean", "default": false },
+            "stackable": { "type": "boolean", "default": false }
           }
         },
 
@@ -144,7 +153,12 @@
               "items": { "$ref": "#/$defs/Id" }
             },
             "credits": { "type": "integer", "minimum": 0 },
-            "once": { "type": "boolean" }
+            "once": { "type": "boolean" },
+            "shared": {
+              "type": "boolean",
+              "default": false,
+              "description": "false = per-player loot; true = shared loot"
+            }
           }
         }
       }

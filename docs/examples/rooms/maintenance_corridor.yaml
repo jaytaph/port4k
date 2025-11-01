@@ -1,0 +1,205 @@
+version: 5
+id: maintenance_corridor
+name: Maintenance Corridor
+short: "A narrow ship corridor with damaged power systems."
+description: |
+  The corridor runs east-west through the transport brig's service level. Emergency lights pulse red, casting harsh shadows across ribbed deck plates. The air smells of burnt insulation and ozone.
+  
+  Overhead, a {o:power_conduit} snakes along the ceiling, its casing split and sparking. A {o:access_panel} sits beside a sealed {o:east_hatch} leading to engineering. To the west, the corridor opens to an observation deck. The way {o:south_exit} leads back to the cell block. North, another corridor continues toward the docking ring.
+
+state:
+  ambience: "alarm_beacons"
+  grid_section: "A-3"
+  corridor_status: "damaged"
+
+hints:
+  - id: power_conduit
+    text: "The power conduit looks damaged—try repairing it with proper tools."
+    when: first_look
+    once: true
+  - id: corridor
+    text: "If the corridor has power, access panels may accept diagnostic probes."
+    when: enter
+    cooldown: 2
+  - id: hatch
+    text: "A hardened east hatch likely ties into the access panel's security relays."
+    when: enter
+  - id: beacon
+    text: "Emergency beacons suggest the main grid is offline or bypassed."
+    when: manual
+  - id: tools
+    text: "If you found tools in the cell block, they might help here."
+    when: search
+    once: true
+
+objects:
+  - id: power_conduit
+    nouns: ["conduit", "power conduit", "cable", "wiring", "power cable"]
+    short: "fractured power conduit"
+    description: "A segmented power trunk with heat-blistered casing and exposed couplings."
+    state:
+      powered: false
+      damaged: true
+    controls:
+      - object:access_panel.online
+    examine: "Couplings are warped; some segments could be reseated with the right spanner."
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+        
+        if verb == "repair" or (verb == "use" and port4k.matches_noun(args, {"conduit", "power conduit", "cable"})) then
+          if not ctx.object.state.damaged then
+            port4k.say("The conduit is already stable; power hums through the trunk.")
+            return true
+          end
+          
+          if port4k.player_has_item("multi_spanner") then
+            port4k.set_object_state("power_conduit", "damaged", false)
+            port4k.set_object_state("power_conduit", "powered", true)
+            port4k.emit_room("With a metallic thunk, couplings seat and the corridor lights surge to steady white.")
+            port4k.set_object_state("access_panel", "online", true)
+          else
+            port4k.say("You need a multi-spanner to reseat the warped couplings.")
+          end
+          return true
+        end
+        
+        return false
+      end
+
+  - id: access_panel
+    nouns: ["panel", "access panel", "maintenance panel", "console"]
+    short: "recessed access panel"
+    description: "A lockout panel with diagnostics pins and a tiny status display."
+    state:
+      online: false
+      bypassed: false
+    controls:
+      - exit:east.locked
+      - object:east_hatch.locked
+    examine: "Its status light is dark; without corridor power, the panel is inert."
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        local args = ctx.intent.args or {}
+        
+        local conduit = ctx.room.objects.power_conduit
+        local online = conduit.state.powered and not conduit.state.damaged
+        
+        if verb == "use" or verb == "hack" or verb == "bypass" then
+          if not online then
+            port4k.say("The panel is dead. Restore corridor power first.")
+            return true
+          end
+          
+          if ctx.object.state.bypassed then
+            port4k.say("The panel already shows a green bypass indicator.")
+            return true
+          end
+          
+          if port4k.player_has_item("fiber_probe") then
+            port4k.set_object_state("access_panel", "bypassed", true)
+            port4k.say("You bridge the diagnostics pins with the fiber probe. Relays click behind the bulkhead.")
+            port4k.set_exit_locked("east", false)
+            port4k.set_object_state("east_hatch", "locked", false)
+          else
+            port4k.say("A fine diagnostics probe could bridge the pins… if only you had one.")
+          end
+          return true
+        end
+        
+        return false
+      end
+
+  - id: east_hatch
+    nouns: ["hatch", "east hatch", "door", "bulkhead"]
+    short: "hardened east hatch"
+    description: "A thick composite bulkhead hatch with impact scarring."
+    state:
+      locked: true
+    controls:
+      - exit:east.locked
+    examine: "No handles—purely powered from the panel. A manual release slot is sealed."
+    on_use: |
+      return function(ctx)
+        local verb = ctx.intent.verb
+        
+        if verb == "open" then
+          if ctx.object.state.locked then
+            port4k.say("Locked. The panel controls must be engaged.")
+          else
+            port4k.say("Servos whine as the east hatch retracts into the bulkhead.")
+          end
+          return true
+        end
+        
+        return false
+      end
+
+  - id: south_exit
+    nouns: ["south", "cell block", "cell"]
+    short: "way south"
+    description: "The corridor narrows back toward the cell block."
+    examine: "Faint emergency lighting leaks in from the cell block."
+
+exits:
+  - dir: south
+    to: "cell_block"
+    description: "Back to the cell block."
+    locked: false
+    visible_when_locked: true
+
+  - dir: east
+    to: "engineering_bay"
+    description: "A sealed passage leading into the engineering bay."
+    locked: true
+    visible_when_locked: true
+    flavor_locked: "The hatch is sealed tight—the access panel controls it."
+    flavor_unlocked: "The hatch stands open, revealing the ship's engineering bay."
+
+  - dir: west
+    to: "observation_deck"
+    description: "A dim alcove with viewport slits."
+    locked: false
+    visible_when_locked: true
+
+  - dir: north
+    to: "docking_airlock"
+    description: "The corridor continues toward the docking ring."
+    locked: false
+    visible_when_locked: true
+
+scripts:
+  on_enter: |
+    return function(ctx)
+      local conduit = ctx.room.objects.power_conduit
+      local powered = conduit.state.powered and not conduit.state.damaged
+      
+      if not powered then
+        port4k.say("Red beacons strobe; the main lights remain dark. The conduit above you crackles softly.")
+        port4k.set_object_state("access_panel", "online", false)
+      else
+        port4k.set_object_state("access_panel", "online", true)
+        port4k.say("Steady white strips light the corridor. The access panel display wakes with a soft tone.")
+      end
+    end
+
+  on_command: |
+    return function(ctx)
+      local verb = ctx.intent.verb
+      
+      if verb == "scan" then
+        local conduit = ctx.room.objects.power_conduit
+        local powered = conduit.state.powered and not conduit.state.damaged
+        
+        if powered then
+          port4k.say("Scan: grid nominal; east hatch linked to local panel; west passage shows no hazards.")
+        else
+          port4k.say("Scan: low power; conduit damage detected overhead.")
+        end
+        return true
+      end
+      
+      return false
+    end
